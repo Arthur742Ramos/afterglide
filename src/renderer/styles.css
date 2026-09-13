@@ -10,14 +10,14 @@
   color: oklch(0.972 0.01 258);
   background: oklch(0.105 0 0);
   font-synthesis: none;
-  --background: oklch(0.105 0 0);
-  --rail: oklch(0.13 0.008 258);
-  --surface: oklch(0.165 0.014 258);
-  --raised: oklch(0.215 0.018 258);
+  --background: oklch(0.155 0.012 258);
+  --rail: oklch(0.18 0.014 258);
+  --surface: oklch(0.205 0.018 258);
+  --raised: oklch(0.255 0.022 258);
   --line: oklch(0.31 0.025 258 / 0.75);
   --ink: oklch(0.972 0.01 258);
   --muted: oklch(0.735 0.03 258);
-  --quiet: oklch(0.57 0.03 258);
+  --quiet: oklch(0.69 0.025 258);
   --primary: oklch(0.681 0.132 258.4);
   --primary-bright: oklch(0.76 0.14 258.4);
   --accent: oklch(0.79 0.145 70);
@@ -177,7 +177,10 @@ kbd {
   border: 1px solid oklch(1 0 0 / 0.18);
   background: oklch(1 0 0 / 0.12);
   color: var(--ink);
-  font: 700 12px/1 inherit;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.1);
 }
 kbd.wide {
@@ -271,7 +274,7 @@ kbd.wide {
   margin-top: 13px;
   font-size: clamp(46px, 5.1vw, 68px);
   line-height: 0.98;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.035em;
 }
 .welcome-copy h1 span {
   color: var(--muted);
@@ -316,7 +319,8 @@ kbd.wide {
   padding: 12px 14px;
   background: oklch(0.28 0.08 25 / 0.5);
   color: oklch(0.88 0.08 25);
-  border-left: 3px solid var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 12px;
   font-size: 14px;
 }
 .inline-error svg {
@@ -860,30 +864,6 @@ kbd.wide {
   border-radius: 50%;
   box-shadow: 0 0 80px oklch(0.48 0.13 258 / 0.08);
 }
-.stage-signal {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 7px;
-  background: var(--primary);
-  box-shadow: 0 0 24px oklch(0.68 0.13 258 / 0.32);
-}
-.console-glyph {
-  width: 98px;
-  height: 98px;
-  display: grid;
-  place-items: center;
-  border: 1px solid oklch(0.54 0.04 258);
-  background: oklch(0.12 0.01 258);
-  transform: rotate(45deg);
-}
-.console-glyph svg {
-  width: 44px;
-  height: 44px;
-  color: var(--primary-bright);
-  transform: rotate(-45deg);
-}
 .console-copy {
   min-width: 0;
 }
@@ -949,6 +929,7 @@ kbd.wide {
   width: 100%;
 }
 .play-action > span {
+  white-space: nowrap;
   flex: 1;
   text-align: left;
 }
@@ -1464,7 +1445,8 @@ kbd.wide {
   backdrop-filter: blur(10px);
 }
 .metric:first-child {
-  border-left: 3px solid var(--success);
+  border: 1px solid var(--success);
+  border-radius: 12px;
 }
 .metric span {
   color: oklch(0.7 0.02 258);
@@ -1514,7 +1496,8 @@ kbd.wide {
   display: flex;
   align-items: center;
   gap: 17px;
-  border-left: 4px solid var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 16px;
   background: oklch(0.11 0.015 258 / 0.92);
   box-shadow: 0 25px 60px #0008;
 }
@@ -1598,7 +1581,7 @@ kbd.wide {
   align-items: center;
   gap: 27px;
   border: 1px solid var(--line);
-  border-left: 4px solid var(--success);
+  border-radius: 20px;
   background: linear-gradient(90deg, var(--surface), transparent);
 }
 .health-ring {
@@ -1680,7 +1663,7 @@ kbd.wide {
   text-overflow: ellipsis;
   font-size: 13px;
   font-weight: 650;
-  text-transform: capitalize;
+  text-transform: none;
 }
 .refresh-health {
   margin-top: 18px;
@@ -1817,6 +1800,324 @@ kbd.wide {
   }
 }
 
+/* Authentication and settings use the same soft geometry as the console stage. */
+.auth-card {
+  border-radius: 24px;
+  border-top-width: 1px;
+}
+.auth-index {
+  border-radius: 50%;
+  transform: none;
+  background: var(--raised);
+}
+.auth-index span {
+  transform: none;
+}
+.device-code {
+  border-radius: 12px;
+}
+.device-code:hover {
+  background: var(--raised);
+}
+.text-action {
+  border-radius: 12px;
+}
+.setting-row span,
+.code-caption {
+  font-size: 14px;
+}
+.toggle {
+  position: relative;
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  inset: -9px -5px;
+}
+@media (max-height: 680px) {
+  .auth-card {
+    margin-top: 24px;
+    padding: 24px 32px;
+    gap: 16px 20px;
+  }
+  .auth-cancel {
+    bottom: 12px;
+  }
+}
+
+/* Shared finish: readable controls, restrained surfaces, and physical console forms. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+.brand-mark::before,
+.shell-main::after,
+.rail-button.active::before {
+  display: none;
+}
+.brand-mark {
+  border-radius: 15px;
+  background: var(--raised);
+  color: var(--primary-bright);
+}
+.brand-mark svg {
+  width: 46px;
+  height: 46px;
+}
+.brand-mark.large svg {
+  width: 64px;
+  height: 64px;
+}
+.brand-word {
+  letter-spacing: 0.14em;
+}
+.primary-action {
+  color: var(--background);
+  font-size: 20px;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.22),
+    0 8px 24px oklch(0 0 0 / 0.18);
+}
+.primary-action kbd {
+  color: inherit;
+  border-color: currentColor;
+  background: transparent;
+  box-shadow: none;
+}
+button {
+  transition:
+    background 180ms ease-out,
+    color 180ms ease-out,
+    transform 180ms ease-out;
+}
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.rail-button:hover,
+.text-action:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+.rail-button span {
+  font-size: 12px;
+}
+.rail-button.active {
+  background: oklch(0.29 0.035 258);
+  color: var(--primary-bright);
+}
+.eyebrow {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+}
+.page-heading h1 {
+  font-weight: 650;
+}
+.page-heading > p:last-child {
+  margin-top: 12px;
+}
+.console-stage {
+  grid-template-columns: 150px minmax(0, 1fr) 224px;
+  gap: 30px;
+  padding: 40px 36px;
+  border-radius: 24px;
+  min-height: 320px;
+  background: linear-gradient(
+    125deg,
+    oklch(0.265 0.034 258),
+    var(--surface) 65%
+  );
+}
+.console-stage::after {
+  display: none;
+}
+.console-copy h2 {
+  font-size: 32px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.console-kicker {
+  font-size: 13px;
+  letter-spacing: 0.025em;
+  text-transform: none;
+}
+.console-facts {
+  font-size: 14px;
+  gap: 12px;
+  flex-direction: column;
+  margin-top: 24px;
+}
+.console-switcher > span {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+.console-switcher button {
+  font-size: 14px;
+  min-height: 48px;
+}
+.console-switcher button:hover {
+  background: var(--raised);
+}
+.console-switcher > div {
+  flex-wrap: wrap;
+}
+.console-sculpture {
+  position: relative;
+  height: 230px;
+  display: grid;
+  place-items: center;
+  perspective: 700px;
+}
+.console-object {
+  position: relative;
+  width: 104px;
+  height: 192px;
+  border-radius: 9px;
+  background: linear-gradient(
+    100deg,
+    oklch(0.9 0.012 258),
+    oklch(0.72 0.02 258)
+  );
+  transform: rotateY(-18deg) rotateZ(-5deg);
+  box-shadow:
+    12px 16px 25px oklch(0 0 0 / 0.28),
+    inset -8px 0 0 oklch(0.6 0.015 258);
+}
+.console-vent {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  top: 21px;
+  left: 12px;
+  background:
+    radial-gradient(circle, oklch(0.37 0.01 258) 0.7px, transparent 1px) 0 0 /
+      4px 4px,
+    oklch(0.14 0.008 258);
+  box-shadow: inset 0 2px 5px oklch(0 0 0 / 0.6);
+}
+.console-power {
+  position: absolute;
+  bottom: 19px;
+  left: 15px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(0.98 0 0);
+  box-shadow: 0 0 8px oklch(1 0 0 / 0.5);
+}
+.console-slot {
+  position: absolute;
+  height: 3px;
+  width: 18px;
+  bottom: 20px;
+  right: 22px;
+  background: oklch(0.3 0.01 258);
+  border-radius: 2px;
+}
+.console-plinth {
+  position: absolute;
+  width: 132px;
+  height: 20px;
+  bottom: 7px;
+  border-radius: 50%;
+  background: oklch(0 0 0 / 0.24);
+  filter: blur(7px);
+}
+.series-x .console-object {
+  width: 108px;
+  background: linear-gradient(
+    100deg,
+    oklch(0.34 0.018 258),
+    oklch(0.2 0.012 258)
+  );
+  box-shadow:
+    12px 16px 25px oklch(0 0 0 / 0.28),
+    inset -12px 0 0 oklch(0.16 0.01 258);
+}
+.series-x .console-vent {
+  border-radius: 5px;
+  height: 15px;
+  top: 8px;
+  background-color: oklch(0.36 0.07 155);
+}
+.series-x .console-slot {
+  width: 3px;
+  height: 62px;
+  left: 17px;
+  bottom: 40px;
+}
+.welcome-copy h1 {
+  font-weight: 650;
+  line-height: 1.04;
+}
+.welcome-copy h1 span {
+  color: var(--ink);
+  font-weight: 450;
+}
+.welcome-steps {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  backdrop-filter: none;
+  background: var(--surface);
+}
+.privacy-note,
+.independent-label,
+.secure-label {
+  font-size: 14px;
+}
+.signal-path i {
+  animation: none;
+}
+.signal-path i:nth-child(1) {
+  left: 20%;
+}
+.signal-path i:nth-child(2) {
+  left: 50%;
+}
+.signal-path i:nth-child(3) {
+  left: 80%;
+}
+.setting-row strong,
+.diagnostic-row strong {
+  font-size: 16px;
+}
+.setting-row p,
+.diagnostic-row p {
+  font-size: 14px;
+}
+.segmented {
+  border-radius: 12px;
+  padding: 4px;
+}
+.segmented button {
+  min-height: 44px;
+  border-radius: 8px;
+}
+.segmented button.active {
+  color: var(--background);
+}
+.controller-footer {
+  font-size: 12px;
+  background: var(--rail);
+}
+@media (max-width: 1100px) {
+  .console-stage {
+    grid-template-columns: 110px minmax(0, 1fr) 190px;
+    gap: 20px;
+    padding: 30px;
+  }
+  .console-object {
+    transform: scale(0.88) rotateY(-18deg) rotateZ(-5deg);
+  }
+  .console-copy h2 {
+    font-size: 27px;
+  }
+}
+
 @media (max-height: 680px) {
   .welcome-copy {
     margin-top: 34px;
@@ -1835,7 +2136,8 @@ kbd.wide {
     font-size: 31px;
   }
   .console-stage {
-    min-height: 260px;
+    min-height: 220px;
+    padding-block: 16px;
     margin-top: 22px;
   }
   .utility-page {
@@ -1916,6 +2218,22 @@ kbd.wide {
   }
 }
 
+@media (max-height: 680px) {
+  .console-sculpture {
+    height: 178px;
+  }
+  .console-object {
+    transform: scale(0.78) rotateY(-18deg) rotateZ(-5deg);
+  }
+  .console-stage {
+    grid-template-columns: 110px minmax(0, 1fr) 200px;
+  }
+  .play-action {
+    padding-inline: 16px;
+    gap: 8px;
+    font-size: 18px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

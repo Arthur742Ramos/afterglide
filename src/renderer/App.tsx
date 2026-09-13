@@ -453,9 +453,16 @@ function ConsoleStage({
         : "Wake available";
   return (
     <article className="console-stage">
-      <div className="stage-signal" />
-      <div className="console-glyph">
-        <Icon name="console" />
+      <div
+        className={`console-sculpture ${console.model.includes("Series S") ? "series-s" : "series-x"}`}
+        aria-hidden="true"
+      >
+        <div className="console-object">
+          <span className="console-vent" />
+          <i className="console-power" />
+          <span className="console-slot" />
+        </div>
+        <div className="console-plinth" />
       </div>
       <div className="console-copy">
         <div className="console-kicker">
@@ -887,8 +894,18 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
 function BrandMark({ size = "normal" }: { size?: "normal" | "large" }) {
   return (
     <div className={`brand-mark ${size}`} aria-label="Afterglide">
-      <span>A</span>
-      <i />
+      <svg viewBox="0 0 512 512" aria-hidden="true">
+        <path
+          d="M96 334 220 113h72l124 221h-78l-21-42H195l-21 42H96Zm132-106h56l-28-59-28 59Z"
+          fill="currentColor"
+        />
+        <path
+          d="M143 390h226"
+          stroke="currentColor"
+          strokeWidth="26"
+          strokeLinecap="round"
+        />
+      </svg>
     </div>
   );
 }

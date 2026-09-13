@@ -68,3 +68,16 @@ Use short verbs and concrete state: “Play,” “Waking your Xbox,” “Start
 and “Connection lost—trying again.” Keep protocol names and raw error codes inside
 diagnostics.
 
+
+## Desktop polish
+
+The desktop uses lifted blue-black surfaces to preserve separation in dim rooms.
+Primary buttons use dark ink on cobalt for contrast. Supporting labels stay at
+14 px where space permits, with explicit hover, pressed, and controller-focus
+states. Settings switches retain compact visuals with expanded touch areas.
+
+The navigation mark matches the application icon. Console selection uses a
+light or dark sculpted console silhouette, with a single rounded stage and no
+colored side stripe. Authentication uses the same rounded panel geometry and
+circular step markers. Compact 960×600 windows reduce the console illustration
+and stage height; the main 1280×800 composition retains generous spacing.
