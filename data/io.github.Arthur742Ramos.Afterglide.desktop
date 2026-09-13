@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Afterglide
+Comment=Controller-first Xbox remote play for Steam Deck
+Exec=afterglide
+Icon=io.github.Arthur742Ramos.Afterglide
+Terminal=false
+Type=Application
+Categories=Game;Network;AudioVideo;
+Keywords=Xbox;Remote Play;Streaming;Steam Deck;
+StartupWMClass=afterglide
+

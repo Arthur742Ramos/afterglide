@@ -1,0 +1,23 @@
+[package]
+name = "afterglide-desktop"
+description = "Controller-first desktop shell for Afterglide"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+afterglide-core = { path = "../../crates/core" }
+slint = { version = "1.17.1", default-features = false, features = [
+    "accessibility",
+    "backend-winit",
+    "compat-1-2",
+    "renderer-skia",
+    "std",
+] }
+
+[build-dependencies]
+slint-build = "1.17.1"
+

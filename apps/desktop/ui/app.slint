@@ -1,0 +1,419 @@
+export global Theme {
+    in property <color> background: #090a0f;
+    in property <color> surface: #141722;
+    in property <color> raised: #1c2130;
+    in property <color> ink: #f4f6ff;
+    in property <color> muted: #a9b2c8;
+    in property <color> primary: #738cff;
+    in property <color> accent: #ffb85f;
+    in property <color> success: #59d3a0;
+}
+
+component StatusDot inherits Rectangle {
+    in property <bool> online: true;
+    width: 11px;
+    height: 11px;
+    border-radius: 6px;
+    background: online ? Theme.success : Theme.accent;
+}
+
+component RailItem inherits Rectangle {
+    in property <string> symbol;
+    in property <string> label;
+    in property <bool> selected;
+    callback invoked();
+
+    width: 68px;
+    height: 68px;
+    border-radius: 18px;
+    background: selected ? Theme.raised : transparent;
+    border-width: selected ? 2px : 0px;
+    border-color: selected ? Theme.primary : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.invoked(); }
+
+    Text {
+        x: 0px;
+        y: 9px;
+        width: parent.width;
+        text: symbol;
+        color: selected ? Theme.ink : Theme.muted;
+        font-size: 22px;
+        font-weight: 600;
+        horizontal-alignment: center;
+    }
+
+    Text {
+        x: 0px;
+        y: 39px;
+        width: parent.width;
+        text: label;
+        color: selected ? Theme.ink : Theme.muted;
+        font-size: 11px;
+        font-weight: 500;
+        horizontal-alignment: center;
+    }
+
+    TouchArea { clicked => { root.invoked(); } }
+}
+
+component ActionButton inherits Rectangle {
+    in property <string> label;
+    in property <string> controller-hint;
+    in property <bool> selected;
+    in property <bool> busy;
+    callback invoked();
+
+    height: 68px;
+    border-radius: 18px;
+    background: selected ? Theme.primary : Theme.raised;
+    border-width: selected ? 3px : 1px;
+    border-color: selected ? #aab8ff : #32394c;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.invoked(); }
+
+    Text {
+        x: 24px;
+        width: parent.width - 96px;
+        height: parent.height;
+        text: busy ? "Connecting…" : label;
+        color: Theme.ink;
+        font-size: 20px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        x: parent.width - 56px;
+        y: 18px;
+        width: 32px;
+        height: 32px;
+        border-radius: 16px;
+        background: selected ? #ffffff2e : #2a3042;
+
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: controller-hint;
+            color: Theme.ink;
+            font-size: 14px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea { clicked => { root.invoked(); } }
+}
+
+export component AppWindow inherits Window {
+    title: "Afterglide";
+    width: 1280px;
+    height: 800px;
+    background: Theme.background;
+    default-font-family: "Inter";
+
+    in-out property <string> status-text: "Ready";
+    in-out property <string> toast-text: "";
+    in-out property <bool> toast-visible: false;
+    in-out property <bool> is-connecting: false;
+    in-out property <bool> is-streaming: false;
+    in-out property <float> progress: 0.0;
+    in-out property <int> focus-index: 0;
+
+    callback play-requested();
+    callback settings-requested();
+    callback diagnostics-requested();
+    callback quit-requested();
+
+    forward-focus: navigation;
+
+    navigation := FocusScope {
+        width: 100%;
+        height: 100%;
+        focus-on-tab-navigation: true;
+
+        key-pressed(event) => {
+            if (event.text == Key.RightArrow || event.text == Key.DownArrow || event.text == Key.Tab) {
+                root.focus-index = mod(root.focus-index + 1, 3);
+                root.toast-visible = false;
+                return accept;
+            }
+            if (event.text == Key.LeftArrow || event.text == Key.UpArrow || event.text == Key.Backtab) {
+                root.focus-index = mod(root.focus-index + 2, 3);
+                root.toast-visible = false;
+                return accept;
+            }
+            if (event.text == Key.Return || event.text == " ") {
+                if (root.focus-index == 0) {
+                    root.play-requested();
+                } else if (root.focus-index == 1) {
+                    root.diagnostics-requested();
+                } else {
+                    root.settings-requested();
+                }
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                root.quit-requested();
+                return accept;
+            }
+            return reject;
+        }
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: 96px;
+            height: parent.height;
+            background: #0e1018;
+            border-width: 1px;
+            border-color: #232838;
+
+            Text {
+                x: 22px;
+                y: 28px;
+                width: 52px;
+                height: 52px;
+                text: "A";
+                color: Theme.primary;
+                font-size: 31px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            RailItem {
+                x: 14px;
+                y: 122px;
+                symbol: "⌂";
+                label: "Home";
+                selected: true;
+                invoked => { root.focus-index = 0; }
+            }
+
+            RailItem {
+                x: 14px;
+                y: parent.height - 96px;
+                symbol: "⚙";
+                label: "Settings";
+                selected: root.focus-index == 2;
+                invoked => {
+                    root.focus-index = 2;
+                    root.settings-requested();
+                }
+            }
+        }
+
+        Rectangle {
+            x: 96px;
+            y: 0px;
+            width: parent.width - 96px;
+            height: parent.height;
+            background: Theme.background;
+            clip: true;
+
+            Rectangle {
+                x: parent.width - 350px;
+                y: -260px;
+                width: 620px;
+                height: 620px;
+                border-radius: 310px;
+                background: #26356f52;
+            }
+
+            Text {
+                x: 52px;
+                y: 38px;
+                text: "AFTERGLIDE";
+                color: Theme.muted;
+                font-size: 14px;
+                font-weight: 700;
+                letter-spacing: 2px;
+            }
+
+            Rectangle {
+                x: parent.width - 214px;
+                y: 30px;
+                width: 162px;
+                height: 42px;
+                border-radius: 21px;
+                background: #18231f;
+                border-width: 1px;
+                border-color: #2e5546;
+
+                StatusDot { x: 17px; y: 16px; }
+                Text {
+                    x: 39px;
+                    width: 108px;
+                    height: parent.height;
+                    text: "Network ready";
+                    color: Theme.ink;
+                    font-size: 14px;
+                    font-weight: 500;
+                    vertical-alignment: center;
+                }
+            }
+
+            Text {
+                x: 52px;
+                y: 130px;
+                text: root.is-streaming ? "You're connected." : "Pick up where you left off.";
+                color: Theme.ink;
+                font-size: 42px;
+                font-weight: 700;
+            }
+
+            Text {
+                x: 54px;
+                y: 191px;
+                width: 600px;
+                text: root.is-streaming ? "The media view lands in the next streaming slice." : "Your console is ready from standby.";
+                color: Theme.muted;
+                font-size: 18px;
+            }
+
+            Rectangle {
+                x: 52px;
+                y: 260px;
+                width: parent.width - 104px;
+                height: 322px;
+                border-radius: 28px;
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: #2b3040;
+
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: 12px;
+                    height: parent.height;
+                    border-radius: 6px;
+                    background: root.is-streaming ? Theme.success : Theme.primary;
+                }
+
+                Rectangle {
+                    x: 44px;
+                    y: 44px;
+                    width: 82px;
+                    height: 82px;
+                    border-radius: 22px;
+                    background: #222a40;
+
+                    Text {
+                        width: parent.width;
+                        height: parent.height;
+                        text: "X";
+                        color: Theme.primary;
+                        font-size: 34px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    x: 154px;
+                    y: 48px;
+                    text: "Living Room Xbox";
+                    color: Theme.ink;
+                    font-size: 27px;
+                    font-weight: 600;
+                }
+
+                StatusDot { x: 156px; y: 94px; online: !root.is-connecting; }
+                Text {
+                    x: 178px;
+                    y: 87px;
+                    text: root.status-text;
+                    color: Theme.muted;
+                    font-size: 16px;
+                }
+
+                Rectangle {
+                    x: 44px;
+                    y: 157px;
+                    width: parent.width - 88px;
+                    height: 2px;
+                    background: #2c3242;
+
+                    Rectangle {
+                        width: parent.width * root.progress;
+                        height: parent.height;
+                        background: Theme.primary;
+                    }
+                }
+
+                ActionButton {
+                    x: 44px;
+                    y: 196px;
+                    width: 390px;
+                    label: root.is-streaming ? "Open stream" : "Play now";
+                    controller-hint: "A";
+                    selected: root.focus-index == 0;
+                    busy: root.is-connecting;
+                    invoked => {
+                        root.focus-index = 0;
+                        if (!root.is-connecting) { root.play-requested(); }
+                    }
+                }
+
+                ActionButton {
+                    x: 450px;
+                    y: 196px;
+                    width: parent.width - 494px;
+                    label: "Check connection";
+                    controller-hint: "Y";
+                    selected: root.focus-index == 1;
+                    busy: false;
+                    invoked => {
+                        root.focus-index = 1;
+                        root.diagnostics-requested();
+                    }
+                }
+            }
+
+            Text {
+                x: 54px;
+                y: parent.height - 108px;
+                text: "A  Select";
+                color: Theme.muted;
+                font-size: 14px;
+                font-weight: 600;
+            }
+
+            Text {
+                x: 142px;
+                y: parent.height - 108px;
+                text: "B  Back";
+                color: Theme.muted;
+                font-size: 14px;
+                font-weight: 600;
+            }
+
+            if root.toast-visible: Rectangle {
+                x: (parent.width - 430px) / 2;
+                y: parent.height - 88px;
+                width: 430px;
+                height: 54px;
+                border-radius: 16px;
+                background: #272d3e;
+                border-width: 1px;
+                border-color: #46506a;
+
+                Text {
+                    x: 18px;
+                    width: parent.width - 36px;
+                    height: parent.height;
+                    text: root.toast-text;
+                    color: Theme.ink;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}
