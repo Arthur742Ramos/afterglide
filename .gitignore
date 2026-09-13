@@ -1,6 +1,10 @@
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+artifacts/
 /target/
-/.idea/
-/.vscode/
+.env
 .DS_Store
 *.log
-

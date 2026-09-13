@@ -1,14 +1,13 @@
 version: 2
 updates:
-  - package-ecosystem: cargo
+  - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     groups:
-      rust-dependencies:
+      app-dependencies:
         patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-

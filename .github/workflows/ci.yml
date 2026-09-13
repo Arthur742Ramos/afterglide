@@ -8,28 +8,42 @@ on:
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   quality:
-    name: Format, lint, and test
+    name: Format, types, unit tests, and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libfontconfig1-dev
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v6
         with:
-          components: clippy,rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - name: Check formatting
-        run: cargo fmt --all --check
-      - name: Lint workspace
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Test core policy
-        run: cargo test -p afterglide-core --all-features
-      - name: Compile desktop shell
-        run: cargo check -p afterglide-desktop --all-features
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --audit-level=high
+      - run: npm run build
+
+  desktop-e2e:
+    name: Electron end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run desktop journeys
+        run: xvfb-run --auto-servernum npm run test:e2e
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-evidence
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
