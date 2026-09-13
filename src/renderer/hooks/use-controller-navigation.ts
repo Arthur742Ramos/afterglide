@@ -7,7 +7,10 @@ const actionKeys: Record<string, string> = {
   right: "ArrowRight",
 };
 
-export function useControllerNavigation(enabled: boolean): void {
+export function useControllerNavigation(
+  enabled: boolean,
+  focusScope?: string,
+): void {
   useEffect(() => {
     if (!enabled) return;
     const focusables = (): HTMLElement[] =>
@@ -80,19 +83,17 @@ export function useControllerNavigation(enabled: boolean): void {
     };
     frame = requestAnimationFrame(pollGamepad);
 
-    const initial = window.setTimeout(
-      () =>
-        (
-          document.querySelector<HTMLElement>("[data-autofocus]") ??
-          focusables()[0]
-        )?.focus(),
-      40,
-    );
+    const initial = window.setTimeout(() => {
+      const items = focusables();
+      (
+        items.find((item) => item.hasAttribute("data-autofocus")) ?? items[0]
+      )?.focus();
+    }, 40);
     return () => {
       clearTimeout(initial);
       cancelAnimationFrame(frame);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("afterglide-gamepad", onGamepad);
     };
-  }, [enabled]);
+  }, [enabled, focusScope]);
 }

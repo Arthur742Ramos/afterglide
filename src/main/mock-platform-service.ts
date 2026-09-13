@@ -136,7 +136,10 @@ export class MockPlatformService implements PlatformService {
 
   async startSession(target: StreamTarget): Promise<SessionStart> {
     await delay(220);
-    if (this.scenario === "connect-error" && this.firstConnection) {
+    const shouldFail =
+      this.scenario === "connect-error" ||
+      (this.scenario === "cloud-connect-error" && target.source === "cloud");
+    if (shouldFail && this.firstConnection) {
       this.firstConnection = false;
       throw new AfterglideError(
         "CONSOLE_UNAVAILABLE",

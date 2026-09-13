@@ -507,9 +507,13 @@ export class AppController {
         packetLossPercent: clamp(telemetry.packetLossPercent, 0, 100),
         bitrateMbps: clamp(telemetry.bitrateMbps, 0, 500),
         codec: String(telemetry.codec).slice(0, 48),
-        connection: telemetry.connection,
+        connection: isConnectionType(telemetry.connection)
+          ? telemetry.connection
+          : "unknown",
         videoDecoder: String(telemetry.videoDecoder).slice(0, 80),
-        networkQuality: telemetry.networkQuality,
+        networkQuality: isNetworkQuality(telemetry.networkQuality)
+          ? telemetry.networkQuality
+          : "measuring",
         updatedAt: Date.now(),
       },
     });
@@ -594,7 +598,10 @@ export class AppController {
     this.patch({
       session: {
         phase: "error",
-        label: "Couldn’t start remote play",
+        label:
+          target?.source === "cloud"
+            ? "Couldn’t start cloud play"
+            : "Couldn’t start remote play",
         detail: message,
         progress: 0,
         errorCode: code,
@@ -658,6 +665,23 @@ function chooseConsole(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? value : 0));
+}
+
+function isConnectionType(
+  value: unknown,
+): value is StreamTelemetry["connection"] {
+  return value === "local" || value === "remote" || value === "unknown";
+}
+
+function isNetworkQuality(
+  value: unknown,
+): value is StreamTelemetry["networkQuality"] {
+  return (
+    value === "measuring" ||
+    value === "excellent" ||
+    value === "good" ||
+    value === "unstable"
+  );
 }
 
 function delay(ms: number): Promise<void> {

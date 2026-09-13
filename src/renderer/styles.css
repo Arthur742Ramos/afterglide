@@ -781,14 +781,14 @@ kbd.wide {
   align-items: center;
   justify-content: space-between;
 }
-.network-ready {
+.account-ready {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--muted);
   font-size: 13px;
 }
-.network-ready svg {
+.account-ready svg {
   width: 18px;
   color: var(--success);
 }
@@ -1378,14 +1378,20 @@ kbd.wide {
   align-items: center;
   gap: 28px;
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
   transform: translateY(-12px);
   transition:
     opacity 180ms ease,
-    transform 180ms ease;
+    transform 180ms ease,
+    visibility 0s linear 180ms;
 }
 .overlay-visible .stream-header {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
   transform: none;
+  transition-delay: 0s;
 }
 .stream-console {
   margin: auto;
@@ -1426,14 +1432,19 @@ kbd.wide {
   bottom: 72px;
   display: flex;
   opacity: 0;
+  visibility: hidden;
   transform: translateY(10px);
   transition:
     opacity 180ms ease,
-    transform 180ms ease;
+    transform 180ms ease,
+    visibility 0s linear 180ms;
 }
-.overlay-visible .performance-strip {
+.overlay-visible .performance-strip,
+.performance-strip.performance-pinned {
   opacity: 1;
+  visibility: visible;
   transform: none;
+  transition-delay: 0s;
 }
 .metric {
   min-width: 96px;
@@ -1472,14 +1483,18 @@ kbd.wide {
   color: oklch(0.8 0.02 258);
   font-size: 11px;
   opacity: 0;
+  visibility: hidden;
   transform: translateY(10px);
   transition:
     opacity 180ms ease,
-    transform 180ms ease;
+    transform 180ms ease,
+    visibility 0s linear 180ms;
 }
 .overlay-visible .stream-controls {
   opacity: 1;
+  visibility: visible;
   transform: none;
+  transition-delay: 0s;
 }
 .stream-controls span {
   display: flex;
@@ -2493,6 +2508,31 @@ button:active:not(:disabled) {
     font-size: 18px;
   }
 }
+
+/* Legible handheld metadata and controls. */
+.welcome-step small,
+.code-caption,
+.cloud-feature-copy > span,
+.cloud-library-title span,
+.game-grid button > span {
+  font-size: 14px;
+}
+.legal-line,
+.rail-button span,
+.controller-footer,
+.stream-controls {
+  font-size: 13px;
+}
+.game-grid strong,
+.stream-console,
+.stream-header button,
+.metric strong {
+  font-size: 14px;
+}
+.metric span {
+  font-size: 10px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

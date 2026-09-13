@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   CloudTitle,
   DeviceCode,
+  StreamTelemetry,
   XboxConsole,
 } from "../../src/shared/contracts";
 import { AppController } from "../../src/main/app-controller";
@@ -175,6 +176,34 @@ describe("AppController", () => {
       phase: "error",
       errorCode: "UNAVAILABLE",
       recoverable: true,
+    });
+  });
+
+  it("bounds numeric telemetry and rejects unknown status values", () => {
+    const controller = makeController(new FakePlatform());
+    controller.updateTelemetry({
+      resolution: "x".repeat(80),
+      framesPerSecond: Number.NaN,
+      roundTripMs: Number.POSITIVE_INFINITY,
+      packetLossPercent: 180,
+      bitrateMbps: -4,
+      codec: "codec".repeat(20),
+      connection: "spoofed",
+      videoDecoder: "decoder".repeat(20),
+      networkQuality: "perfect",
+      updatedAt: 1,
+    } as unknown as StreamTelemetry);
+
+    expect(controller.getSnapshot().telemetry).toMatchObject({
+      resolution: "x".repeat(32),
+      framesPerSecond: 0,
+      roundTripMs: 0,
+      packetLossPercent: 100,
+      bitrateMbps: 0,
+      codec: "codec".repeat(9) + "cod",
+      connection: "unknown",
+      videoDecoder: "decoder".repeat(11) + "dec",
+      networkQuality: "measuring",
     });
   });
 });

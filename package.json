@@ -1,7 +1,7 @@
 {
   "name": "afterglide",
   "version": "0.2.0",
-  "description": "A controller-first Xbox remote-play client for Steam Deck",
+  "description": "A controller-first Xbox streaming client for Steam Deck",
   "desktopName": "afterglide",
   "license": "MIT",
   "author": "Arthur Ramos",

@@ -27,4 +27,19 @@ describe("Xbox input protocol", () => {
     );
     expect(decoded).toEqual({ address: "192.0.2.45", port: 40_000 });
   });
+
+  it("sends one neutral frame when the active controller disappears", () => {
+    const active = streamProtocolTestUtils.chooseInputUpdate({ A: 1 });
+    expect(active?.frame.A).toBe(1);
+
+    const released = streamProtocolTestUtils.chooseInputUpdate(
+      undefined,
+      active?.signature,
+    );
+    expect(released?.frame.A).toBe(0);
+    expect(released?.signature).toBe("");
+    expect(
+      streamProtocolTestUtils.chooseInputUpdate(undefined),
+    ).toBeUndefined();
+  });
 });

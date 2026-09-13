@@ -6,20 +6,22 @@ product
 
 ## Users
 
-Steam Deck owners who want to play games from their own Xbox without reaching
-for a mouse, opening a terminal, or understanding streaming terminology. They
-usually launch the app from Gaming Mode while holding the Deck in both hands,
-often on a couch or away from their console.
+Steam Deck owners who want to play games from their own Xbox or cloud library
+without reaching for a mouse, opening a terminal, or understanding streaming
+terminology. They usually launch the app from Gaming Mode while holding the
+Deck in both hands, often on a couch or away from their console.
 
 ## Product Purpose
 
-Afterglide makes Xbox remote play feel native to Steam Deck. Success means a
-new user can install the app, sign in, find a console, and start a stable stream
-without configuration. During play, the app should preserve image quality and
-responsiveness while consuming as little power as practical.
+Afterglide makes Xbox streaming feel native to Steam Deck. Success means a new
+user can install the app, sign in, choose a console or an eligible cloud game,
+and start a stable stream without configuration. During play, the app should
+preserve image quality and responsiveness while consuming as little power as
+practical.
 
-The first release targets remote play from a user's own Xbox. Cloud gaming is a
-separate milestone after the local streaming path is reliable and measured.
+Home remote play and Xbox Cloud Gaming share one controller-first shell, media
+path, performance display, and recovery experience. Eligibility and region
+limits remain clear before a user tries to launch a cloud game.
 
 ## Brand Personality
 
@@ -48,4 +50,3 @@ thumb, and memorable without becoming theatrical.
 Target WCAG 2.2 AA contrast and semantics. Support reduced motion, non-color state
 cues, scalable text, visible focus, touch, keyboard, Steam Input, and external
 controllers. Never require precision pointing for a primary action.
-

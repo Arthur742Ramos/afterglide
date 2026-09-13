@@ -2,7 +2,7 @@
 
 **Your Xbox. Wherever you land.**
 
-Afterglide is an open-source, controller-first Xbox remote-play client designed
+Afterglide is an open-source, controller-first Xbox streaming client designed
 for Steam Deck. The current pre-alpha implements the desktop paths from
 Microsoft device-code sign-in through console discovery and xHome remote play,
 as well as xCloud library discovery and Xbox Cloud Gaming sessions. Both paths

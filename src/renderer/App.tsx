@@ -27,8 +27,15 @@ export function App() {
 
   const signedIn = snapshot?.auth.status === "signed-in";
   const inStream = Boolean(descriptor) && snapshot?.session.phase !== "error";
+  const focusScope =
+    page === "home"
+      ? `${page}:${snapshot?.consolesStatus}`
+      : page === "cloud"
+        ? `${page}:${snapshot?.cloud.status}`
+        : page;
   useControllerNavigation(
     Boolean(snapshot && signedIn && !inStream && !isConnecting(snapshot)),
+    focusScope,
   );
 
   useEffect(() => {
@@ -208,8 +215,8 @@ function WelcomeScreen({
         />
         <Step
           number="02"
-          label="Find your Xbox"
-          detail="Ready and waiting on your account"
+          label="Choose where to play"
+          detail="Your console or cloud library"
         />
         <Step
           number="03"
@@ -243,7 +250,7 @@ function DeviceCodeScreen({ snapshot }: { snapshot: AppSnapshot }) {
     const timer = window.setInterval(update, 1_000);
     return () => clearInterval(timer);
   }, [code]);
-  useControllerNavigation(true);
+  useControllerNavigation(true, code ? "ready" : "waiting");
 
   return (
     <main className="auth-screen">
@@ -264,6 +271,7 @@ function DeviceCodeScreen({ snapshot }: { snapshot: AppSnapshot }) {
           <button
             className="secondary-action"
             data-focusable
+            data-autofocus
             disabled={!code}
             onClick={() =>
               code && void window.afterglide.openExternal(code.verificationUrl)
@@ -361,9 +369,9 @@ function Shell({
       <div className="shell-main">
         <header className="shell-header">
           <BrandWord />
-          <div className="network-ready">
-            <Icon name="wifi" />
-            <span>Network ready</span>
+          <div className="account-ready">
+            <Icon name="shield" />
+            <span>Account connected</span>
           </div>
         </header>
         {children}
@@ -443,6 +451,7 @@ function CloudPage({
           <button
             className="secondary-action"
             data-focusable
+            data-autofocus
             onClick={() => void window.afterglide.refreshCloudTitles()}
           >
             <Icon name="refresh" /> Check again
@@ -585,6 +594,7 @@ function HomePage({
           <button
             className="secondary-action"
             data-focusable
+            data-autofocus
             onClick={() => void window.afterglide.refreshConsoles()}
           >
             <Icon name="refresh" /> Try again
@@ -827,12 +837,16 @@ function StreamView({
         onTelemetry={onTelemetry}
       />
       <div className="stream-vignette" />
-      <header className="stream-header">
+      <header className="stream-header" aria-hidden={!overlay}>
         <BrandWord />
         <div className="stream-console">
           <span className="live-dot" /> {descriptor.displayName}
         </div>
-        <button aria-label="Leave Xbox stream" onClick={() => void onExit()}>
+        <button
+          aria-label="Leave Xbox stream"
+          tabIndex={overlay ? 0 : -1}
+          onClick={() => void onExit()}
+        >
           <Icon name="power" /> End session
         </button>
       </header>
@@ -846,7 +860,10 @@ function StreamView({
         </div>
       )}
       {(snapshot.settings.showPerformance || overlay) && (
-        <div className="performance-strip">
+        <div
+          className={`performance-strip ${snapshot.settings.showPerformance ? "performance-pinned" : ""}`}
+          aria-label="Stream performance"
+        >
           <Metric
             label="VIDEO"
             value={`${Math.round(telemetry.framesPerSecond)} FPS`}
@@ -888,6 +905,10 @@ function SessionErrorScreen({
   onBack: () => void;
 }) {
   useControllerNavigation(true);
+  const backLabel =
+    snapshot.session.source === "cloud"
+      ? "Back to cloud games"
+      : "Back to consoles";
   return (
     <main className="error-screen">
       <BrandLockup />
@@ -906,7 +927,7 @@ function SessionErrorScreen({
             </button>
           )}
           <button className="secondary-action" data-focusable onClick={onBack}>
-            <Icon name="back" /> Back to library
+            <Icon name="back" /> {backLabel}
           </button>
         </div>
       </section>
@@ -981,6 +1002,7 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
       <button
         className="secondary-action refresh-health"
         data-focusable
+        data-autofocus
         onClick={() => void window.afterglide.refreshConsoles()}
       >
         <Icon name="refresh" /> Refresh console check
@@ -1010,6 +1032,9 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
               <button
                 key={resolution}
                 data-focusable
+                data-autofocus={
+                  snapshot.settings.resolution === resolution ? true : undefined
+                }
                 className={
                   snapshot.settings.resolution === resolution ? "active" : ""
                 }
@@ -1223,6 +1248,7 @@ function EmptyConsoles() {
       <button
         className="primary-action"
         data-focusable
+        data-autofocus
         onClick={() => void window.afterglide.refreshConsoles()}
       >
         <Icon name="refresh" /> Check again <ControllerHint label="A" />

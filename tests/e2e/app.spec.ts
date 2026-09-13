@@ -12,8 +12,10 @@ import {
 const root = join(import.meta.dirname, "../..");
 const screenshots = join(root, "artifacts/e2e");
 const temporaryDirectories: string[] = [];
+const rendererErrors: string[] = [];
 
 test.afterEach(() => {
+  expect(rendererErrors.splice(0), "renderer errors").toEqual([]);
   temporaryDirectories
     .splice(0)
     .forEach((directory) =>
@@ -39,6 +41,10 @@ async function launch(
     },
   });
   const page = await app.firstWindow();
+  page.on("pageerror", (error) => rendererErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") rendererErrors.push(message.text());
+  });
   await page.setViewportSize({ width: 1280, height: 800 });
   return { app, page };
 }
@@ -56,6 +62,9 @@ test("first run uses device-code auth and lands on the console stage", async () 
     await expect(
       page.getByRole("button", { name: /Copy code DECK-7G/ }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Open microsoft.com\/link/ }),
+    ).toBeFocused();
     await expect(page.getByText("Waiting for Microsoft")).toBeVisible();
     await page.screenshot({ path: join(screenshots, "auth-1280x800.png") });
     await expect(
@@ -64,6 +73,7 @@ test("first run uses device-code auth and lands on the console stage", async () 
     await expect(
       page.getByRole("heading", { name: "Studio Series S" }),
     ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Play now/ })).toBeFocused();
     await page.screenshot({ path: join(screenshots, "home-1280x800.png") });
   } finally {
     await app.close();
@@ -93,6 +103,15 @@ test("console selection, connection stages, stream overlay, and clean exit work"
     await expect(page.getByTestId("mock-stream")).toBeVisible();
     await expect(page.getByText("60 FPS")).toBeVisible();
     await page.screenshot({ path: join(screenshots, "stream-1280x800.png") });
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await expect(
+      page.locator('.stream-header button[aria-label="Leave Xbox stream"]'),
+    ).toHaveAttribute("tabindex", "-1");
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Leave Xbox stream" }).click();
     await expect(
       page.getByRole("heading", { name: "Studio Series S" }),
@@ -109,6 +128,9 @@ test("cloud library selection launches an xCloud stream", async () => {
     await expect(
       page.getByRole("heading", { name: "Your library. Ready anywhere." }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Play from cloud/ }),
+    ).toBeFocused();
     await expect(
       page.getByRole("heading", { name: "Starfield" }),
     ).toBeVisible();
@@ -148,6 +170,9 @@ test("cloud eligibility has a clear unavailable state", async () => {
     await expect(
       page.getByText("Cloud gaming requires a supported account and region."),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Check again/ }),
+    ).toBeFocused();
   } finally {
     await app.close();
   }
@@ -167,6 +192,7 @@ test("controller semantics navigate to health and settings persist in the shell"
       page.getByRole("heading", { name: "Ready before you play." }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByRole("button", { name: "1080p" })).toBeFocused();
     await page.getByRole("switch", { name: "Performance overlay" }).click();
     await expect(
       page.getByRole("switch", { name: "Performance overlay" }),
@@ -176,6 +202,15 @@ test("controller semantics navigate to health and settings persist in the shell"
       /active/,
     );
     await page.screenshot({ path: join(screenshots, "settings-1280x800.png") });
+    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByRole("button", { name: /Play now/ }).click();
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await expect(page.locator(".performance-strip")).toBeVisible();
   } finally {
     await app.close();
   }
@@ -210,9 +245,72 @@ test("a failed connection explains the problem and retries successfully", async 
       page.getByRole("heading", { name: "Couldn’t start remote play" }),
     ).toBeVisible();
     await expect(page.getByText("Your Xbox did not answer.")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Back to consoles/ }),
+    ).toBeVisible();
     await page.screenshot({ path: join(screenshots, "error-1280x800.png") });
     await page.getByRole("button", { name: /Try again/ }).click();
     await expect(page.getByTestId("mock-stream")).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("a cloud launch failure returns to the cloud library", async () => {
+  const { app, page } = await launch({
+    signedIn: true,
+    scenario: "cloud-connect-error",
+  });
+  try {
+    await page.getByRole("button", { name: "Cloud" }).click();
+    await page.getByRole("button", { name: /Play from cloud/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Couldn’t start cloud play" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /Back to cloud games/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Your library. Ready anywhere." }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("primary surfaces remain usable at the minimum window size", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.setViewportSize({ width: 960, height: 600 });
+    await expect(
+      page.getByRole("heading", { name: "Pick up where you left off." }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Play now/ })).toBeVisible();
+    await page.screenshot({ path: join(screenshots, "home-960x600.png") });
+
+    await page.getByRole("button", { name: "Cloud" }).click();
+    await expect(
+      page.getByRole("button", { name: /Play from cloud/ }),
+    ).toBeVisible();
+    await page.screenshot({ path: join(screenshots, "cloud-960x600.png") });
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Performance overlay" }),
+    ).toBeVisible();
+    await page.screenshot({ path: join(screenshots, "settings-960x600.png") });
+
+    const dimensions = await page.evaluate(() => ({
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      document: {
+        width: document.documentElement.scrollWidth,
+        height: document.documentElement.scrollHeight,
+      },
+    }));
+    expect(dimensions.document.width).toBeLessThanOrEqual(
+      dimensions.viewport.width,
+    );
+    expect(dimensions.document.height).toBeLessThanOrEqual(
+      dimensions.viewport.height,
+    );
   } finally {
     await app.close();
   }

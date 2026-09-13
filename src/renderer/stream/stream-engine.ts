@@ -436,16 +436,16 @@ export class XboxStreamEngine {
       document.visibilityState === "visible"
     ) {
       const frame = readInputFrame(this.pressedKeys);
-      if (frame) {
-        const signature = JSON.stringify(frame);
-        const heartbeatDue =
-          performance.now() - this.lastInputAt >=
-          NETWORK_POLICY.inputHeartbeatMs;
-        if (signature !== this.lastInputSignature || heartbeatDue) {
-          this.sendInputFrame(frame);
-          this.lastInputSignature = signature;
-          this.lastInputAt = performance.now();
-        }
+      const now = performance.now();
+      const update = chooseInputUpdate(
+        frame,
+        this.lastInputSignature,
+        now - this.lastInputAt >= NETWORK_POLICY.inputHeartbeatMs,
+      );
+      if (update) {
+        this.sendInputFrame(update.frame);
+        this.lastInputSignature = update.signature;
+        this.lastInputAt = now;
       }
     }
     this.inputFrameId = requestAnimationFrame(this.inputLoop);
@@ -721,6 +721,21 @@ function emptyInputFrame(): InputFrame {
   };
 }
 
+function chooseInputUpdate(
+  frame: InputFrame | undefined,
+  lastSignature: string,
+  heartbeatDue: boolean,
+): { frame: InputFrame; signature: string } | undefined {
+  if (!frame)
+    return lastSignature
+      ? { frame: emptyInputFrame(), signature: "" }
+      : undefined;
+  const signature = JSON.stringify(frame);
+  return signature !== lastSignature || heartbeatDue
+    ? { frame, signature }
+    : undefined;
+}
+
 function writeGamepad(
   packet: DataView,
   offset: number,
@@ -848,4 +863,17 @@ export function encodeGamepadPacketForTest(
   return bytes;
 }
 
-export const streamProtocolTestUtils = { decodeTeredo, withTeredoFallback };
+export const streamProtocolTestUtils = {
+  decodeTeredo,
+  withTeredoFallback,
+  chooseInputUpdate: (
+    input: Partial<InputFrame> | undefined,
+    lastSignature = "",
+    heartbeatDue = false,
+  ) =>
+    chooseInputUpdate(
+      input ? { ...emptyInputFrame(), ...input } : undefined,
+      lastSignature,
+      heartbeatDue,
+    ),
+};
