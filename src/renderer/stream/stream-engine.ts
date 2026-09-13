@@ -513,6 +513,7 @@ export class XboxStreamEngine {
   private async collectTelemetry(): Promise<void> {
     if (this.destroyed) return;
     const reports = await this.peer.getStats();
+    if (this.destroyed) return;
     let resolution = "Waiting for video";
     let fps = 0;
     let rtt = 0;

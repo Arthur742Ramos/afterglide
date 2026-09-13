@@ -1402,6 +1402,11 @@ kbd.wide {
   color: oklch(0.9 0.02 258);
   font-size: 12px;
 }
+.stream-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .live-dot {
   display: inline-block;
   width: 7px;
@@ -1431,19 +1436,13 @@ kbd.wide {
   left: 34px;
   bottom: 72px;
   display: flex;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(10px);
+  opacity: 1;
+  visibility: visible;
+  transform: none;
   transition:
     opacity 180ms ease,
     transform 180ms ease,
     visibility 0s linear 180ms;
-}
-.overlay-visible .performance-strip,
-.performance-strip.performance-pinned {
-  opacity: 1;
-  visibility: visible;
-  transform: none;
   transition-delay: 0s;
 }
 .metric {
@@ -1500,6 +1499,11 @@ kbd.wide {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.stream-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 22px;
 }
 .recovery-panel {
   position: absolute;

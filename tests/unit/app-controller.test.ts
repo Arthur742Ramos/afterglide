@@ -139,6 +139,11 @@ describe("AppController", () => {
     expect(controller.getSnapshot().session.phase).toBe("negotiating");
     await controller.reportStreamEvent("session", "connected");
     expect(controller.getSnapshot().session.phase).toBe("streaming");
+    await controller.stopStream();
+    await expect(
+      controller.reportStreamEvent("session", "interrupted"),
+    ).resolves.toBeUndefined();
+    expect(controller.getSnapshot().session.phase).toBe("idle");
   });
 
   it("discovers and launches a cloud title without waking a console", async () => {

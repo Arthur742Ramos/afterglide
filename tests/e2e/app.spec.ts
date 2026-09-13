@@ -187,6 +187,8 @@ test("console selection, connection stages, stream overlay, and clean exit work"
       ),
     ).toBeVisible();
     await expect(page.getByTestId("mock-stream")).toBeVisible();
+    await expect(page.getByLabel("Stream performance")).toHaveCount(0);
+    await page.getByRole("button", { name: "Show performance stats" }).click();
     await expect(page.getByText("60 FPS")).toBeVisible();
     await page.screenshot({ path: join(screenshots, "stream-1280x800.png") });
     await page.keyboard.press("Escape");
@@ -197,11 +199,119 @@ test("console selection, connection stages, stream overlay, and clean exit work"
     await expect(
       page.locator('.stream-header button[aria-label="Leave Xbox stream"]'),
     ).toHaveAttribute("tabindex", "-1");
+    await expect(page.getByLabel("Stream performance")).toBeVisible();
+    await page.keyboard.press("F3");
+    await expect(page.getByLabel("Stream performance")).toHaveCount(0);
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Leave Xbox stream" }).click();
     await expect(
       page.getByRole("heading", { name: "Studio Series S" }),
     ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("stream chrome stays out of keyboard play and survives shortcut stress", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.evaluate(() =>
+      window.afterglide.updateSettings({ keyboardControls: true }),
+    );
+    await page.getByRole("button", { name: /Play now/ }).click();
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    for (const key of [
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "Enter",
+      "Backspace",
+      "x",
+      "y",
+      "[",
+      "]",
+      "m",
+      "v",
+      "n",
+    ])
+      await page.keyboard.press(key);
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await page.keyboard.press("F3");
+    await expect(page.getByLabel("Stream performance")).toBeVisible();
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await page.keyboard.press("F3");
+    await expect(page.getByLabel("Stream performance")).toHaveCount(0);
+
+    await page.keyboard.down("Escape");
+    await page.keyboard.down("Escape");
+    await page.keyboard.up("Escape");
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "false",
+    );
+    await page.keyboard.press("Escape");
+    for (let index = 0; index < 20; index += 1)
+      await page.keyboard.press("Escape");
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "Show performance stats" }),
+    ).toBeFocused();
+    await page.waitForTimeout(4_200);
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "false",
+    );
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await expect(
+      page.locator(
+        '.stream-header button[aria-label="Show performance stats"]',
+      ),
+    ).not.toBeFocused();
+    await expectNoAccessibilityViolations(page, "hidden stream chrome");
+
+    await page.mouse.move(101, 101);
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "false",
+    );
+    await page.locator(".stream-view").focus();
+    await page.waitForTimeout(4_200);
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
   } finally {
     await app.close();
   }
@@ -462,6 +572,14 @@ test("controller semantics navigate to health and settings persist in the shell"
       "true",
     );
     await expect(page.locator(".performance-strip")).toBeVisible();
+    await page.keyboard.press("F3");
+    await expect(page.getByLabel("Stream performance")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Performance overlay" }),
+    ).toHaveAttribute("aria-checked", "false");
   } finally {
     await app.close();
   }
@@ -478,7 +596,6 @@ test("an interrupted stream recovers autonomously", async () => {
     await expect(page.getByTestId("mock-stream")).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText("60 FPS")).toBeVisible();
   } finally {
     await app.close();
   }
@@ -813,7 +930,7 @@ test("repeated stream start and clean exit does not leak UI state", async () => 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await page.getByRole("button", { name: /Play now/ }).click();
       await expect(page.getByTestId("mock-stream")).toBeVisible();
-      await expect(page.getByText("60 FPS")).toBeVisible();
+      await expect(page.getByLabel("Stream performance")).toHaveCount(0);
       await page.getByRole("button", { name: "Leave Xbox stream" }).click();
       await expect(
         page.getByRole("heading", { name: "Studio Series S" }),

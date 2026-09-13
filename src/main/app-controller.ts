@@ -449,7 +449,8 @@ export class AppController {
     event: "connected" | "interrupted" | "failed",
     detail?: string,
   ): Promise<void> {
-    const session = this.requireSession(sessionId);
+    const session = this.activeSession;
+    if (!session || session.id !== sessionId) return;
     if (event === "connected") {
       this.setSession(
         "streaming",

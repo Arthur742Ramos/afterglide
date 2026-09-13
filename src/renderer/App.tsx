@@ -773,18 +773,72 @@ function StreamView({
   onExit: () => Promise<void>;
 }) {
   const [overlay, setOverlay] = useState(true);
+  const [performanceVisible, setPerformanceVisible] = useState(
+    snapshot.settings.showPerformance,
+  );
+  const [performanceAnnouncement, setPerformanceAnnouncement] = useState("");
+  const overlayRef = useRef(true);
+  const performanceVisibleRef = useRef(snapshot.settings.showPerformance);
+  const streamEventsEnabled = useRef(true);
+  const root = useRef<HTMLElement>(null);
+  const header = useRef<HTMLElement>(null);
   const timer = useRef<number | undefined>(undefined);
-  const reveal = useCallback(() => {
-    setOverlay(true);
+  const scheduleHide = useCallback(() => {
     clearTimeout(timer.current);
-    if (snapshot.session.phase === "streaming")
-      timer.current = window.setTimeout(() => setOverlay(false), 4_000);
+    if (snapshot.session.phase !== "streaming") return;
+    timer.current = window.setTimeout(() => {
+      if (header.current?.contains(document.activeElement)) {
+        scheduleHide();
+        return;
+      }
+      overlayRef.current = false;
+      setOverlay(false);
+    }, 4_000);
   }, [snapshot.session.phase]);
+  const reveal = useCallback(() => {
+    overlayRef.current = true;
+    setOverlay(true);
+    scheduleHide();
+  }, [scheduleHide]);
+  const hide = useCallback(() => {
+    clearTimeout(timer.current);
+    overlayRef.current = false;
+    setOverlay(false);
+    if (header.current?.contains(document.activeElement))
+      root.current?.focus({ preventScroll: true });
+  }, []);
+  const toggleOverlay = useCallback(() => {
+    if (overlayRef.current) hide();
+    else reveal();
+  }, [hide, reveal]);
+  const togglePerformance = useCallback(() => {
+    const visible = !performanceVisibleRef.current;
+    performanceVisibleRef.current = visible;
+    setPerformanceVisible(visible);
+    setPerformanceAnnouncement(
+      `Performance stats ${visible ? "shown" : "hidden"}.`,
+    );
+    void window.afterglide.updateSettings({ showPerformance: visible });
+  }, []);
   useEffect(() => {
     reveal();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOverlay((value) => !value);
-      else reveal();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (!event.repeat) toggleOverlay();
+      } else if (event.key === "F3") {
+        event.preventDefault();
+        if (!event.repeat) togglePerformance();
+      } else if (event.key === "Tab") {
+        const wasHidden = !overlayRef.current;
+        reveal();
+        if (wasHidden) {
+          event.preventDefault();
+          window.requestAnimationFrame(() =>
+            header.current?.querySelector<HTMLButtonElement>("button")?.focus(),
+          );
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointermove", reveal);
@@ -793,42 +847,54 @@ function StreamView({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointermove", reveal);
     };
-  }, [reveal]);
+  }, [reveal, toggleOverlay, togglePerformance]);
 
-  const onConnected = useCallback(
-    () =>
-      void window.afterglide.reportStreamEvent(
-        descriptor.sessionId,
-        "connected",
-      ),
-    [descriptor.sessionId],
+  useEffect(
+    () => () => {
+      streamEventsEnabled.current = false;
+    },
+    [],
   );
-  const onInterrupted = useCallback(
-    () =>
-      void window.afterglide.reportStreamEvent(
-        descriptor.sessionId,
-        "interrupted",
-      ),
-    [descriptor.sessionId],
-  );
+
+  const exitStream = useCallback(async () => {
+    streamEventsEnabled.current = false;
+    await onExit();
+  }, [onExit]);
+
+  const onConnected = useCallback(() => {
+    if (!streamEventsEnabled.current) return;
+    void window.afterglide.reportStreamEvent(descriptor.sessionId, "connected");
+  }, [descriptor.sessionId]);
+  const onInterrupted = useCallback(() => {
+    if (!streamEventsEnabled.current) return;
+    void window.afterglide.reportStreamEvent(
+      descriptor.sessionId,
+      "interrupted",
+    );
+  }, [descriptor.sessionId]);
   const onError = useCallback(
-    (message: string) =>
+    (message: string) => {
+      if (!streamEventsEnabled.current) return;
       void window.afterglide.reportStreamEvent(
         descriptor.sessionId,
         "failed",
         message,
-      ),
+      );
+    },
     [descriptor.sessionId],
   );
-  const onTelemetry = useCallback(
-    (value: AppSnapshot["telemetry"]) =>
-      void window.afterglide.updateTelemetry(value),
-    [],
-  );
+  const onTelemetry = useCallback((value: AppSnapshot["telemetry"]) => {
+    if (!streamEventsEnabled.current) return;
+    void window.afterglide.updateTelemetry(value);
+  }, []);
 
   const telemetry = snapshot.telemetry;
   return (
-    <main className={`stream-view ${overlay ? "overlay-visible" : ""}`}>
+    <main
+      ref={root}
+      tabIndex={-1}
+      className={`stream-view ${overlay ? "overlay-visible" : ""}`}
+    >
       <StreamSurface
         descriptor={descriptor}
         reducedMotion={snapshot.settings.reducedMotion}
@@ -839,18 +905,34 @@ function StreamView({
         onTelemetry={onTelemetry}
       />
       <div className="stream-vignette" />
-      <header className="stream-header" aria-hidden={!overlay}>
+      <header ref={header} className="stream-header" aria-hidden={!overlay}>
         <BrandWord />
         <div className="stream-console">
           <span className="live-dot" /> {descriptor.displayName}
         </div>
-        <button
-          aria-label="Leave Xbox stream"
-          tabIndex={overlay ? 0 : -1}
-          onClick={() => void onExit()}
-        >
-          <Icon name="power" /> End session
-        </button>
+        <div className="stream-header-actions">
+          <button
+            aria-label={
+              performanceVisible
+                ? "Hide performance stats"
+                : "Show performance stats"
+            }
+            aria-keyshortcuts="F3"
+            aria-pressed={performanceVisible}
+            tabIndex={overlay ? 0 : -1}
+            onClick={togglePerformance}
+          >
+            <Icon name="pulse" />{" "}
+            {performanceVisible ? "Hide stats" : "Show stats"}
+          </button>
+          <button
+            aria-label="Leave Xbox stream"
+            tabIndex={overlay ? 0 : -1}
+            onClick={() => void exitStream()}
+          >
+            <Icon name="power" /> End session
+          </button>
+        </div>
       </header>
       {snapshot.session.phase === "recovering" && (
         <div className="recovery-panel" role="status">
@@ -861,11 +943,8 @@ function StreamView({
           </div>
         </div>
       )}
-      {(snapshot.settings.showPerformance || overlay) && (
-        <div
-          className={`performance-strip ${snapshot.settings.showPerformance ? "performance-pinned" : ""}`}
-          aria-label="Stream performance"
-        >
+      {performanceVisible && (
+        <div className="performance-strip" aria-label="Stream performance">
           <Metric
             label="VIDEO"
             value={`${Math.round(telemetry.framesPerSecond)} FPS`}
@@ -884,14 +963,22 @@ function StreamView({
           />
         </div>
       )}
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {performanceAnnouncement}
+      </p>
       <footer className="stream-controls">
         <span>
           <ControllerHint label="☰" /> + <ControllerHint label="◫" /> Xbox
           button
         </span>
-        <span>
-          Press <ControllerHint label="Esc" wide /> to show controls
-        </span>
+        <div className="stream-shortcuts">
+          <span>
+            <ControllerHint label="F3" wide /> Stats
+          </span>
+          <span>
+            <ControllerHint label="Esc" wide /> Controls
+          </span>
+        </div>
       </footer>
     </main>
   );
@@ -1050,7 +1137,7 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
         <SettingRow
           icon="pulse"
           title="Performance overlay"
-          detail="Show live frame rate and latency while playing."
+          detail="Show live frame rate and latency while playing. Toggle it any time with F3."
         >
           <Toggle
             checked={snapshot.settings.showPerformance}
