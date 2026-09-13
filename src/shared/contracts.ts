@@ -174,7 +174,7 @@ export interface StreamApi {
 export interface TestApi {
   simulateNetworkDrop(): Promise<void>;
   injectGamepad(
-    action: "up" | "down" | "left" | "right" | "accept" | "back",
+    action: "up" | "down" | "left" | "right" | "accept" | "back" | "controls",
   ): Promise<void>;
 }
 

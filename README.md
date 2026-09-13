@@ -21,7 +21,8 @@ share WebRTC video/audio, controller input, rumble, telemetry, and recovery UI.
 - Xbox xHome provisioning and authenticated SDP/ICE signaling
 - xCloud entitlement detection, recent games, catalog metadata, and streaming
 - H.264 WebRTC video, audio, keepalive, and connection telemetry
-- Focused-window gamepad input, keyboard opt-in, and controller rumble
+- Focused-window gamepad input, full keyboard emulation, and controller rumble
+- L3 + R3 access to stream controls with game input paused while they are open
 - Controller-first home, setup, settings, diagnostics, error, and recovery flows
 - Deterministic Playwright coverage of the real Electron desktop shell
 
@@ -62,7 +63,7 @@ The end-to-end suite launches Electron at the Steam Deck's 1280×800 viewport,
 the 960×600 minimum, and a 1600×1000 desktop viewport. It uses an unpackaged-only
 deterministic adapter and covers authentication races, large cloud libraries,
 spatial controller navigation, editable keyboard input, connection cancellation,
-streaming and recovery, restart persistence, renderer security boundaries,
+stream input capture, streaming and recovery, restart persistence, renderer security boundaries,
 long-content layout, and automated WCAG checks.
 
 ## Build a Linux package

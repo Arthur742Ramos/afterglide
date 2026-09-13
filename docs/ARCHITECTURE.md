@@ -56,6 +56,13 @@ and `message`. The input channel transmits controller frames and receives rumble
 Physical input is sampled only while the window is focused and visible; losing
 focus sends a neutral frame and stops capture.
 
+The input schema reserves L3 + R3 for Afterglide's in-stream controls. Opening
+them sends a neutral frame and suspends game input until the controls close;
+D-pad or left stick, A, and B then navigate the application. Menu + View emits
+the Xbox button. Optional keyboard emulation covers both sticks, D-pad, face
+buttons, bumpers, triggers, stick clicks, Menu, View, and Xbox while Escape and
+F3 remain local controls.
+
 ## Network policy
 
 Xbox service reads have bounded timeouts and retry only transient HTTP or

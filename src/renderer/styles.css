@@ -1370,6 +1370,14 @@ kbd.wide {
 .overlay-visible .stream-vignette {
   opacity: 1;
 }
+.controls-captured .stream-vignette {
+  background: linear-gradient(
+    to bottom,
+    oklch(0.04 0.012 258 / 0.92),
+    oklch(0.06 0.015 258 / 0.14) 28%,
+    oklch(0.04 0.012 258 / 0.9)
+  );
+}
 .stream-header {
   position: absolute;
   top: 0;
@@ -1433,6 +1441,9 @@ kbd.wide {
 .stream-header button svg {
   width: 17px;
   color: oklch(0.82 0.11 25);
+}
+.controls-captured .stream-header button {
+  background: oklch(0.14 0.02 258 / 0.94);
 }
 .performance-strip {
   position: absolute;
@@ -1502,6 +1513,17 @@ kbd.wide {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.input-captured-status {
+  color: var(--ink);
+  font-weight: 650;
+}
+.input-captured-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px oklch(0.79 0.145 70 / 0.65);
 }
 .stream-shortcuts {
   display: flex;
@@ -1788,6 +1810,13 @@ kbd.wide {
 .keyboard-guide small {
   color: var(--muted);
   font-size: 13px;
+}
+.controller-guide {
+  background: linear-gradient(
+    90deg,
+    oklch(0.25 0.045 70 / 0.32),
+    transparent 74%
+  );
 }
 .keyboard-guide-keys {
   display: flex;

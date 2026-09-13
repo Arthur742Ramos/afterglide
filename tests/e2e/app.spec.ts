@@ -261,6 +261,38 @@ test("stream chrome stays out of keyboard play and survives shortcut stress", as
     await page.keyboard.press("F3");
     await expect(page.getByLabel("Stream performance")).toHaveCount(0);
 
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("controls"));
+    await expect(page.locator(".stream-view")).toHaveClass(/controls-captured/);
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "true",
+    );
+    await expect(
+      page.getByRole("button", { name: "Show performance stats" }),
+    ).toBeFocused();
+    await expect(page.getByText("game input paused")).toBeVisible();
+    await page.screenshot({
+      path: join(screenshots, "stream-controls-1280x800.png"),
+    });
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("accept"));
+    await expect(page.getByLabel("Stream performance")).toBeVisible();
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("right"));
+    await expect(
+      page.getByRole("button", { name: "Leave Xbox stream" }),
+    ).toBeFocused();
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("back"));
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await expect(page.locator(".stream-view")).not.toHaveClass(
+      /controls-captured/,
+    );
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "false",
+    );
+
     await page.keyboard.down("Escape");
     await page.keyboard.down("Escape");
     await page.keyboard.up("Escape");
@@ -278,7 +310,7 @@ test("stream chrome stays out of keyboard play and survives shortcut stress", as
 
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("button", { name: "Show performance stats" }),
+      page.getByRole("button", { name: /performance stats/ }),
     ).toBeFocused();
     await page.waitForTimeout(4_200);
     await expect(page.locator(".stream-header")).toHaveAttribute(
@@ -292,9 +324,7 @@ test("stream chrome stays out of keyboard play and survives shortcut stress", as
       "true",
     );
     await expect(
-      page.locator(
-        '.stream-header button[aria-label="Show performance stats"]',
-      ),
+      page.locator('.stream-header button[aria-label*="performance stats"]'),
     ).not.toBeFocused();
     await expectNoAccessibilityViolations(page, "hidden stream chrome");
 
@@ -594,7 +624,9 @@ test("controller semantics navigate to health and settings persist in the shell"
     ).toBeVisible();
     await page.getByRole("button", { name: "Home" }).focus();
     await page.evaluate(() => window.afterglideTest!.injectGamepad("down"));
+    await expect(page.getByRole("button", { name: "Cloud" })).toBeFocused();
     await page.evaluate(() => window.afterglideTest!.injectGamepad("down"));
+    await expect(page.getByRole("button", { name: "Health" })).toBeFocused();
     await page.evaluate(() => window.afterglideTest!.injectGamepad("accept"));
     await expect(
       page.getByRole("heading", { name: "Ready before you play." }),
@@ -616,7 +648,16 @@ test("controller semantics navigate to health and settings persist in the shell"
       "Arrows D-pad",
     );
     await expect(page.getByLabel("Keyboard game controls")).toContainText(
+      "WASD Left stick",
+    );
+    await expect(page.getByLabel("Keyboard game controls")).toContainText(
+      "Z / C LT / RT",
+    );
+    await expect(page.getByLabel("Keyboard game controls")).toContainText(
       "Esc controls",
+    );
+    await expect(page.getByLabel("Controller controls")).toContainText(
+      "L3 + R3 Afterglide controls",
     );
     await page.getByRole("button", { name: "720p" }).click();
     await expect(page.getByRole("button", { name: "720p" })).toHaveClass(
@@ -773,6 +814,19 @@ test("primary surfaces remain usable at the minimum window size", async () => {
     ).toBeVisible();
     await page.screenshot({ path: join(screenshots, "settings-960x600.png") });
 
+    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByRole("button", { name: /Play now/ }).click();
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("controls"));
+    await expect(page.getByText("game input paused")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Leave Xbox stream" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: join(screenshots, "stream-controls-960x600.png"),
+    });
+
     const dimensions = await page.evaluate(() => ({
       viewport: { width: window.innerWidth, height: window.innerHeight },
       document: {
@@ -786,6 +840,7 @@ test("primary surfaces remain usable at the minimum window size", async () => {
     expect(dimensions.document.height).toBeLessThanOrEqual(
       dimensions.viewport.height,
     );
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
   } finally {
     await app.close();
   }

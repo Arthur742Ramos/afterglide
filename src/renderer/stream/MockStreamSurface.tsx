@@ -3,12 +3,14 @@ import type { StreamTelemetry } from "../../shared/contracts";
 
 interface Props {
   reducedMotion: boolean;
+  inputSuspended: boolean;
   onConnected: () => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
 }
 
 export function MockStreamSurface({
   reducedMotion,
+  inputSuspended,
   onConnected,
   onTelemetry,
 }: Props) {
@@ -39,6 +41,7 @@ export function MockStreamSurface({
     <div
       className={`mock-stream ${reducedMotion ? "reduced" : ""}`}
       data-testid="mock-stream"
+      data-input-suspended={inputSuspended}
       role="img"
       aria-label="Test remote-play video"
     >

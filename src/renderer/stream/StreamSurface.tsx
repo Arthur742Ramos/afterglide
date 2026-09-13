@@ -7,6 +7,7 @@ interface Props {
   descriptor: StreamDescriptor;
   reducedMotion: boolean;
   keyboardControls: boolean;
+  inputSuspended: boolean;
   onConnected: () => void;
   onInterrupted: () => void;
   onError: (message: string) => void;
@@ -15,6 +16,7 @@ interface Props {
 
 export function StreamSurface(props: Props) {
   const container = useRef<HTMLDivElement>(null);
+  const engine = useRef<XboxStreamEngine | undefined>(undefined);
   const onConnected = useCallback(props.onConnected, [props.onConnected]);
   const onInterrupted = useCallback(props.onInterrupted, [props.onInterrupted]);
   const onError = useCallback(props.onError, [props.onError]);
@@ -22,7 +24,7 @@ export function StreamSurface(props: Props) {
 
   useEffect(() => {
     if (props.descriptor.mock || !container.current) return;
-    const engine = new XboxStreamEngine({
+    const streamEngine = new XboxStreamEngine({
       sessionId: props.descriptor.sessionId,
       container: container.current,
       keyboardControls: props.keyboardControls,
@@ -31,8 +33,12 @@ export function StreamSurface(props: Props) {
       onError,
       onTelemetry,
     });
-    void engine.connect();
-    return () => engine.destroy();
+    engine.current = streamEngine;
+    void streamEngine.connect();
+    return () => {
+      engine.current = undefined;
+      streamEngine.destroy();
+    };
   }, [
     props.descriptor,
     props.keyboardControls,
@@ -42,10 +48,15 @@ export function StreamSurface(props: Props) {
     onTelemetry,
   ]);
 
+  useEffect(() => {
+    engine.current?.setInputSuspended(props.inputSuspended);
+  }, [props.inputSuspended]);
+
   if (props.descriptor.mock) {
     return (
       <MockStreamSurface
         reducedMotion={props.reducedMotion}
+        inputSuspended={props.inputSuspended}
         onConnected={onConnected}
         onTelemetry={onTelemetry}
       />

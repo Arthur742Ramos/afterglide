@@ -6,6 +6,12 @@ import {
   assessNetworkQuality,
   NETWORK_POLICY,
 } from "../../shared/network-policy";
+import {
+  applyKeyboardInput,
+  isKeyboardControlCode,
+  type XboxButtonName as ButtonName,
+  type XboxInputFrame as InputFrame,
+} from "./input-schema";
 
 interface StreamEngineOptions {
   sessionId: string;
@@ -16,33 +22,6 @@ interface StreamEngineOptions {
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
 }
-
-type InputFrame = Record<ButtonName, number> & {
-  GamepadIndex: number;
-  LeftThumbXAxis: number;
-  LeftThumbYAxis: number;
-  RightThumbXAxis: number;
-  RightThumbYAxis: number;
-  LeftTrigger: number;
-  RightTrigger: number;
-};
-
-type ButtonName =
-  | "Nexus"
-  | "Menu"
-  | "View"
-  | "A"
-  | "B"
-  | "X"
-  | "Y"
-  | "DPadUp"
-  | "DPadDown"
-  | "DPadLeft"
-  | "DPadRight"
-  | "LeftShoulder"
-  | "RightShoulder"
-  | "LeftThumb"
-  | "RightThumb";
 
 const buttonMap: Record<ButtonName, number> = {
   A: 0,
@@ -60,22 +39,6 @@ const buttonMap: Record<ButtonName, number> = {
   Menu: 9,
   View: 8,
   Nexus: 16,
-};
-
-const keyboardMap: Partial<Record<string, keyof InputFrame>> = {
-  Enter: "A",
-  Backspace: "B",
-  x: "X",
-  y: "Y",
-  ArrowUp: "DPadUp",
-  ArrowDown: "DPadDown",
-  ArrowLeft: "DPadLeft",
-  ArrowRight: "DPadRight",
-  "[": "LeftShoulder",
-  "]": "RightShoulder",
-  m: "Menu",
-  v: "View",
-  n: "Nexus",
 };
 
 /**
@@ -98,6 +61,7 @@ export class XboxStreamEngine {
   private terminal = false;
   private connected = false;
   private inputActive = false;
+  private inputSuspended = false;
   private sequence = 0;
   private lastInputAt = 0;
   private lastInputSignature = "";
@@ -249,6 +213,12 @@ export class XboxStreamEngine {
       if (this.destroyed) return;
       this.notifyError(streamErrorMessage(error));
     }
+  }
+
+  setInputSuspended(suspended: boolean): void {
+    if (suspended === this.inputSuspended) return;
+    this.inputSuspended = suspended;
+    if (suspended) this.releaseInput();
   }
 
   destroy(): void {
@@ -431,6 +401,7 @@ export class XboxStreamEngine {
     if (this.destroyed) return;
     if (
       this.inputActive &&
+      !this.inputSuspended &&
       document.hasFocus() &&
       document.visibilityState === "visible"
     ) {
@@ -442,7 +413,7 @@ export class XboxStreamEngine {
   };
 
   private sendCurrentInput(heartbeatDue = false): void {
-    if (!this.inputActive) return;
+    if (!this.inputActive || this.inputSuspended) return;
     const update = chooseInputUpdate(
       readInputFrame(this.pressedKeys),
       this.lastInputSignature,
@@ -479,18 +450,21 @@ export class XboxStreamEngine {
   private onKeyDown = (event: KeyboardEvent): void => {
     if (
       !this.options.keyboardControls ||
-      !(event.key in keyboardMap) ||
+      this.inputSuspended ||
+      !isKeyboardControlCode(event.code) ||
       !document.hasFocus()
     )
       return;
-    this.pressedKeys.add(event.key);
+    this.pressedKeys.add(event.code);
     this.sendCurrentInput();
     event.preventDefault();
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
-    if (!this.options.keyboardControls || !(event.key in keyboardMap)) return;
-    this.pressedKeys.delete(event.key);
+    if (!this.options.keyboardControls || !isKeyboardControlCode(event.code))
+      return;
+    this.pressedKeys.delete(event.code);
+    if (this.inputSuspended) return;
     this.sendCurrentInput();
     event.preventDefault();
   };
@@ -691,7 +665,7 @@ function waitForIceGathering(
   });
 }
 
-function readInputFrame(keys: Set<string>): InputFrame | undefined {
+function readInputFrame(keys: ReadonlySet<string>): InputFrame | undefined {
   const frame = emptyInputFrame();
   const gamepad = navigator.getGamepads().find((item) => item?.connected);
   if (!gamepad && keys.size === 0) return undefined;
@@ -708,16 +682,22 @@ function readInputFrame(keys: Set<string>): InputFrame | undefined {
     frame.RightThumbXAxis = deadzone(gamepad.axes[2] ?? 0);
     frame.RightThumbYAxis = deadzone(gamepad.axes[3] ?? 0);
   }
-  keys.forEach((key) => {
-    const name = keyboardMap[key];
-    if (name) frame[name] = 1;
-  });
+  applyKeyboardInput(frame, keys);
+  normalizeInputChords(frame);
+  return frame;
+}
+
+function normalizeInputChords(frame: InputFrame): void {
+  // L3 + R3 belongs to Afterglide so the same press cannot leak into a game.
+  if (frame.LeftThumb > 0 && frame.RightThumb > 0) {
+    frame.LeftThumb = 0;
+    frame.RightThumb = 0;
+  }
   if (frame.View > 0 && frame.Menu > 0) {
     frame.View = 0;
     frame.Menu = 0;
     frame.Nexus = 1;
   }
-  return frame;
 }
 
 function emptyInputFrame(): InputFrame {
@@ -902,4 +882,14 @@ export const streamProtocolTestUtils = {
       lastSignature,
       heartbeatDue,
     ),
+  keyboardInput: (codes: string[]) => {
+    const frame = emptyInputFrame();
+    applyKeyboardInput(frame, new Set(codes));
+    return frame;
+  },
+  normalizedInput: (input: Partial<InputFrame>) => {
+    const frame = { ...emptyInputFrame(), ...input };
+    normalizeInputChords(frame);
+    return frame;
+  },
 };

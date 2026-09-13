@@ -44,6 +44,83 @@ describe("Xbox input protocol", () => {
     ).toBeUndefined();
   });
 
+  it("maps the complete keyboard controller schema", () => {
+    const frame = streamProtocolTestUtils.keyboardInput([
+      "KeyW",
+      "KeyD",
+      "KeyI",
+      "KeyL",
+      "Space",
+      "Enter",
+      "Backspace",
+      "KeyX",
+      "KeyY",
+      "ArrowUp",
+      "ArrowRight",
+      "KeyQ",
+      "KeyE",
+      "KeyZ",
+      "KeyC",
+      "KeyF",
+      "KeyH",
+      "KeyV",
+      "KeyM",
+      "KeyN",
+    ]);
+    expect(frame).toMatchObject({
+      LeftThumbXAxis: 1,
+      LeftThumbYAxis: -1,
+      RightThumbXAxis: 1,
+      RightThumbYAxis: -1,
+      A: 1,
+      B: 1,
+      X: 1,
+      Y: 1,
+      DPadUp: 1,
+      DPadRight: 1,
+      LeftShoulder: 1,
+      RightShoulder: 1,
+      LeftTrigger: 1,
+      RightTrigger: 1,
+      LeftThumb: 1,
+      RightThumb: 1,
+      View: 1,
+      Menu: 1,
+      Nexus: 1,
+    });
+  });
+
+  it("cancels opposing keyboard axes and preserves independent buttons", () => {
+    const frame = streamProtocolTestUtils.keyboardInput([
+      "KeyW",
+      "KeyS",
+      "KeyA",
+      "KeyD",
+      "ArrowDown",
+      "Backspace",
+      "KeyZ",
+    ]);
+    expect(frame).toMatchObject({
+      LeftThumbXAxis: 0,
+      LeftThumbYAxis: 0,
+      DPadDown: 1,
+      B: 1,
+      LeftTrigger: 1,
+    });
+  });
+
+  it("reserves L3 plus R3 for Afterglide and maps Menu plus View to Xbox", () => {
+    expect(
+      streamProtocolTestUtils.normalizedInput({
+        LeftThumb: 1,
+        RightThumb: 1,
+      }),
+    ).toMatchObject({ LeftThumb: 0, RightThumb: 0 });
+    expect(
+      streamProtocolTestUtils.normalizedInput({ Menu: 1, View: 1 }),
+    ).toMatchObject({ Menu: 0, View: 0, Nexus: 1 });
+  });
+
   it("removes Electron's IPC wrapper from safe negotiation errors", () => {
     expect(
       streamErrorMessage(

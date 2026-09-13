@@ -8,6 +8,9 @@ const actionKeys: Record<string, string> = {
 };
 
 const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+const repeatingActions = new Set(["up", "down", "left", "right"]);
+const repeatDelayMs = 360;
+const repeatIntervalMs = 95;
 
 function isTextEntry(target: EventTarget | null): boolean {
   return (
@@ -107,26 +110,53 @@ export function useControllerNavigation(
     window.addEventListener("afterglide-gamepad", onGamepad);
 
     let previous = new Set<string>();
+    const repeatAt = new Map<string, number>();
     let frame = 0;
-    const pollGamepad = (): void => {
+    const pollGamepad = (now: number): void => {
       const gamepad = navigator
         .getGamepads()
         .find((candidate) => candidate?.connected);
       const active = new Set<string>();
       if (gamepad) {
-        if (gamepad.buttons[12]?.pressed || (gamepad.axes[1] ?? 0) < -0.65)
-          active.add("up");
-        if (gamepad.buttons[13]?.pressed || (gamepad.axes[1] ?? 0) > 0.65)
-          active.add("down");
-        if (gamepad.buttons[14]?.pressed || (gamepad.axes[0] ?? 0) < -0.65)
-          active.add("left");
-        if (gamepad.buttons[15]?.pressed || (gamepad.axes[0] ?? 0) > 0.65)
-          active.add("right");
-        if (gamepad.buttons[0]?.pressed) active.add("accept");
+        const dpad = [
+          gamepad.buttons[12]?.pressed ? "up" : "",
+          gamepad.buttons[13]?.pressed ? "down" : "",
+          gamepad.buttons[14]?.pressed ? "left" : "",
+          gamepad.buttons[15]?.pressed ? "right" : "",
+        ].filter(Boolean);
+        if (dpad.length > 0) dpad.forEach((action) => active.add(action));
+        else {
+          const x = gamepad.axes[0] ?? 0;
+          const y = gamepad.axes[1] ?? 0;
+          if (Math.max(Math.abs(x), Math.abs(y)) > 0.65)
+            active.add(
+              Math.abs(x) > Math.abs(y)
+                ? x < 0
+                  ? "left"
+                  : "right"
+                : y < 0
+                  ? "up"
+                  : "down",
+            );
+        }
         if (gamepad.buttons[1]?.pressed) active.add("back");
+        else if (gamepad.buttons[0]?.pressed) active.add("accept");
       }
       active.forEach((action) => {
-        if (!previous.has(action)) perform(action);
+        if (!previous.has(action)) {
+          perform(action);
+          if (repeatingActions.has(action))
+            repeatAt.set(action, now + repeatDelayMs);
+        } else if (
+          repeatingActions.has(action) &&
+          now >= (repeatAt.get(action) ?? Number.POSITIVE_INFINITY)
+        ) {
+          perform(action);
+          repeatAt.set(action, now + repeatIntervalMs);
+        }
+      });
+      repeatAt.forEach((_time, action) => {
+        if (!active.has(action)) repeatAt.delete(action);
       });
       previous = active;
       frame = requestAnimationFrame(pollGamepad);

@@ -8,6 +8,10 @@ import type {
 } from "../shared/contracts";
 import { Icon, type IconName } from "./icons";
 import { useControllerNavigation } from "./hooks/use-controller-navigation";
+import {
+  CONTROLLER_CONTROL_GUIDE,
+  KEYBOARD_CONTROL_GUIDE,
+} from "./stream/input-schema";
 import { StreamSurface } from "./stream/StreamSurface";
 
 type Page = "home" | "cloud" | "diagnostics" | "settings";
@@ -828,19 +832,23 @@ function StreamView({
     snapshot.settings.showPerformance,
   );
   const [performanceAnnouncement, setPerformanceAnnouncement] = useState("");
+  const [controlsCaptured, setControlsCaptured] = useState(false);
   const overlayRef = useRef(true);
   const performanceVisibleRef = useRef(snapshot.settings.showPerformance);
+  const controlsCapturedRef = useRef(false);
   const streamEventsEnabled = useRef(true);
   const root = useRef<HTMLElement>(null);
   const header = useRef<HTMLElement>(null);
   const timer = useRef<number | undefined>(undefined);
+  const focusFrame = useRef<number | undefined>(undefined);
   const scheduleHide = useCallback(() => {
     clearTimeout(timer.current);
-    if (snapshot.session.phase !== "streaming") return;
+    if (snapshot.session.phase !== "streaming" || controlsCapturedRef.current)
+      return;
     timer.current = window.setTimeout(() => {
+      if (controlsCapturedRef.current) return;
       if (header.current?.contains(document.activeElement)) {
-        scheduleHide();
-        return;
+        root.current?.focus({ preventScroll: true });
       }
       overlayRef.current = false;
       setOverlay(false);
@@ -853,15 +861,41 @@ function StreamView({
   }, [scheduleHide]);
   const hide = useCallback(() => {
     clearTimeout(timer.current);
+    cancelAnimationFrame(focusFrame.current ?? 0);
+    focusFrame.current = undefined;
     overlayRef.current = false;
     setOverlay(false);
     if (header.current?.contains(document.activeElement))
       root.current?.focus({ preventScroll: true });
   }, []);
+  const captureControls = useCallback((focusFirst = false) => {
+    clearTimeout(timer.current);
+    controlsCapturedRef.current = true;
+    setControlsCaptured(true);
+    overlayRef.current = true;
+    setOverlay(true);
+    if (focusFirst) {
+      cancelAnimationFrame(focusFrame.current ?? 0);
+      focusFrame.current = window.requestAnimationFrame(() => {
+        focusFrame.current = undefined;
+        if (!controlsCapturedRef.current) return;
+        header.current
+          ?.querySelector<HTMLButtonElement>("[data-autofocus]")
+          ?.focus();
+      });
+    }
+  }, []);
+  const closeControls = useCallback(() => {
+    controlsCapturedRef.current = false;
+    setControlsCaptured(false);
+    hide();
+  }, [hide]);
   const toggleOverlay = useCallback(() => {
-    if (overlayRef.current) hide();
-    else reveal();
-  }, [hide, reveal]);
+    if (overlayRef.current) {
+      if (controlsCapturedRef.current) closeControls();
+      else hide();
+    } else captureControls(true);
+  }, [captureControls, closeControls, hide]);
   const togglePerformance = useCallback(() => {
     const visible = !performanceVisibleRef.current;
     performanceVisibleRef.current = visible;
@@ -871,6 +905,10 @@ function StreamView({
     );
     void window.afterglide.updateSettings({ showPerformance: visible });
   }, []);
+  useControllerNavigation(
+    controlsCaptured,
+    `stream:${performanceVisible ? "stats" : "no-stats"}`,
+  );
   useEffect(() => {
     reveal();
     const onKey = (event: KeyboardEvent) => {
@@ -881,24 +919,62 @@ function StreamView({
         event.preventDefault();
         if (!event.repeat) togglePerformance();
       } else if (event.key === "Tab") {
-        const wasHidden = !overlayRef.current;
-        reveal();
-        if (wasHidden) {
-          event.preventDefault();
-          window.requestAnimationFrame(() =>
-            header.current?.querySelector<HTMLButtonElement>("button")?.focus(),
-          );
+        event.preventDefault();
+        const buttons = Array.from(
+          header.current?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+        );
+        if (!controlsCapturedRef.current) {
+          captureControls(true);
+          return;
         }
+        const current = buttons.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
+        const direction = event.shiftKey ? -1 : 1;
+        buttons[
+          (current + direction + buttons.length) % buttons.length
+        ]?.focus();
       }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointermove", reveal);
     return () => {
       clearTimeout(timer.current);
+      cancelAnimationFrame(focusFrame.current ?? 0);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointermove", reveal);
     };
-  }, [reveal, toggleOverlay, togglePerformance]);
+  }, [captureControls, reveal, toggleOverlay, togglePerformance]);
+
+  useEffect(() => {
+    const toggleControls = () => {
+      if (controlsCapturedRef.current) closeControls();
+      else captureControls(true);
+    };
+    const onGamepadAction = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === "controls")
+        toggleControls();
+    };
+    let chordPressed = false;
+    let frame = 0;
+    const poll = () => {
+      const gamepad = navigator
+        .getGamepads()
+        .find((candidate) => candidate?.connected);
+      const pressed = Boolean(
+        gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed,
+      );
+      if (pressed && !chordPressed) toggleControls();
+      chordPressed = pressed;
+      frame = requestAnimationFrame(poll);
+    };
+    window.addEventListener("afterglide-gamepad", onGamepadAction);
+    frame = requestAnimationFrame(poll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("afterglide-gamepad", onGamepadAction);
+    };
+  }, [captureControls, closeControls]);
 
   useEffect(
     () => () => {
@@ -944,12 +1020,15 @@ function StreamView({
     <main
       ref={root}
       tabIndex={-1}
-      className={`stream-view ${overlay ? "overlay-visible" : ""}`}
+      className={`stream-view ${overlay ? "overlay-visible" : ""} ${
+        controlsCaptured ? "controls-captured" : ""
+      }`}
     >
       <StreamSurface
         descriptor={descriptor}
         reducedMotion={snapshot.settings.reducedMotion}
         keyboardControls={snapshot.settings.keyboardControls}
+        inputSuspended={controlsCaptured}
         onConnected={onConnected}
         onInterrupted={onInterrupted}
         onError={onError}
@@ -963,6 +1042,8 @@ function StreamView({
         </div>
         <div className="stream-header-actions">
           <button
+            data-focusable
+            data-autofocus
             aria-label={
               performanceVisible
                 ? "Hide performance stats"
@@ -977,6 +1058,7 @@ function StreamView({
             {performanceVisible ? "Hide stats" : "Show stats"}
           </button>
           <button
+            data-focusable
             aria-label="Leave Xbox stream"
             tabIndex={overlay ? 0 : -1}
             onClick={() => void exitStream()}
@@ -1018,17 +1100,42 @@ function StreamView({
         {performanceAnnouncement}
       </p>
       <footer className="stream-controls">
-        <span>
-          <ControllerHint label="☰" /> + <ControllerHint label="◫" /> Xbox
-          button
-        </span>
+        {controlsCaptured ? (
+          <span className="input-captured-status" role="status">
+            <i /> Afterglide controls · game input paused
+          </span>
+        ) : (
+          <span>
+            <ControllerHint label="L3" wide /> +{" "}
+            <ControllerHint label="R3" wide /> Controls
+          </span>
+        )}
         <div className="stream-shortcuts">
-          <span>
-            <ControllerHint label="F3" wide /> Stats
-          </span>
-          <span>
-            <ControllerHint label="Esc" wide /> Controls
-          </span>
+          {controlsCaptured ? (
+            <>
+              <span>
+                <ControllerHint label="A" /> /{" "}
+                <ControllerHint label="Enter" wide /> Select
+              </span>
+              <span>
+                <ControllerHint label="B" /> /{" "}
+                <ControllerHint label="Esc" wide /> Close
+              </span>
+            </>
+          ) : (
+            <>
+              <span>
+                <ControllerHint label="☰" /> + <ControllerHint label="◫" />{" "}
+                Xbox
+              </span>
+              <span>
+                <ControllerHint label="F3" wide /> Stats
+              </span>
+              <span>
+                <ControllerHint label="Esc" wide /> Controls
+              </span>
+            </>
+          )}
         </div>
       </footer>
     </main>
@@ -1207,6 +1314,7 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
             onChange={(value) => update({ keyboardControls: value })}
           />
         </SettingRow>
+        <ControllerGuide />
         {snapshot.settings.keyboardControls && <KeyboardGuide />}
         <SettingRow
           icon="settings"
@@ -1256,32 +1364,37 @@ function KeyboardGuide() {
         <span>These keys are sent to the game while streaming.</span>
       </div>
       <div className="keyboard-guide-keys">
-        <span>
-          <ControllerHint label="Arrows" wide /> D-pad
-        </span>
-        <span>
-          <ControllerHint label="Enter" wide /> A
-        </span>
-        <span>
-          <ControllerHint label="⌫" /> B
-        </span>
-        <span>
-          <ControllerHint label="X / Y" wide /> Face buttons
-        </span>
-        <span>
-          <ControllerHint label="[ / ]" wide /> Bumpers
-        </span>
-        <span>
-          <ControllerHint label="M / V" wide /> Menu / View
-        </span>
-        <span>
-          <ControllerHint label="N" /> Xbox
-        </span>
+        {KEYBOARD_CONTROL_GUIDE.map(({ keys, action }) => (
+          <span key={keys}>
+            <ControllerHint label={keys} wide /> {action}
+          </span>
+        ))}
       </div>
       <small>
         <ControllerHint label="Esc" wide /> controls ·{" "}
         <ControllerHint label="F3" wide /> performance stats
       </small>
+    </aside>
+  );
+}
+
+function ControllerGuide() {
+  return (
+    <aside
+      className="keyboard-guide controller-guide"
+      aria-label="Controller controls"
+    >
+      <div>
+        <strong>Controller controls</strong>
+        <span>Afterglide pauses game input while its controls are open.</span>
+      </div>
+      <div className="keyboard-guide-keys">
+        {CONTROLLER_CONTROL_GUIDE.map(({ keys, action }) => (
+          <span key={keys}>
+            <ControllerHint label={keys} wide /> {action}
+          </span>
+        ))}
+      </div>
     </aside>
   );
 }
