@@ -20,7 +20,14 @@ export class SettingsStore {
   }
 
   get settings(): AppSettings {
-    return { ...defaultSettings, ...this.state.settings };
+    const settings = { ...defaultSettings, ...this.state.settings };
+    return {
+      ...settings,
+      controllerMenuShortcut:
+        settings.controllerMenuShortcut === "steam-input"
+          ? "steam-input"
+          : "stick-chord",
+    };
   }
 
   get selectedConsoleId(): string | undefined {

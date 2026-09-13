@@ -1818,6 +1818,24 @@ kbd.wide {
     transparent 74%
   );
 }
+.controller-shortcut button {
+  min-width: 104px;
+}
+.steam-input-tip {
+  padding-top: 14px;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid oklch(1 0 0 / 0.09);
+}
+.steam-input-tip > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.steam-input-tip > div:first-child span,
+.steam-input-tip small {
+  color: var(--muted);
+  font-size: 13px;
+}
 .keyboard-guide-keys {
   display: flex;
   flex-wrap: wrap;

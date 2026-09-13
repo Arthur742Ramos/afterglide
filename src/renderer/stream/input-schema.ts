@@ -33,9 +33,25 @@ export interface ControlGuideItem {
 export const CONTROLLER_CONTROL_GUIDE: readonly ControlGuideItem[] = [
   { keys: "D-pad / Left stick", action: "Navigate Afterglide" },
   { keys: "A / B", action: "Select / Back" },
-  { keys: "L3 + R3", action: "Afterglide controls" },
   { keys: "Menu + View", action: "Xbox button" },
 ];
+
+export const STEAM_INPUT_CONTROL_GUIDE: readonly ControlGuideItem[] = [
+  { keys: "L4 → F10", action: "Afterglide controls" },
+  { keys: "R4 → F9", action: "Performance stats" },
+];
+
+export const LOCAL_CONTROL_SHORTCUTS = {
+  controls: ["Escape", "F10"],
+  performance: ["F3", "F9"],
+} as const;
+
+export function isLocalControlShortcut(
+  key: string,
+  action: keyof typeof LOCAL_CONTROL_SHORTCUTS,
+): boolean {
+  return (LOCAL_CONTROL_SHORTCUTS[action] as readonly string[]).includes(key);
+}
 
 export const KEYBOARD_CONTROL_GUIDE: readonly ControlGuideItem[] = [
   { keys: "WASD", action: "Left stick" },

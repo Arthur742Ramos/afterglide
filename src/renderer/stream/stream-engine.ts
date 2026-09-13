@@ -17,6 +17,7 @@ interface StreamEngineOptions {
   sessionId: string;
   container: HTMLElement;
   keyboardControls: boolean;
+  reserveControlChord: boolean;
   onConnected: () => void;
   onInterrupted: () => void;
   onError: (message: string) => void;
@@ -415,7 +416,7 @@ export class XboxStreamEngine {
   private sendCurrentInput(heartbeatDue = false): void {
     if (!this.inputActive || this.inputSuspended) return;
     const update = chooseInputUpdate(
-      readInputFrame(this.pressedKeys),
+      readInputFrame(this.pressedKeys, this.options.reserveControlChord),
       this.lastInputSignature,
       heartbeatDue,
     );
@@ -665,7 +666,10 @@ function waitForIceGathering(
   });
 }
 
-function readInputFrame(keys: ReadonlySet<string>): InputFrame | undefined {
+function readInputFrame(
+  keys: ReadonlySet<string>,
+  reserveControlChord = true,
+): InputFrame | undefined {
   const frame = emptyInputFrame();
   const gamepad = navigator.getGamepads().find((item) => item?.connected);
   if (!gamepad && keys.size === 0) return undefined;
@@ -683,13 +687,16 @@ function readInputFrame(keys: ReadonlySet<string>): InputFrame | undefined {
     frame.RightThumbYAxis = deadzone(gamepad.axes[3] ?? 0);
   }
   applyKeyboardInput(frame, keys);
-  normalizeInputChords(frame);
+  normalizeInputChords(frame, reserveControlChord);
   return frame;
 }
 
-function normalizeInputChords(frame: InputFrame): void {
-  // L3 + R3 belongs to Afterglide so the same press cannot leak into a game.
-  if (frame.LeftThumb > 0 && frame.RightThumb > 0) {
+function normalizeInputChords(
+  frame: InputFrame,
+  reserveControlChord = true,
+): void {
+  // In the built-in mode, prevent Afterglide's L3 + R3 shortcut from leaking.
+  if (reserveControlChord && frame.LeftThumb > 0 && frame.RightThumb > 0) {
     frame.LeftThumb = 0;
     frame.RightThumb = 0;
   }
@@ -887,9 +894,9 @@ export const streamProtocolTestUtils = {
     applyKeyboardInput(frame, new Set(codes));
     return frame;
   },
-  normalizedInput: (input: Partial<InputFrame>) => {
+  normalizedInput: (input: Partial<InputFrame>, reserveControlChord = true) => {
     const frame = { ...emptyInputFrame(), ...input };
-    normalizeInputChords(frame);
+    normalizeInputChords(frame, reserveControlChord);
     return frame;
   },
 };

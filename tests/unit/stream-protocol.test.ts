@@ -117,6 +117,12 @@ describe("Xbox input protocol", () => {
       }),
     ).toMatchObject({ LeftThumb: 0, RightThumb: 0 });
     expect(
+      streamProtocolTestUtils.normalizedInput(
+        { LeftThumb: 1, RightThumb: 1 },
+        false,
+      ),
+    ).toMatchObject({ LeftThumb: 1, RightThumb: 1 });
+    expect(
       streamProtocolTestUtils.normalizedInput({ Menu: 1, View: 1 }),
     ).toMatchObject({ Menu: 0, View: 0, Nexus: 1 });
   });

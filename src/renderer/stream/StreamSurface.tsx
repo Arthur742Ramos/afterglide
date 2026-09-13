@@ -7,6 +7,7 @@ interface Props {
   descriptor: StreamDescriptor;
   reducedMotion: boolean;
   keyboardControls: boolean;
+  reserveControlChord: boolean;
   inputSuspended: boolean;
   onConnected: () => void;
   onInterrupted: () => void;
@@ -28,6 +29,7 @@ export function StreamSurface(props: Props) {
       sessionId: props.descriptor.sessionId,
       container: container.current,
       keyboardControls: props.keyboardControls,
+      reserveControlChord: props.reserveControlChord,
       onConnected,
       onInterrupted,
       onError,
@@ -42,6 +44,7 @@ export function StreamSurface(props: Props) {
   }, [
     props.descriptor,
     props.keyboardControls,
+    props.reserveControlChord,
     onConnected,
     onInterrupted,
     onError,

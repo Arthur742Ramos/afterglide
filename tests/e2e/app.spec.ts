@@ -191,7 +191,9 @@ test("console selection, connection stages, stream overlay, and clean exit work"
     await page.getByRole("button", { name: "Show performance stats" }).click();
     await expect(page.getByText("60 FPS")).toBeVisible();
     await page.screenshot({ path: join(screenshots, "stream-1280x800.png") });
-    await page.keyboard.press("Escape");
+    await page.keyboard.press("F10");
+    await expect(page.locator(".stream-view")).toHaveClass(/controls-captured/);
+    await page.keyboard.press("F10");
     await expect(page.locator(".stream-header")).toHaveAttribute(
       "aria-hidden",
       "true",
@@ -261,6 +263,18 @@ test("stream chrome stays out of keyboard play and survives shortcut stress", as
     await page.keyboard.press("F3");
     await expect(page.getByLabel("Stream performance")).toHaveCount(0);
 
+    await page.keyboard.press("F9");
+    await expect(page.getByLabel("Stream performance")).toBeVisible();
+    await page.keyboard.press("F9");
+    await expect(page.getByLabel("Stream performance")).toHaveCount(0);
+    await page.keyboard.press("F10");
+    await expect(page.locator(".stream-view")).toHaveClass(/controls-captured/);
+    await page.keyboard.press("F10");
+    await expect(page.locator(".stream-header")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
     await page.evaluate(() => window.afterglideTest!.injectGamepad("controls"));
     await expect(page.locator(".stream-view")).toHaveClass(/controls-captured/);
     await expect(page.getByTestId("mock-stream")).toHaveAttribute(
@@ -293,14 +307,11 @@ test("stream chrome stays out of keyboard play and survives shortcut stress", as
       "false",
     );
 
-    await page.keyboard.down("Escape");
-    await page.keyboard.down("Escape");
-    await page.keyboard.up("Escape");
-    await expect(page.locator(".stream-header")).toHaveAttribute(
-      "aria-hidden",
-      "false",
-    );
-    await page.keyboard.press("Escape");
+    await page.keyboard.down("F10");
+    await page.keyboard.down("F10");
+    await page.keyboard.up("F10");
+    await expect(page.locator(".stream-view")).toHaveClass(/controls-captured/);
+    await page.keyboard.press("F10");
     for (let index = 0; index < 20; index += 1)
       await page.keyboard.press("Escape");
     await expect(page.locator(".stream-header")).toHaveAttribute(
@@ -644,6 +655,14 @@ test("controller semantics navigate to health and settings persist in the shell"
       page.getByRole("switch", { name: "Performance overlay" }),
     ).toHaveAttribute("aria-checked", "true");
     await page.getByRole("switch", { name: "Keyboard controls" }).click();
+    await expect(page.getByRole("button", { name: "L3 + R3" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.getByRole("button", { name: "Steam Input" }).click();
+    await expect(
+      page.getByRole("button", { name: "Steam Input" }),
+    ).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByLabel("Keyboard game controls")).toContainText(
       "Arrows D-pad",
     );
@@ -654,10 +673,16 @@ test("controller semantics navigate to health and settings persist in the shell"
       "Z / C LT / RT",
     );
     await expect(page.getByLabel("Keyboard game controls")).toContainText(
-      "Esc controls",
+      "Esc / F10 controls",
     );
     await expect(page.getByLabel("Controller controls")).toContainText(
-      "L3 + R3 Afterglide controls",
+      "F10 Afterglide controls",
+    );
+    await expect(page.getByLabel("Controller controls")).toContainText(
+      "L4 → F10 Afterglide controls",
+    );
+    await expect(page.getByLabel("Controller controls")).toContainText(
+      "L3 + R3 passes through to the Xbox",
     );
     await page.getByRole("button", { name: "720p" }).click();
     await expect(page.getByRole("button", { name: "720p" })).toHaveClass(
@@ -878,6 +903,7 @@ test("preferences and the selected console survive a complete restart", async ()
     await first.page.getByRole("button", { name: /Den Series X/ }).click();
     await first.page.getByRole("button", { name: "Settings" }).click();
     await first.page.getByRole("button", { name: "720p" }).click();
+    await first.page.getByRole("button", { name: "Steam Input" }).click();
     for (const name of [
       "Performance overlay",
       "Keyboard controls",
@@ -906,6 +932,9 @@ test("preferences and the selected console survive a complete restart", async ()
     await expect(
       restarted.page.getByRole("button", { name: "720p" }),
     ).toHaveClass(/active/);
+    await expect(
+      restarted.page.getByRole("button", { name: "Steam Input" }),
+    ).toHaveAttribute("aria-pressed", "true");
     for (const name of [
       "Performance overlay",
       "Keyboard controls",
@@ -935,6 +964,7 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
         resolution: 1440,
         reducedMotion: "yes",
         showPerformance: 1,
+        controllerMenuShortcut: "unbound",
         unknownSetting: true,
       } as never);
       return (await window.afterglide.getSnapshot()).settings;
@@ -944,6 +974,7 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
       reducedMotion: false,
       showPerformance: false,
       keyboardControls: false,
+      controllerMenuShortcut: "stick-chord",
       launchFullscreen: false,
     });
 

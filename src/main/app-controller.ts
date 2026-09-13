@@ -524,6 +524,11 @@ export class AppController {
     const allowed: Partial<AppSettings> = {};
     if (update.resolution === 720 || update.resolution === 1080)
       allowed.resolution = update.resolution;
+    if (
+      update.controllerMenuShortcut === "stick-chord" ||
+      update.controllerMenuShortcut === "steam-input"
+    )
+      allowed.controllerMenuShortcut = update.controllerMenuShortcut;
     for (const key of [
       "reducedMotion",
       "showPerformance",

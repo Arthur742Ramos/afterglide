@@ -16,7 +16,12 @@ describe("SettingsStore", () => {
     const path = join(directory, "preferences.json");
     const store = new SettingsStore(path);
     expect(store.settings.resolution).toBe(1080);
-    store.updateSettings({ resolution: 720, reducedMotion: true });
+    expect(store.settings.controllerMenuShortcut).toBe("stick-chord");
+    store.updateSettings({
+      resolution: 720,
+      reducedMotion: true,
+      controllerMenuShortcut: "steam-input",
+    });
     store.setSelectedConsole("den");
 
     const restored = new SettingsStore(path);
@@ -24,6 +29,7 @@ describe("SettingsStore", () => {
       resolution: 720,
       reducedMotion: true,
       showPerformance: false,
+      controllerMenuShortcut: "steam-input",
     });
     expect(restored.selectedConsoleId).toBe("den");
     expect(readFileSync(path, "utf8")).toContain('"resolution": 720');

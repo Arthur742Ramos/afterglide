@@ -96,6 +96,7 @@ export interface AppSettings {
   reducedMotion: boolean;
   showPerformance: boolean;
   keyboardControls: boolean;
+  controllerMenuShortcut: "stick-chord" | "steam-input";
   launchFullscreen: boolean;
 }
 
@@ -183,6 +184,7 @@ export const defaultSettings: AppSettings = {
   reducedMotion: false,
   showPerformance: false,
   keyboardControls: false,
+  controllerMenuShortcut: "stick-chord",
   launchFullscreen: false,
 };
 

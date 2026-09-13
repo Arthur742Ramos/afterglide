@@ -47,6 +47,27 @@ choose a console or open the Cloud library. For home streaming, remote features
 must be enabled on Xbox under **Settings → Devices & connections → Remote
 features**.
 
+### Steam Input and Deck paddles
+
+Add the Afterglide AppImage to Steam as a non-Steam game and keep Steam's
+**Gamepad** template so normal controller input reaches the Xbox. In **Controller
+Settings → Edit Layout**, map any spare buttons or rear paddles to these keyboard
+keys:
+
+- **L4 → F10** opens and closes Afterglide's controls.
+- **R4 → F9** shows and hides performance stats.
+
+Both keys remain local to Afterglide and work even when keyboard game controls
+are disabled. In Afterglide's settings, **L3 + R3** keeps the built-in controller
+shortcut; **Steam Input** passes that chord through to the Xbox and relies on the
+user's F10 binding. Steam's controller configurator supports these keyboard and
+XInput mappings through [legacy mode bindings](https://partner.steamgames.com/doc/features/steam_controller/legacy_mode).
+
+Named Afterglide actions in Steam's overlay require a Steam AppID, Steam Input
+API integration, and a published action manifest. Those belong to a future Steam
+depot; the current AppImage exposes stable legacy bindings without pretending to
+have an official Steam configuration.
+
 The renderer never receives Microsoft or Xbox tokens. Afterglide persists a
 refresh token only when Electron reports a real OS encryption backend; Linux's
 `basic_text` fallback is rejected and leaves the session in memory only.
