@@ -511,6 +511,59 @@ test("cloud search filters case-insensitively and reports no matches", async () 
   }
 });
 
+test("large cloud libraries stay light and controller movement follows the grid", async () => {
+  const { app, page } = await launch({
+    signedIn: true,
+    scenario: "large-cloud-catalog",
+  });
+  try {
+    await page.setViewportSize({ width: 960, height: 600 });
+    await page.getByRole("button", { name: "Cloud" }).click();
+    const search = page.getByRole("textbox", { name: "Search cloud games" });
+    const cards = page.locator(".game-grid > button");
+
+    await expect(cards).toHaveCount(48);
+    await expect(page.getByText("Showing 48 of 80")).toBeVisible();
+    await page.screenshot({
+      path: join(screenshots, "large-cloud-960x600.png"),
+    });
+
+    await search.fill("Cloud Game 80");
+    await search.press("ArrowRight");
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue("Cloud Game 80");
+    await page.getByRole("button", { name: "Clear game search" }).click();
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue("");
+
+    await page.getByRole("button", { name: "Show 32 more games" }).click();
+    await expect(cards).toHaveCount(80);
+    await expect(page.getByText("80 titles")).toBeVisible();
+
+    const rowTops = await cards.evaluateAll((buttons) =>
+      buttons.map((button) => button.getBoundingClientRect().top),
+    );
+    const secondRowIndex = rowTops.findIndex((top) => top > rowTops[0]! + 2);
+    expect(secondRowIndex).toBeGreaterThan(1);
+
+    await cards.first().focus();
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("down"));
+    const activeIndex = await cards.evaluateAll((buttons) =>
+      buttons.indexOf(document.activeElement as HTMLButtonElement),
+    );
+    expect(activeIndex).toBe(secondRowIndex);
+
+    const activeCard = cards.nth(activeIndex);
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("accept"));
+    await expect(activeCard).toHaveAttribute("aria-pressed", "true");
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("accept"));
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+  } finally {
+    await app.close();
+  }
+});
+
 test("vetted Xbox catalog artwork loads under the renderer security policy", async () => {
   const { app, page } = await launch({
     signedIn: true,
@@ -558,6 +611,13 @@ test("controller semantics navigate to health and settings persist in the shell"
     await expect(
       page.getByRole("switch", { name: "Performance overlay" }),
     ).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("switch", { name: "Keyboard controls" }).click();
+    await expect(page.getByLabel("Keyboard game controls")).toContainText(
+      "Arrows D-pad",
+    );
+    await expect(page.getByLabel("Keyboard game controls")).toContainText(
+      "Esc controls",
+    );
     await page.getByRole("button", { name: "720p" }).click();
     await expect(page.getByRole("button", { name: "720p" })).toHaveClass(
       /active/,
@@ -731,6 +791,31 @@ test("primary surfaces remain usable at the minimum window size", async () => {
   }
 });
 
+test("desktop widescreen keeps actions comfortably grouped", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await expect(
+      page.getByRole("heading", { name: "Pick up where you left off." }),
+    ).toBeVisible();
+    await expect(page.locator(".page")).toHaveCSS("max-width", "1400px");
+    await page.screenshot({ path: join(screenshots, "home-1600x1000.png") });
+
+    await page.getByRole("button", { name: "Cloud" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Your library. Ready anywhere." }),
+    ).toBeVisible();
+    await page.screenshot({ path: join(screenshots, "cloud-1600x1000.png") });
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test("preferences and the selected console survive a complete restart", async () => {
   const first = await launch({ signedIn: true });
   let running: ElectronApplication | undefined = first.app;
@@ -866,7 +951,7 @@ test("core signed-out and signed-in surfaces meet automated WCAG checks", async 
     for (const navigation of [
       { button: "Cloud", heading: "Your library. Ready anywhere." },
       { button: "Health", heading: "Ready before you play." },
-      { button: "Settings", heading: "Tuned for the handheld." },
+      { button: "Settings", heading: "Tuned to how you play." },
     ]) {
       await signedIn.page
         .getByRole("button", { name: navigation.button })

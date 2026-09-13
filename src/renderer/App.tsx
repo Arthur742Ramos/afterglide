@@ -11,6 +11,7 @@ import { useControllerNavigation } from "./hooks/use-controller-navigation";
 import { StreamSurface } from "./stream/StreamSurface";
 
 type Page = "home" | "cloud" | "diagnostics" | "settings";
+const CLOUD_PAGE_SIZE = 48;
 
 export function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | undefined>(undefined);
@@ -175,15 +176,15 @@ function WelcomeScreen({
         <span className="independent-label">Open source · Independent</span>
       </div>
       <section className="welcome-copy">
-        <p className="eyebrow">XBOX STREAMING FOR STEAM DECK</p>
+        <p className="eyebrow">XBOX STREAMING, YOUR WAY</p>
         <h1>
           Your Xbox.
           <br />
           <span>Wherever you land.</span>
         </h1>
         <p className="welcome-lede">
-          Play from your own console or Xbox Cloud Gaming, with a
-          controller-first experience built for your Deck.
+          Play from your own console or Xbox Cloud Gaming in a controller-first
+          experience that feels at home on Steam Deck and desktop.
         </p>
         {error && (
           <div className="inline-error" role="alert">
@@ -377,10 +378,17 @@ function Shell({
         {children}
         <footer className="controller-footer">
           <span>
-            <ControllerHint label="A" /> Select
+            <ControllerHint label="A" /> / <ControllerHint label="Enter" wide />
+            Select
           </span>
           <span>
-            <ControllerHint label="B" /> Back
+            <ControllerHint label="B" /> / <ControllerHint label="Esc" wide />
+            Back
+          </span>
+          <span>
+            <ControllerHint label="✣" /> /{" "}
+            <ControllerHint label="Arrows" wide />
+            Move
           </span>
           <span className="footer-version">v{snapshot.version}</span>
         </footer>
@@ -397,6 +405,8 @@ function CloudPage({
   onPlay: (titleId: string) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(CLOUD_PAGE_SIZE);
+  const searchInput = useRef<HTMLInputElement>(null);
   const selected = snapshot.cloud.titles.find(
     (title) => title.id === snapshot.cloud.selectedTitleId,
   );
@@ -405,6 +415,9 @@ function CloudPage({
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
+  const visibleTitles = filtered.slice(0, visibleCount);
+
+  useEffect(() => setVisibleCount(CLOUD_PAGE_SIZE), [query]);
 
   return (
     <section className="page cloud-page">
@@ -415,16 +428,33 @@ function CloudPage({
           <p>Games available to stream with this Microsoft account.</p>
         </div>
         {snapshot.cloud.status === "ready" && (
-          <label className="cloud-search">
+          <div className="cloud-search" role="search">
             <Icon name="search" />
-            <span className="sr-only">Search cloud games</span>
+            <label className="sr-only" htmlFor="cloud-game-search">
+              Search cloud games
+            </label>
             <input
+              ref={searchInput}
+              id="cloud-game-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search games"
               data-focusable
             />
-          </label>
+            {query && (
+              <button
+                type="button"
+                aria-label="Clear game search"
+                data-focusable
+                onClick={() => {
+                  setQuery("");
+                  searchInput.current?.focus();
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -487,8 +517,10 @@ function CloudPage({
         <div className="cloud-library">
           <div className="cloud-library-title">
             <h2>{query ? "Search results" : "All cloud games"}</h2>
-            <span>
-              {filtered.length} {filtered.length === 1 ? "title" : "titles"}
+            <span aria-live="polite">
+              {visibleTitles.length < filtered.length
+                ? `Showing ${visibleTitles.length} of ${filtered.length}`
+                : `${filtered.length} ${filtered.length === 1 ? "title" : "titles"}`}
             </span>
           </div>
           {filtered.length === 0 ? (
@@ -498,24 +530,43 @@ function CloudPage({
                 : "No cloud games are currently available for this account."}
             </p>
           ) : (
-            <div className="game-grid">
-              {filtered.map((title) => (
+            <>
+              <div className="game-grid">
+                {visibleTitles.map((title) => (
+                  <button
+                    key={title.id}
+                    className={title.id === selected?.id ? "selected" : ""}
+                    data-focusable
+                    aria-pressed={title.id === selected?.id}
+                    onClick={(event) => {
+                      if (event.detail === 0 && title.id === selected?.id)
+                        void onPlay(title.id);
+                      else void window.afterglide.selectCloudTitle(title.id);
+                    }}
+                    onDoubleClick={() => void onPlay(title.id)}
+                    aria-label={`${title.name}, ${title.publisher}`}
+                  >
+                    <GameArtwork title={title} />
+                    <strong>{title.name}</strong>
+                    <span>{title.publisher}</span>
+                  </button>
+                ))}
+              </div>
+              {visibleTitles.length < filtered.length && (
                 <button
-                  key={title.id}
-                  className={title.id === selected?.id ? "selected" : ""}
+                  className="secondary-action cloud-load-more"
                   data-focusable
                   onClick={() =>
-                    void window.afterglide.selectCloudTitle(title.id)
+                    setVisibleCount((count) => count + CLOUD_PAGE_SIZE)
                   }
-                  onDoubleClick={() => void onPlay(title.id)}
-                  aria-label={`${title.name}, ${title.publisher}`}
                 >
-                  <GameArtwork title={title} />
-                  <strong>{title.name}</strong>
-                  <span>{title.publisher}</span>
+                  {`Show ${Math.min(
+                    CLOUD_PAGE_SIZE,
+                    filtered.length - visibleCount,
+                  )} more games`}
                 </button>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -574,7 +625,7 @@ function HomePage({
   return (
     <section className="page home-page">
       <div className="page-heading">
-        <p className="eyebrow">GOOD EVENING</p>
+        <p className="eyebrow">READY WHEN YOU ARE</p>
         <h1>
           {selected ? "Pick up where you left off." : "Let’s find your Xbox."}
         </h1>
@@ -1107,8 +1158,8 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
     <section className="page utility-page settings-page">
       <div className="page-heading">
         <p className="eyebrow">PREFERENCES</p>
-        <h1>Tuned for the handheld.</h1>
-        <p>Automatic choices stay strong. Change only what helps your setup.</p>
+        <h1>Tuned to how you play.</h1>
+        <p>Fast on a handheld. Comfortable at a desk. Make it yours.</p>
       </div>
       <div className="settings-list">
         <SettingRow
@@ -1148,7 +1199,7 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
         <SettingRow
           icon="controller"
           title="Keyboard controls"
-          detail="Map keyboard keys to Xbox input during a stream."
+          detail="Use a keyboard as an Xbox controller during a stream."
         >
           <Toggle
             checked={snapshot.settings.keyboardControls}
@@ -1156,6 +1207,7 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
             onChange={(value) => update({ keyboardControls: value })}
           />
         </SettingRow>
+        {snapshot.settings.keyboardControls && <KeyboardGuide />}
         <SettingRow
           icon="settings"
           title="Reduce motion"
@@ -1170,7 +1222,7 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
         <SettingRow
           icon="display"
           title="Launch fullscreen"
-          detail="Open directly in a Gaming Mode-friendly view."
+          detail="Start in a focused view on desktop or Gaming Mode."
         >
           <Toggle
             checked={snapshot.settings.launchFullscreen}
@@ -1193,6 +1245,44 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
         </button>
       </div>
     </section>
+  );
+}
+
+function KeyboardGuide() {
+  return (
+    <aside className="keyboard-guide" aria-label="Keyboard game controls">
+      <div>
+        <strong>Keyboard game controls</strong>
+        <span>These keys are sent to the game while streaming.</span>
+      </div>
+      <div className="keyboard-guide-keys">
+        <span>
+          <ControllerHint label="Arrows" wide /> D-pad
+        </span>
+        <span>
+          <ControllerHint label="Enter" wide /> A
+        </span>
+        <span>
+          <ControllerHint label="⌫" /> B
+        </span>
+        <span>
+          <ControllerHint label="X / Y" wide /> Face buttons
+        </span>
+        <span>
+          <ControllerHint label="[ / ]" wide /> Bumpers
+        </span>
+        <span>
+          <ControllerHint label="M / V" wide /> Menu / View
+        </span>
+        <span>
+          <ControllerHint label="N" /> Xbox
+        </span>
+      </div>
+      <small>
+        <ControllerHint label="Esc" wide /> controls ·{" "}
+        <ControllerHint label="F3" wide /> performance stats
+      </small>
+    </aside>
   );
 }
 

@@ -3,7 +3,7 @@
 **Your Xbox. Wherever you land.**
 
 Afterglide is an open-source, controller-first Xbox streaming client designed
-for Steam Deck. The current pre-alpha implements the desktop paths from
+for Steam Deck and desktop computers. The current pre-alpha implements the paths from
 Microsoft device-code sign-in through console discovery and xHome remote play,
 as well as xCloud library discovery and Xbox Cloud Gaming sessions. Both paths
 share WebRTC video/audio, controller input, rumble, telemetry, and recovery UI.
@@ -58,11 +58,12 @@ npm run test:e2e
 npm audit --audit-level=high
 ```
 
-The end-to-end suite launches Electron at the Steam Deck's 1280×800 viewport and
-the 960×600 minimum. It uses an unpackaged-only deterministic adapter and covers
-authentication races, console and cloud states, controller navigation,
-connection cancellation, streaming and recovery, restart persistence, renderer
-security boundaries, long-content layout, and automated WCAG checks.
+The end-to-end suite launches Electron at the Steam Deck's 1280×800 viewport,
+the 960×600 minimum, and a 1600×1000 desktop viewport. It uses an unpackaged-only
+deterministic adapter and covers authentication races, large cloud libraries,
+spatial controller navigation, editable keyboard input, connection cancellation,
+streaming and recovery, restart persistence, renderer security boundaries,
+long-content layout, and automated WCAG checks.
 
 ## Build a Linux package
 

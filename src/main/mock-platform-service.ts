@@ -161,6 +161,14 @@ export class MockPlatformService implements PlatformService {
       );
     }
     if (this.scenario === "cloud-empty") return [];
+    if (this.scenario === "large-cloud-catalog")
+      return Array.from({ length: 80 }, (_, index) => ({
+        ...structuredClone(cloudTitles[index % cloudTitles.length]!),
+        id: `CLOUD-GAME-${index + 1}`,
+        productId: `PRODUCT-${index + 1}`,
+        name: `Cloud Game ${String(index + 1).padStart(2, "0")}`,
+        recentlyPlayed: index === 0,
+      }));
     const result = structuredClone(cloudTitles);
     if (this.scenario === "cloud-artwork" && result[0])
       result[0].imageUrl = "https://images.xboxlive.com/e2e-cover.svg";
