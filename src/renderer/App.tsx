@@ -3,6 +3,7 @@ import type {
   AppSettings,
   AppSnapshot,
   CloudTitle,
+  ControllerTuning,
   StreamDescriptor,
   XboxConsole,
 } from "../shared/contracts";
@@ -16,9 +17,85 @@ import {
   isLocalControlShortcut,
 } from "./stream/input-schema";
 import { StreamSurface } from "./stream/StreamSurface";
+import {
+  friendlyControllerName,
+  selectController,
+} from "./stream/controller-input";
+import type { ControllerStatus } from "./stream/stream-engine";
 
 type Page = "home" | "cloud" | "diagnostics" | "settings";
 const CLOUD_PAGE_SIZE = 48;
+const GAMEPAD_BUTTON_LABELS = [
+  "A",
+  "B",
+  "X",
+  "Y",
+  "LB",
+  "RB",
+  "LT",
+  "RT",
+  "View",
+  "Menu",
+  "L3",
+  "R3",
+  "D-pad up",
+  "D-pad down",
+  "D-pad left",
+  "D-pad right",
+  "Xbox",
+] as const;
+
+interface ControllerDiagnostic {
+  id: string;
+  index: number;
+  name: string;
+  mapping: string;
+  buttons: number;
+  axes: number[];
+  pressed: string[];
+  rumble: boolean;
+}
+
+function useControllerDiagnostics(): ControllerDiagnostic[] {
+  const [controllers, setControllers] = useState<ControllerDiagnostic[]>([]);
+  useEffect(() => {
+    let previous = "";
+    const refresh = () => {
+      const next = Array.from(navigator.getGamepads())
+        .filter((gamepad): gamepad is Gamepad => Boolean(gamepad?.connected))
+        .map((gamepad) => ({
+          id: gamepad.id,
+          index: gamepad.index,
+          name: friendlyControllerName(gamepad.id),
+          mapping:
+            gamepad.mapping === "standard" ? "Standard mapping" : "Raw mapping",
+          buttons: gamepad.buttons.length,
+          axes: gamepad.axes.map((axis) => Math.round(axis * 100) / 100),
+          pressed: gamepad.buttons.flatMap((button, index) =>
+            button.pressed || button.value > 0.18
+              ? [GAMEPAD_BUTTON_LABELS[index] ?? `Button ${index + 1}`]
+              : [],
+          ),
+          rumble: Boolean(gamepad.vibrationActuator),
+        }));
+      const signature = JSON.stringify(next);
+      if (signature !== previous) {
+        previous = signature;
+        setControllers(next);
+      }
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 125);
+    window.addEventListener("gamepadconnected", refresh);
+    window.addEventListener("gamepaddisconnected", refresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("gamepadconnected", refresh);
+      window.removeEventListener("gamepaddisconnected", refresh);
+    };
+  }, []);
+  return controllers;
+}
 
 export function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | undefined>(undefined);
@@ -44,6 +121,7 @@ export function App() {
   useControllerNavigation(
     Boolean(snapshot && signedIn && !inStream && !isConnecting(snapshot)),
     focusScope,
+    snapshot?.settings.preferredControllerId,
   );
 
   useEffect(() => {
@@ -836,6 +914,7 @@ function StreamView({
   );
   const [performanceAnnouncement, setPerformanceAnnouncement] = useState("");
   const [controlsCaptured, setControlsCaptured] = useState(false);
+  const [controllerNotice, setControllerNotice] = useState("");
   const overlayRef = useRef(true);
   const performanceVisibleRef = useRef(snapshot.settings.showPerformance);
   const controlsCapturedRef = useRef(false);
@@ -844,6 +923,7 @@ function StreamView({
   const header = useRef<HTMLElement>(null);
   const timer = useRef<number | undefined>(undefined);
   const focusFrame = useRef<number | undefined>(undefined);
+  const controllerNoticeTimer = useRef<number | undefined>(undefined);
   const scheduleHide = useCallback(() => {
     clearTimeout(timer.current);
     if (snapshot.session.phase !== "streaming" || controlsCapturedRef.current)
@@ -915,6 +995,7 @@ function StreamView({
   useControllerNavigation(
     controlsCaptured,
     `stream:${performanceVisible ? "stats" : "no-stats"}`,
+    snapshot.settings.preferredControllerId,
   );
   useEffect(() => {
     reveal();
@@ -974,11 +1055,15 @@ function StreamView({
         toggleControls();
     };
     let chordPressed = false;
+    let activeGamepadIndex: number | undefined;
     let frame = 0;
     const poll = () => {
-      const gamepad = navigator
-        .getGamepads()
-        .find((candidate) => candidate?.connected);
+      const gamepad = selectController(
+        navigator.getGamepads(),
+        snapshot.settings.preferredControllerId,
+        activeGamepadIndex,
+      );
+      activeGamepadIndex = gamepad?.index;
       const pressed =
         snapshot.settings.controllerMenuShortcut === "stick-chord" &&
         Boolean(gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed);
@@ -992,7 +1077,11 @@ function StreamView({
       cancelAnimationFrame(frame);
       window.removeEventListener("afterglide-gamepad", onGamepadAction);
     };
-  }, [snapshot.settings.controllerMenuShortcut, toggleControls]);
+  }, [
+    snapshot.settings.controllerMenuShortcut,
+    snapshot.settings.preferredControllerId,
+    toggleControls,
+  ]);
 
   useEffect(
     () => () => {
@@ -1032,6 +1121,22 @@ function StreamView({
     if (!streamEventsEnabled.current) return;
     void window.afterglide.updateTelemetry(value);
   }, []);
+  const onControllerStatus = useCallback((status: ControllerStatus) => {
+    clearTimeout(controllerNoticeTimer.current);
+    const message =
+      status.state === "disconnected"
+        ? `${status.label} disconnected · game input released`
+        : status.state === "switched"
+          ? `Now using ${status.label}`
+          : `${status.label} ready`;
+    setControllerNotice(message);
+    controllerNoticeTimer.current = window.setTimeout(
+      () => setControllerNotice(""),
+      status.state === "disconnected" ? 5_000 : 3_000,
+    );
+  }, []);
+
+  useEffect(() => () => clearTimeout(controllerNoticeTimer.current), []);
 
   const telemetry = snapshot.telemetry;
   return (
@@ -1050,13 +1155,20 @@ function StreamView({
         reserveControlChord={
           snapshot.settings.controllerMenuShortcut === "stick-chord"
         }
+        controllerSettings={snapshot.settings}
         inputSuspended={controlsCaptured}
         onConnected={onConnected}
         onInterrupted={onInterrupted}
         onError={onError}
         onTelemetry={onTelemetry}
+        onControllerStatus={onControllerStatus}
       />
       <div className="stream-vignette" />
+      {controllerNotice && (
+        <div className="controller-notice" role="status">
+          <Icon name="controller" /> {controllerNotice}
+        </div>
+      )}
       <header ref={header} className="stream-header" aria-hidden={!overlay}>
         <BrandWord />
         <div className="stream-console">
@@ -1189,7 +1301,11 @@ function SessionErrorScreen({
   onRetry: () => void;
   onBack: () => void;
 }) {
-  useControllerNavigation(true);
+  useControllerNavigation(
+    true,
+    undefined,
+    snapshot.settings.preferredControllerId,
+  );
   const backLabel =
     snapshot.session.source === "cloud"
       ? "Back to cloud games"
@@ -1299,6 +1415,47 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
 function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
   const update = (settings: Partial<AppSettings>) =>
     void window.afterglide.updateSettings(settings);
+  const controllers = useControllerDiagnostics();
+  const controllerIds = Array.from(
+    new Map(
+      controllers.map((controller) => [controller.id, controller]),
+    ).values(),
+  );
+  const preferredId = snapshot.settings.preferredControllerId;
+  const activeTuning =
+    (preferredId
+      ? snapshot.settings.controllerProfiles.find(
+          (profile) => profile.id === preferredId,
+        )
+      : undefined) ?? snapshot.settings.controllerDefaults;
+  const hasDeviceProfile = Boolean(
+    preferredId &&
+    snapshot.settings.controllerProfiles.some(
+      (profile) => profile.id === preferredId,
+    ),
+  );
+  const updateControllerTuning = (change: Partial<ControllerTuning>) => {
+    if (!preferredId) {
+      update({
+        controllerDefaults: {
+          ...snapshot.settings.controllerDefaults,
+          ...change,
+        },
+      });
+      return;
+    }
+    const profiles = snapshot.settings.controllerProfiles.filter(
+      (profile) => profile.id !== preferredId,
+    );
+    profiles.push({ id: preferredId, ...activeTuning, ...change });
+    update({ controllerProfiles: profiles });
+  };
+  const resetControllerProfile = () =>
+    update({
+      controllerProfiles: snapshot.settings.controllerProfiles.filter(
+        (profile) => profile.id !== preferredId,
+      ),
+    });
   return (
     <section className="page utility-page settings-page">
       <div className="page-heading">
@@ -1386,6 +1543,164 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
             onChange={(value) => update({ keyboardControls: value })}
           />
         </SettingRow>
+        <SettingRow
+          icon="controller"
+          title="Active controller"
+          detail="Automatic follows the last controller you use; choose one to lock input and tuning to it."
+        >
+          <select
+            className="controller-select"
+            data-focusable
+            aria-label="Active controller"
+            value={preferredId}
+            onChange={(event) =>
+              update({ preferredControllerId: event.currentTarget.value })
+            }
+          >
+            <option value="">Automatic · last active</option>
+            {preferredId &&
+              !controllerIds.some(
+                (controller) => controller.id === preferredId,
+              ) && (
+                <option value={preferredId}>
+                  {friendlyControllerName(preferredId)} · disconnected
+                </option>
+              )}
+            {controllerIds.map((controller) => (
+              <option key={controller.id} value={controller.id}>
+                {controller.name} · slot {controller.index + 1}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+        <SettingRow
+          icon="controller"
+          title="Vibration"
+          detail={`${preferredId ? "This controller’s" : "Default"} rumble strength. Unsupported devices ignore it.`}
+        >
+          <div
+            className="segmented controller-tuning"
+            role="group"
+            aria-label="Vibration"
+          >
+            {(
+              [
+                ["off", "Off"],
+                ["low", "Low"],
+                ["full", "Full"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                data-focusable
+                aria-pressed={activeTuning.rumble === value}
+                className={activeTuning.rumble === value ? "active" : ""}
+                onClick={() => updateControllerTuning({ rumble: value })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
+        <SettingRow
+          icon="pulse"
+          title="Stick response"
+          detail="Increase the deadzone if a resting stick drifts."
+        >
+          <div
+            className="segmented controller-tuning"
+            role="group"
+            aria-label="Stick response"
+          >
+            {(
+              [
+                [0.04, "Tight"],
+                [0.08, "Standard"],
+                [0.12, "Relaxed"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                data-focusable
+                aria-label={`${label} ${Math.round(value * 100)} percent deadzone`}
+                aria-pressed={activeTuning.stickDeadzone === value}
+                className={activeTuning.stickDeadzone === value ? "active" : ""}
+                onClick={() => updateControllerTuning({ stickDeadzone: value })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
+        <SettingRow
+          icon="pulse"
+          title="Trigger response"
+          detail="Short and Quick reach a full pull earlier for worn or short-travel triggers."
+        >
+          <div
+            className="segmented controller-tuning"
+            role="group"
+            aria-label="Trigger response"
+          >
+            {(
+              [
+                [1, "Full"],
+                [0.75, "Short"],
+                [0.5, "Quick"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                data-focusable
+                aria-pressed={activeTuning.triggerRange === value}
+                className={activeTuning.triggerRange === value ? "active" : ""}
+                onClick={() => updateControllerTuning({ triggerRange: value })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
+        <SettingRow
+          icon="controller"
+          title="Face buttons"
+          detail="Remap the two face-button pairs for accessibility or controller conventions."
+        >
+          <div
+            className="segmented controller-layout"
+            role="group"
+            aria-label="Face button mapping"
+          >
+            {(
+              [
+                ["standard", "Standard"],
+                ["swap-ab", "Swap A/B"],
+                ["swap-xy", "Swap X/Y"],
+                ["swap-both", "Swap both"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                data-focusable
+                aria-pressed={activeTuning.buttonLayout === value}
+                className={activeTuning.buttonLayout === value ? "active" : ""}
+                onClick={() => updateControllerTuning({ buttonLayout: value })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
+        <ControllerDiagnostics
+          controllers={controllers}
+          preferredId={preferredId}
+          profiledIds={snapshot.settings.controllerProfiles.map(
+            (profile) => profile.id,
+          )}
+          onResetProfile={
+            preferredId && hasDeviceProfile ? resetControllerProfile : undefined
+          }
+        />
         <ControllerGuide shortcut={snapshot.settings.controllerMenuShortcut} />
         {snapshot.settings.keyboardControls && <KeyboardGuide />}
         <SettingRow
@@ -1425,6 +1740,102 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
         </button>
       </div>
     </section>
+  );
+}
+
+function ControllerDiagnostics({
+  controllers,
+  preferredId,
+  profiledIds,
+  onResetProfile,
+}: {
+  controllers: ControllerDiagnostic[];
+  preferredId: string;
+  profiledIds: string[];
+  onResetProfile?: () => void;
+}) {
+  return (
+    <aside
+      className="controller-diagnostics"
+      aria-label="Connected controller diagnostics"
+    >
+      <div className="controller-diagnostics-heading">
+        <div>
+          <strong>Controller check</strong>
+          <span>
+            {controllers.length === 0
+              ? "Connect or wake a controller to inspect it."
+              : `${controllers.length} controller${controllers.length === 1 ? "" : "s"} detected · input updates live`}
+          </span>
+        </div>
+        {onResetProfile && (
+          <button
+            className="text-action"
+            data-focusable
+            onClick={onResetProfile}
+          >
+            Reset this profile
+          </button>
+        )}
+      </div>
+      {controllers.length > 0 && (
+        <div className="controller-diagnostics-grid">
+          {controllers.map((controller) => {
+            const selected = preferredId === controller.id;
+            const axes = controller.axes
+              .slice(0, 4)
+              .map((axis) => axis.toFixed(2))
+              .join(" · ");
+            return (
+              <article
+                key={`${controller.id}:${controller.index}`}
+                className={selected ? "selected" : ""}
+                title={controller.id}
+              >
+                <div className="controller-card-title">
+                  <span className="controller-ready-dot" />
+                  <strong>{controller.name}</strong>
+                  <small>Slot {controller.index + 1}</small>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Device</dt>
+                    <dd title={controller.id}>{controller.id}</dd>
+                  </div>
+                  <div>
+                    <dt>Input</dt>
+                    <dd>
+                      {controller.pressed.length > 0
+                        ? controller.pressed.join(" + ")
+                        : "Waiting for input"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Axes</dt>
+                    <dd>{axes || "None"}</dd>
+                  </div>
+                  <div>
+                    <dt>Support</dt>
+                    <dd>
+                      {controller.mapping} · {controller.buttons} buttons ·{" "}
+                      {controller.rumble ? "Rumble ready" : "No browser rumble"}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="controller-card-badges">
+                  {selected && <span>LOCKED</span>}
+                  {profiledIds.includes(controller.id) && <span>PROFILE</span>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+      <small className="controller-diagnostics-note">
+        Automatic mode locks to the last active controller. If it disconnects,
+        Afterglide releases every Xbox input before switching.
+      </small>
+    </aside>
   );
 }
 

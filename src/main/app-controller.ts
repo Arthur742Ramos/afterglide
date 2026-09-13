@@ -10,6 +10,7 @@ import type {
   XboxConsole,
 } from "../shared/contracts";
 import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
+import { sanitizeSettingsUpdate } from "../shared/controller-settings";
 import { NETWORK_POLICY } from "../shared/network-policy";
 import { errorForLog, safeError } from "./errors";
 import type { PlatformService, StreamTarget } from "./platform-service";
@@ -521,22 +522,7 @@ export class AppController {
   }
 
   updateSettings(update: Partial<AppSettings>): void {
-    const allowed: Partial<AppSettings> = {};
-    if (update.resolution === 720 || update.resolution === 1080)
-      allowed.resolution = update.resolution;
-    if (
-      update.controllerMenuShortcut === "stick-chord" ||
-      update.controllerMenuShortcut === "steam-input"
-    )
-      allowed.controllerMenuShortcut = update.controllerMenuShortcut;
-    for (const key of [
-      "reducedMotion",
-      "showPerformance",
-      "keyboardControls",
-      "launchFullscreen",
-    ] as const) {
-      if (typeof update[key] === "boolean") allowed[key] = update[key];
-    }
+    const allowed = sanitizeSettingsUpdate(update, this.snapshot.settings);
     this.patch({ settings: this.preferences.updateSettings(allowed) });
   }
 

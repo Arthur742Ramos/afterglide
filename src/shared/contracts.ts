@@ -91,12 +91,35 @@ export interface HardwareInfo {
   secureStorage: boolean;
 }
 
+export type ControllerRumble = "off" | "low" | "full";
+export type ControllerButtonLayout =
+  | "standard"
+  | "swap-ab"
+  | "swap-xy"
+  | "swap-both";
+export type ControllerDeadzone = 0.04 | 0.08 | 0.12;
+export type ControllerTriggerRange = 0.5 | 0.75 | 1;
+
+export interface ControllerTuning {
+  rumble: ControllerRumble;
+  buttonLayout: ControllerButtonLayout;
+  stickDeadzone: ControllerDeadzone;
+  triggerRange: ControllerTriggerRange;
+}
+
+export interface ControllerProfile extends ControllerTuning {
+  id: string;
+}
+
 export interface AppSettings {
   resolution: 720 | 1080;
   reducedMotion: boolean;
   showPerformance: boolean;
   keyboardControls: boolean;
   controllerMenuShortcut: "stick-chord" | "steam-input";
+  preferredControllerId: string;
+  controllerDefaults: ControllerTuning;
+  controllerProfiles: ControllerProfile[];
   launchFullscreen: boolean;
 }
 
@@ -179,12 +202,22 @@ export interface TestApi {
   ): Promise<void>;
 }
 
+export const defaultControllerTuning: ControllerTuning = {
+  rumble: "full",
+  buttonLayout: "standard",
+  stickDeadzone: 0.08,
+  triggerRange: 1,
+};
+
 export const defaultSettings: AppSettings = {
   resolution: 1080,
   reducedMotion: false,
   showPerformance: false,
   keyboardControls: false,
   controllerMenuShortcut: "stick-chord",
+  preferredControllerId: "",
+  controllerDefaults: { ...defaultControllerTuning },
+  controllerProfiles: [],
   launchFullscreen: false,
 };
 

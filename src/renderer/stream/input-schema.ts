@@ -25,6 +25,33 @@ export type XboxInputFrame = Record<XboxButtonName, number> & {
   RightTrigger: number;
 };
 
+export function emptyXboxInputFrame(): XboxInputFrame {
+  return {
+    GamepadIndex: 0,
+    Nexus: 0,
+    Menu: 0,
+    View: 0,
+    A: 0,
+    B: 0,
+    X: 0,
+    Y: 0,
+    DPadUp: 0,
+    DPadDown: 0,
+    DPadLeft: 0,
+    DPadRight: 0,
+    LeftShoulder: 0,
+    RightShoulder: 0,
+    LeftThumb: 0,
+    RightThumb: 0,
+    LeftThumbXAxis: 0,
+    LeftThumbYAxis: 0,
+    RightThumbXAxis: 0,
+    RightThumbYAxis: 0,
+    LeftTrigger: 0,
+    RightTrigger: 0,
+  };
+}
+
 export interface ControlGuideItem {
   keys: string;
   action: string;

@@ -1,7 +1,10 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AppSettings } from "../shared/contracts";
-import { defaultSettings } from "../shared/contracts";
+import {
+  normalizeAppSettings,
+  sanitizeSettingsUpdate,
+} from "../shared/controller-settings";
 
 interface StoredPreferences {
   selectedConsoleId?: string;
@@ -20,14 +23,7 @@ export class SettingsStore {
   }
 
   get settings(): AppSettings {
-    const settings = { ...defaultSettings, ...this.state.settings };
-    return {
-      ...settings,
-      controllerMenuShortcut:
-        settings.controllerMenuShortcut === "steam-input"
-          ? "steam-input"
-          : "stick-chord",
-    };
+    return normalizeAppSettings(this.state.settings);
   }
 
   get selectedConsoleId(): string | undefined {
@@ -35,7 +31,11 @@ export class SettingsStore {
   }
 
   updateSettings(update: Partial<AppSettings>): AppSettings {
-    this.state.settings = { ...this.settings, ...update };
+    const current = this.settings;
+    this.state.settings = {
+      ...current,
+      ...sanitizeSettingsUpdate(update, current),
+    };
     this.save();
     return this.settings;
   }

@@ -663,6 +663,23 @@ test("controller semantics navigate to health and settings persist in the shell"
     await expect(
       page.getByRole("button", { name: "Steam Input" }),
     ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("Active controller")).toHaveValue("");
+    await expect(
+      page.getByLabel("Connected controller diagnostics"),
+    ).toContainText("Connect or wake a controller");
+    await page.getByRole("button", { name: "Low" }).click();
+    await page
+      .getByRole("button", { name: "Relaxed 12 percent deadzone" })
+      .click();
+    await page.getByRole("button", { name: "Short" }).click();
+    await page.getByRole("button", { name: "Swap both" }).click();
+    await expect(page.getByRole("button", { name: "Low" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(
+      page.getByRole("button", { name: "Swap both" }),
+    ).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByLabel("Keyboard game controls")).toContainText(
       "Arrows D-pad",
     );
@@ -706,6 +723,84 @@ test("controller semantics navigate to health and settings persist in the shell"
     await expect(
       page.getByRole("switch", { name: "Performance overlay" }),
     ).toHaveAttribute("aria-checked", "false");
+  } finally {
+    await app.close();
+  }
+});
+
+test("controller diagnostics and device profiles are usable", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.evaluate(() => {
+      const makeButtons = (pressedIndex?: number) =>
+        Array.from({ length: 17 }, (_, index) => ({
+          pressed: index === pressedIndex,
+          touched: index === pressedIndex,
+          value: index === pressedIndex ? 1 : 0,
+        }));
+      const controllers = [
+        {
+          id: "Steam Virtual Gamepad",
+          index: 0,
+          connected: true,
+          mapping: "standard",
+          axes: [0, 0, 0, 0],
+          buttons: makeButtons(),
+          vibrationActuator: { type: "dual-rumble" },
+          timestamp: 1,
+        },
+        {
+          id: "Xbox Wireless Controller (Vendor: 045e Product: 0b13)",
+          index: 2,
+          connected: true,
+          mapping: "standard",
+          axes: [0.25, -0.5, 0, 0],
+          buttons: makeButtons(0),
+          vibrationActuator: null,
+          timestamp: 2,
+        },
+      ];
+      Object.defineProperty(navigator, "getGamepads", {
+        configurable: true,
+        value: () => controllers,
+      });
+    });
+    await page.getByRole("button", { name: "Settings" }).click();
+    const diagnostics = page.getByLabel("Connected controller diagnostics");
+    await expect(diagnostics).toContainText("2 controllers detected");
+    await expect(diagnostics).toContainText("Steam Virtual Gamepad");
+    await expect(diagnostics).toContainText("Xbox Wireless Controller");
+    await expect(diagnostics).toContainText("A");
+    await expect(diagnostics).toContainText("0.25 · -0.50");
+    await expect(diagnostics).toContainText("Rumble ready");
+
+    await page
+      .getByLabel("Active controller")
+      .selectOption({ label: "Xbox Wireless Controller · slot 3" });
+    await page.getByRole("button", { name: "Low" }).click();
+    await expect(diagnostics.getByText("LOCKED")).toBeVisible();
+    await expect(
+      diagnostics.getByText("PROFILE", { exact: true }),
+    ).toBeVisible();
+    await diagnostics.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: join(screenshots, "controller-diagnostics-1280x800.png"),
+    });
+    const settings = await page.evaluate(() => window.afterglide.getSnapshot());
+    expect(settings.settings.preferredControllerId).toContain(
+      "Xbox Wireless Controller",
+    );
+    expect(settings.settings.controllerProfiles).toEqual([
+      expect.objectContaining({
+        id: expect.stringContaining("Xbox Wireless Controller"),
+        rumble: "low",
+      }),
+    ]);
+
+    await page.getByRole("button", { name: "Reset this profile" }).click();
+    await expect(diagnostics.getByText("PROFILE", { exact: true })).toHaveCount(
+      0,
+    );
   } finally {
     await app.close();
   }
@@ -965,6 +1060,9 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
         reducedMotion: "yes",
         showPerformance: 1,
         controllerMenuShortcut: "unbound",
+        preferredControllerId: 42,
+        controllerDefaults: { rumble: "loud" },
+        controllerProfiles: "all",
         unknownSetting: true,
       } as never);
       return (await window.afterglide.getSnapshot()).settings;
@@ -975,6 +1073,14 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
       showPerformance: false,
       keyboardControls: false,
       controllerMenuShortcut: "stick-chord",
+      preferredControllerId: "",
+      controllerDefaults: {
+        rumble: "full",
+        buttonLayout: "standard",
+        stickDeadzone: 0.08,
+        triggerRange: 1,
+      },
+      controllerProfiles: [],
       launchFullscreen: false,
     });
 

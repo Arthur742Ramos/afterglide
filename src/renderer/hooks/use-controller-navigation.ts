@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { selectController } from "../stream/controller-input";
 
 const actionKeys: Record<string, string> = {
   up: "ArrowUp",
@@ -61,6 +62,7 @@ function nextInDirection(
 export function useControllerNavigation(
   enabled: boolean,
   focusScope?: string,
+  preferredControllerId = "",
 ): void {
   useEffect(() => {
     if (!enabled) return;
@@ -111,11 +113,15 @@ export function useControllerNavigation(
 
     let previous = new Set<string>();
     const repeatAt = new Map<string, number>();
+    let activeGamepadIndex: number | undefined;
     let frame = 0;
     const pollGamepad = (now: number): void => {
-      const gamepad = navigator
-        .getGamepads()
-        .find((candidate) => candidate?.connected);
+      const gamepad = selectController(
+        navigator.getGamepads(),
+        preferredControllerId,
+        activeGamepadIndex,
+      );
+      activeGamepadIndex = gamepad?.index;
       const active = new Set<string>();
       if (gamepad) {
         const dpad = [
@@ -175,5 +181,5 @@ export function useControllerNavigation(
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("afterglide-gamepad", onGamepad);
     };
-  }, [enabled, focusScope]);
+  }, [enabled, focusScope, preferredControllerId]);
 }

@@ -56,6 +56,21 @@ and `message`. The input channel transmits controller frames and receives rumble
 Physical input is sampled only while the window is focused and visible; losing
 focus sends a neutral frame and stops capture.
 
+The renderer owns one controller-selection path shared by shell navigation,
+in-stream shortcuts, Xbox input reports, and rumble. Automatic mode retains the
+current device until another connected controller produces input; an explicit
+device ID locks selection. A disconnect or controller switch sends a neutral Xbox
+frame before any replacement input, preventing held buttons from crossing device
+boundaries. Rumble targets the selected physical controller rather than the
+server's virtual gamepad index.
+
+Controller tuning has a safe default plus bounded per-device profiles. Profiles
+can choose off, low, or full rumble; 4%, 8%, or 12% stick deadzones; full, short,
+or quick trigger travel; and common face-button pair swaps. The main process
+validates controller IDs and every enumerated profile value before persisting the
+settings. The renderer's diagnostics panel reads the browser Gamepad API directly;
+controller identity and live input data never cross the preload boundary.
+
 The default input schema reserves L3 + R3 for Afterglide's in-stream controls.
 Users can instead select Steam Input mode, which passes the chord to Xbox and
 uses the always-local F10 shortcut that a Deck button or paddle can emit. F9 is

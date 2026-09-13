@@ -21,7 +21,9 @@ share WebRTC video/audio, controller input, rumble, telemetry, and recovery UI.
 - Xbox xHome provisioning and authenticated SDP/ICE signaling
 - xCloud entitlement detection, recent games, catalog metadata, and streaming
 - H.264 WebRTC video, audio, keepalive, and connection telemetry
-- Focused-window gamepad input, full keyboard emulation, and controller rumble
+- Last-active or explicitly selected gamepad input with matching controller rumble
+- Per-controller vibration, deadzone, trigger-travel, and face-button profiles
+- Live controller identity, button, axis, mapping, and rumble diagnostics
 - L3 + R3 access to stream controls with game input paused while they are open
 - Controller-first home, setup, settings, diagnostics, error, and recovery flows
 - Deterministic Playwright coverage of the real Electron desktop shell
@@ -62,6 +64,20 @@ are disabled. In Afterglide's settings, **L3 + R3** keeps the built-in controlle
 shortcut; **Steam Input** passes that chord through to the Xbox and relies on the
 user's F10 binding. Steam's controller configurator supports these keyboard and
 XInput mappings through [legacy mode bindings](https://partner.steamgames.com/doc/features/steam_controller/legacy_mode).
+
+### Controller selection and profiles
+
+Afterglide follows the last controller that produces input by default. In
+**Settings → Active controller**, choose a specific device when a dock, Steam
+Input, or another controller exposes more than one gamepad. Input and rumble
+always use that same selected device. If it disconnects, Afterglide immediately
+sends a neutral Xbox frame before choosing another controller.
+
+Settings also provide default and per-controller profiles for vibration strength,
+stick deadzone, trigger travel, and A/B or X/Y swaps. The live controller check
+shows each browser-visible device, its exact ID, current buttons and axes, mapping,
+and rumble availability. Select **Reset this profile** to return one controller to
+the automatic defaults.
 
 Named Afterglide actions in Steam's overlay require a Steam AppID, Steam Input
 API integration, and a published action manifest. Those belong to a future Steam

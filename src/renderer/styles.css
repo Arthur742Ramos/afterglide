@@ -1552,6 +1552,29 @@ kbd.wide {
 .recovery-panel small {
   color: var(--muted);
 }
+.controller-notice {
+  position: absolute;
+  z-index: 6;
+  top: 82px;
+  left: 50%;
+  min-height: 42px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(-50%);
+  border: 1px solid var(--line-bright);
+  border-radius: 12px;
+  background: oklch(0.14 0.015 258 / 0.94);
+  box-shadow: 0 12px 32px oklch(0 0 0 / 0.35);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.controller-notice svg {
+  width: 19px;
+  color: var(--primary-bright);
+}
 
 /* Errors, diagnostics, settings */
 .error-screen {
@@ -1821,6 +1844,147 @@ kbd.wide {
 .controller-shortcut button {
   min-width: 104px;
 }
+.controller-select {
+  width: min(310px, 34vw);
+  min-height: 44px;
+  padding: 0 36px 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font:
+    650 12px/1.2 system-ui,
+    sans-serif;
+}
+.controller-select:focus-visible {
+  outline: 2px solid var(--primary-bright);
+  outline-offset: 3px;
+}
+.controller-tuning button {
+  min-width: 72px;
+}
+.controller-layout button {
+  min-width: 82px;
+}
+.controller-diagnostics {
+  padding: 19px 8px 20px 65px;
+  display: grid;
+  gap: 15px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(
+    90deg,
+    oklch(0.2 0.028 258 / 0.72),
+    transparent 80%
+  );
+}
+.controller-diagnostics-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.controller-diagnostics-heading > div {
+  display: grid;
+  gap: 4px;
+}
+.controller-diagnostics-heading strong {
+  font-size: 15px;
+}
+.controller-diagnostics-heading span,
+.controller-diagnostics-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+.controller-diagnostics-heading button {
+  flex: 0 0 auto;
+}
+.controller-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.controller-diagnostics article {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.controller-diagnostics article.selected {
+  border-color: oklch(0.7 0.12 70 / 0.7);
+  box-shadow: inset 0 0 0 1px oklch(0.7 0.12 70 / 0.18);
+}
+.controller-card-title {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.controller-ready-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 10px oklch(0.78 0.12 162 / 0.45);
+}
+.controller-card-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.controller-card-title small {
+  color: var(--quiet);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.controller-diagnostics dl {
+  margin: 13px 0 0;
+  display: grid;
+  gap: 7px;
+}
+.controller-diagnostics dl > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+}
+.controller-diagnostics dt {
+  color: var(--quiet);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.controller-diagnostics dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font:
+    11px/1.35 ui-monospace,
+    monospace;
+  white-space: nowrap;
+}
+.controller-card-badges {
+  min-height: 19px;
+  margin-top: 11px;
+  display: flex;
+  gap: 6px;
+}
+.controller-card-badges span {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--raised);
+  color: var(--primary-bright);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.controller-diagnostics-note {
+  display: block;
+}
 .steam-input-tip {
   padding-top: 14px;
   display: grid;
@@ -1906,6 +2070,10 @@ kbd.wide {
   .page {
     padding-left: 36px;
     padding-right: 36px;
+  }
+  .controller-layout button {
+    min-width: 70px;
+    padding-inline: 8px;
   }
 }
 

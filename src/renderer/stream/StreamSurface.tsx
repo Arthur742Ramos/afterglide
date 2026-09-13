@@ -1,18 +1,27 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { StreamDescriptor, StreamTelemetry } from "../../shared/contracts";
+import type {
+  AppSettings,
+  StreamDescriptor,
+  StreamTelemetry,
+} from "../../shared/contracts";
 import { MockStreamSurface } from "./MockStreamSurface";
-import { XboxStreamEngine } from "./stream-engine";
+import { XboxStreamEngine, type ControllerStatus } from "./stream-engine";
 
 interface Props {
   descriptor: StreamDescriptor;
   reducedMotion: boolean;
   keyboardControls: boolean;
   reserveControlChord: boolean;
+  controllerSettings: Pick<
+    AppSettings,
+    "preferredControllerId" | "controllerDefaults" | "controllerProfiles"
+  >;
   inputSuspended: boolean;
   onConnected: () => void;
   onInterrupted: () => void;
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
+  onControllerStatus: (status: ControllerStatus) => void;
 }
 
 export function StreamSurface(props: Props) {
@@ -22,6 +31,9 @@ export function StreamSurface(props: Props) {
   const onInterrupted = useCallback(props.onInterrupted, [props.onInterrupted]);
   const onError = useCallback(props.onError, [props.onError]);
   const onTelemetry = useCallback(props.onTelemetry, [props.onTelemetry]);
+  const onControllerStatus = useCallback(props.onControllerStatus, [
+    props.onControllerStatus,
+  ]);
 
   useEffect(() => {
     if (props.descriptor.mock || !container.current) return;
@@ -30,10 +42,12 @@ export function StreamSurface(props: Props) {
       container: container.current,
       keyboardControls: props.keyboardControls,
       reserveControlChord: props.reserveControlChord,
+      controllerSettings: props.controllerSettings,
       onConnected,
       onInterrupted,
       onError,
       onTelemetry,
+      onControllerStatus,
     });
     engine.current = streamEngine;
     void streamEngine.connect();
@@ -49,6 +63,7 @@ export function StreamSurface(props: Props) {
     onInterrupted,
     onError,
     onTelemetry,
+    onControllerStatus,
   ]);
 
   useEffect(() => {

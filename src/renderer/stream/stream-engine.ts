@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   IceCandidatePayload,
   StreamTelemetry,
 } from "../../shared/contracts";
@@ -8,39 +9,39 @@ import {
 } from "../../shared/network-policy";
 import {
   applyKeyboardInput,
+  emptyXboxInputFrame,
   isKeyboardControlCode,
   type XboxButtonName as ButtonName,
   type XboxInputFrame as InputFrame,
 } from "./input-schema";
+import {
+  controllerInputFrame,
+  friendlyControllerName,
+  selectController,
+  tuningForGamepad,
+  type GamepadLike,
+} from "./controller-input";
+
+export interface ControllerStatus {
+  state: "connected" | "switched" | "disconnected";
+  label: string;
+}
 
 interface StreamEngineOptions {
   sessionId: string;
   container: HTMLElement;
   keyboardControls: boolean;
   reserveControlChord: boolean;
+  controllerSettings: Pick<
+    AppSettings,
+    "preferredControllerId" | "controllerDefaults" | "controllerProfiles"
+  >;
   onConnected: () => void;
   onInterrupted: () => void;
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
+  onControllerStatus: (status: ControllerStatus) => void;
 }
-
-const buttonMap: Record<ButtonName, number> = {
-  A: 0,
-  B: 1,
-  X: 2,
-  Y: 3,
-  LeftShoulder: 4,
-  RightShoulder: 5,
-  LeftThumb: 10,
-  RightThumb: 11,
-  DPadUp: 12,
-  DPadDown: 13,
-  DPadLeft: 14,
-  DPadRight: 15,
-  Menu: 9,
-  View: 8,
-  Nexus: 16,
-};
 
 /**
  * Browser WebRTC transport for Xbox streaming. The protocol shape is
@@ -76,6 +77,8 @@ export class XboxStreamEngine {
   private previousPacketsReceived = 0;
   private previousPacketsLost = 0;
   private previousStatsAt = 0;
+  private activeGamepadIndex?: number;
+  private activeGamepadLabel = "";
 
   constructor(private readonly options: StreamEngineOptions) {
     this.channels = {
@@ -415,8 +418,16 @@ export class XboxStreamEngine {
 
   private sendCurrentInput(heartbeatDue = false): void {
     if (!this.inputActive || this.inputSuspended) return;
+    const gamepad = this.resolveGamepad();
     const update = chooseInputUpdate(
-      readInputFrame(this.pressedKeys, this.options.reserveControlChord),
+      readInputFrame(
+        gamepad,
+        this.pressedKeys,
+        gamepad
+          ? tuningForGamepad(this.options.controllerSettings, gamepad)
+          : undefined,
+        this.options.reserveControlChord,
+      ),
       this.lastInputSignature,
       heartbeatDue,
     );
@@ -440,7 +451,7 @@ export class XboxStreamEngine {
 
   private releaseInput = (): void => {
     this.pressedKeys.clear();
-    if (this.inputActive) this.sendInputFrame(emptyInputFrame());
+    if (this.inputActive) this.sendInputFrame(emptyXboxInputFrame());
     this.lastInputSignature = "";
   };
 
@@ -474,15 +485,49 @@ export class XboxStreamEngine {
     if (!(event.data instanceof ArrayBuffer)) return;
     const report = new DataView(event.data);
     if (report.byteLength < 13 || report.getUint8(0) !== 128) return;
-    const gamepad = navigator.getGamepads()[report.getUint8(3)];
+    const gamepad = this.resolveGamepad();
+    const tuning = gamepad
+      ? tuningForGamepad(this.options.controllerSettings, gamepad)
+      : undefined;
+    if (!gamepad || !tuning || tuning.rumble === "off") return;
     const actuator = gamepad?.vibrationActuator;
     if (!actuator || !("playEffect" in actuator)) return;
+    const intensity = tuning.rumble === "low" ? 0.45 : 1;
     void actuator.playEffect("dual-rumble", {
       startDelay: report.getUint16(10, true),
       duration: report.getUint16(8, true),
-      weakMagnitude: report.getUint8(5) / 100,
-      strongMagnitude: report.getUint8(4) / 100,
+      weakMagnitude: (report.getUint8(5) / 100) * intensity,
+      strongMagnitude: (report.getUint8(4) / 100) * intensity,
     });
+  }
+
+  private resolveGamepad(): GamepadLike | undefined {
+    const previousIndex = this.activeGamepadIndex;
+    const previousLabel = this.activeGamepadLabel;
+    const gamepad = selectController(
+      navigator.getGamepads(),
+      this.options.controllerSettings.preferredControllerId,
+      previousIndex,
+    );
+    if (gamepad?.index === previousIndex) return gamepad;
+    if (previousIndex !== undefined && this.inputActive) {
+      this.sendInputFrame(emptyXboxInputFrame());
+      this.lastInputSignature = "";
+    }
+    this.activeGamepadIndex = gamepad?.index;
+    this.activeGamepadLabel = gamepad ? friendlyControllerName(gamepad.id) : "";
+    if (gamepad) {
+      this.options.onControllerStatus({
+        state: previousIndex === undefined ? "connected" : "switched",
+        label: this.activeGamepadLabel,
+      });
+    } else if (previousIndex !== undefined) {
+      this.options.onControllerStatus({
+        state: "disconnected",
+        label: previousLabel || "Controller",
+      });
+    }
+    return gamepad;
   }
 
   private async collectTelemetry(): Promise<void> {
@@ -667,25 +712,16 @@ function waitForIceGathering(
 }
 
 function readInputFrame(
+  gamepad: GamepadLike | undefined,
   keys: ReadonlySet<string>,
+  tuning: ReturnType<typeof tuningForGamepad> | undefined,
   reserveControlChord = true,
 ): InputFrame | undefined {
-  const frame = emptyInputFrame();
-  const gamepad = navigator.getGamepads().find((item) => item?.connected);
+  const frame =
+    gamepad && tuning
+      ? controllerInputFrame(gamepad, tuning)
+      : emptyXboxInputFrame();
   if (!gamepad && keys.size === 0) return undefined;
-  if (gamepad) {
-    (Object.entries(buttonMap) as Array<[ButtonName, number]>).forEach(
-      ([name, index]) => {
-        frame[name] = gamepad.buttons[index]?.value ?? 0;
-      },
-    );
-    frame.LeftTrigger = gamepad.buttons[6]?.value ?? 0;
-    frame.RightTrigger = gamepad.buttons[7]?.value ?? 0;
-    frame.LeftThumbXAxis = deadzone(gamepad.axes[0] ?? 0);
-    frame.LeftThumbYAxis = deadzone(gamepad.axes[1] ?? 0);
-    frame.RightThumbXAxis = deadzone(gamepad.axes[2] ?? 0);
-    frame.RightThumbYAxis = deadzone(gamepad.axes[3] ?? 0);
-  }
   applyKeyboardInput(frame, keys);
   normalizeInputChords(frame, reserveControlChord);
   return frame;
@@ -707,33 +743,6 @@ function normalizeInputChords(
   }
 }
 
-function emptyInputFrame(): InputFrame {
-  return {
-    GamepadIndex: 0,
-    Nexus: 0,
-    Menu: 0,
-    View: 0,
-    A: 0,
-    B: 0,
-    X: 0,
-    Y: 0,
-    DPadUp: 0,
-    DPadDown: 0,
-    DPadLeft: 0,
-    DPadRight: 0,
-    LeftShoulder: 0,
-    RightShoulder: 0,
-    LeftThumb: 0,
-    RightThumb: 0,
-    LeftThumbXAxis: 0,
-    LeftThumbYAxis: 0,
-    RightThumbXAxis: 0,
-    RightThumbYAxis: 0,
-    LeftTrigger: 0,
-    RightTrigger: 0,
-  };
-}
-
 function chooseInputUpdate(
   frame: InputFrame | undefined,
   lastSignature: string,
@@ -741,7 +750,7 @@ function chooseInputUpdate(
 ): { frame: InputFrame; signature: string } | undefined {
   if (!frame)
     return lastSignature
-      ? { frame: emptyInputFrame(), signature: "" }
+      ? { frame: emptyXboxInputFrame(), signature: "" }
       : undefined;
   const signature = JSON.stringify(frame);
   return signature !== lastSignature || heartbeatDue
@@ -793,12 +802,6 @@ function normalizeAxis(value: number): number {
 
 function normalizeTrigger(value: number): number {
   return Math.max(0, Math.min(65_535, Math.round(value * 65_535)));
-}
-
-function deadzone(value: number): number {
-  const zone = 0.08;
-  if (Math.abs(value) < zone) return 0;
-  return (value - Math.sign(value) * zone) / (1 - zone);
 }
 
 function withTeredoFallback(
@@ -872,7 +875,7 @@ export function encodeGamepadPacketForTest(
   packet.setUint32(2, sequence, true);
   packet.setFloat64(6, timestamp, true);
   packet.setUint8(14, 1);
-  writeGamepad(packet, 15, { ...emptyInputFrame(), ...input });
+  writeGamepad(packet, 15, { ...emptyXboxInputFrame(), ...input });
   return bytes;
 }
 
@@ -885,17 +888,17 @@ export const streamProtocolTestUtils = {
     heartbeatDue = false,
   ) =>
     chooseInputUpdate(
-      input ? { ...emptyInputFrame(), ...input } : undefined,
+      input ? { ...emptyXboxInputFrame(), ...input } : undefined,
       lastSignature,
       heartbeatDue,
     ),
   keyboardInput: (codes: string[]) => {
-    const frame = emptyInputFrame();
+    const frame = emptyXboxInputFrame();
     applyKeyboardInput(frame, new Set(codes));
     return frame;
   },
   normalizedInput: (input: Partial<InputFrame>, reserveControlChord = true) => {
-    const frame = { ...emptyInputFrame(), ...input };
+    const frame = { ...emptyXboxInputFrame(), ...input };
     normalizeInputChords(frame, reserveControlChord);
     return frame;
   },
