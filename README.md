@@ -58,10 +58,11 @@ npm run test:e2e
 npm audit --audit-level=high
 ```
 
-The end-to-end suite launches Electron at the Steam Deck's 1280×800 viewport. It
-uses an unpackaged-only deterministic adapter and covers first run, authentication,
-console and cloud-game selection, controller navigation, connection stages,
-streaming, settings, interruption recovery, errors, and retry.
+The end-to-end suite launches Electron at the Steam Deck's 1280×800 viewport and
+the 960×600 minimum. It uses an unpackaged-only deterministic adapter and covers
+authentication races, console and cloud states, controller navigation,
+connection cancellation, streaming and recovery, restart persistence, renderer
+security boundaries, long-content layout, and automated WCAG checks.
 
 ## Build a Linux package
 

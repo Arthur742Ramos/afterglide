@@ -52,6 +52,12 @@ export function StreamSurface(props: Props) {
     );
   }
   return (
-    <div ref={container} className="stream-media" data-testid="stream-media" />
+    <div
+      ref={container}
+      className="stream-media"
+      data-testid="stream-media"
+      role="img"
+      aria-label={`${props.descriptor.displayName} remote-play video`}
+    />
   );
 }

@@ -599,9 +599,11 @@ export class AppController {
       session: {
         phase: "error",
         label:
-          target?.source === "cloud"
-            ? "Couldn’t start cloud play"
-            : "Couldn’t start remote play",
+          code === "MEDIA_FAILED"
+            ? "The stream stopped"
+            : target?.source === "cloud"
+              ? "Couldn’t start cloud play"
+              : "Couldn’t start remote play",
         detail: message,
         progress: 0,
         errorCode: code,

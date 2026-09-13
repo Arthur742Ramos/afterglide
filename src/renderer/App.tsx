@@ -487,7 +487,9 @@ function CloudPage({
         <div className="cloud-library">
           <div className="cloud-library-title">
             <h2>{query ? "Search results" : "All cloud games"}</h2>
-            <span>{filtered.length} titles</span>
+            <span>
+              {filtered.length} {filtered.length === 1 ? "title" : "titles"}
+            </span>
           </div>
           {filtered.length === 0 ? (
             <p className="cloud-empty">
@@ -1109,7 +1111,7 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
 
 function BrandMark({ size = "normal" }: { size?: "normal" | "large" }) {
   return (
-    <div className={`brand-mark ${size}`} aria-label="Afterglide">
+    <div className={`brand-mark ${size}`} role="img" aria-label="Afterglide">
       <svg viewBox="0 0 512 512" aria-hidden="true">
         <path
           d="M96 334 220 113h72l124 221h-78l-21-42H195l-21 42H96Zm132-106h56l-28-59-28 59Z"

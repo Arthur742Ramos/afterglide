@@ -63,6 +63,8 @@ export class MockPlatformService implements PlatformService {
   private cancelled = false;
   private statusChecks = 0;
   private firstConnection = true;
+  private firstConsoleDiscovery = true;
+  private firstCloudDiscovery = true;
   private readonly scenario = process.env.AFTERGLIDE_E2E_SCENARIO ?? "happy";
 
   constructor(initiallySignedIn: boolean) {
@@ -102,6 +104,12 @@ export class MockPlatformService implements PlatformService {
         "Sign-in was cancelled.",
         false,
       );
+    if (this.scenario === "auth-denied")
+      throw new AfterglideError(
+        "AUTH_DENIED",
+        "Microsoft sign-in was declined. Start again when you’re ready.",
+        false,
+      );
     this.signedIn = true;
   }
 
@@ -116,7 +124,25 @@ export class MockPlatformService implements PlatformService {
   async listConsoles(): Promise<XboxConsole[]> {
     await delay(180);
     if (this.scenario === "empty") return [];
-    return structuredClone(consoles);
+    if (this.scenario === "console-error-once" && this.firstConsoleDiscovery) {
+      this.firstConsoleDiscovery = false;
+      throw new AfterglideError(
+        "CONSOLE_DISCOVERY_FAILED",
+        "Xbox console discovery is temporarily unavailable.",
+      );
+    }
+    const result = structuredClone(consoles);
+    if (this.scenario === "remote-play-disabled") {
+      const selected = result.find((console) => console.power === "on");
+      if (selected) selected.remotePlayEnabled = false;
+    }
+    if (this.scenario === "long-content") {
+      const selected = result.find((console) => console.power === "on");
+      if (selected)
+        selected.name =
+          "Upstairs Family Room Xbox Series S With A Very Long Console Name";
+    }
+    return result;
   }
 
   async listCloudTitles(): Promise<CloudTitle[]> {
@@ -127,7 +153,24 @@ export class MockPlatformService implements PlatformService {
         "Cloud gaming is not available for this account or region.",
         false,
       );
-    return structuredClone(cloudTitles);
+    if (this.scenario === "cloud-error-once" && this.firstCloudDiscovery) {
+      this.firstCloudDiscovery = false;
+      throw new AfterglideError(
+        "CLOUD_CATALOG_FAILED",
+        "The cloud catalog is temporarily unavailable.",
+      );
+    }
+    if (this.scenario === "cloud-empty") return [];
+    const result = structuredClone(cloudTitles);
+    if (this.scenario === "cloud-artwork" && result[0])
+      result[0].imageUrl = "https://images.xboxlive.com/e2e-cover.svg";
+    if (this.scenario === "long-content" && result[0]) {
+      result[0].name =
+        "Microsoft Flight Simulator 2024 Premium Deluxe World Edition";
+      result[0].publisher =
+        "Xbox Game Studios and Partner Publishing International";
+    }
+    return result;
   }
 
   async wakeConsole(): Promise<void> {

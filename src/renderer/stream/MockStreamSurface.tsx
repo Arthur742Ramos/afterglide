@@ -39,6 +39,7 @@ export function MockStreamSurface({
     <div
       className={`mock-stream ${reducedMotion ? "reduced" : ""}`}
       data-testid="mock-stream"
+      role="img"
       aria-label="Test remote-play video"
     >
       <div className="mock-sky" />
