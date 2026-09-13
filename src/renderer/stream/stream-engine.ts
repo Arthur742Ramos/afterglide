@@ -204,16 +204,17 @@ export class XboxStreamEngine {
           "useinbandfec=1; stereo=1",
         );
       await this.peer.setLocalDescription(offer);
+
+      const answer = await window.afterglide.sendSdp(
+        this.options.sessionId,
+        offer,
+      );
+      await this.peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
+
       await waitForIceGathering(
         this.peer,
         NETWORK_POLICY.iceGatheringTimeoutMs,
       );
-
-      const answer = await window.afterglide.sendSdp(
-        this.options.sessionId,
-        this.peer.localDescription ?? offer,
-      );
-      await this.peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
 
       const remoteCandidates = await window.afterglide.sendIce(
         this.options.sessionId,
@@ -246,9 +247,7 @@ export class XboxStreamEngine {
       this.inputFrameId = requestAnimationFrame(this.inputLoop);
     } catch (error) {
       if (this.destroyed) return;
-      this.notifyError(
-        error instanceof Error ? error.message : "Video negotiation failed.",
-      );
+      this.notifyError(streamErrorMessage(error));
     }
   }
 
@@ -435,21 +434,25 @@ export class XboxStreamEngine {
       document.hasFocus() &&
       document.visibilityState === "visible"
     ) {
-      const frame = readInputFrame(this.pressedKeys);
-      const now = performance.now();
-      const update = chooseInputUpdate(
-        frame,
-        this.lastInputSignature,
-        now - this.lastInputAt >= NETWORK_POLICY.inputHeartbeatMs,
+      this.sendCurrentInput(
+        performance.now() - this.lastInputAt >= NETWORK_POLICY.inputHeartbeatMs,
       );
-      if (update) {
-        this.sendInputFrame(update.frame);
-        this.lastInputSignature = update.signature;
-        this.lastInputAt = now;
-      }
     }
     this.inputFrameId = requestAnimationFrame(this.inputLoop);
   };
+
+  private sendCurrentInput(heartbeatDue = false): void {
+    if (!this.inputActive) return;
+    const update = chooseInputUpdate(
+      readInputFrame(this.pressedKeys),
+      this.lastInputSignature,
+      heartbeatDue,
+    );
+    if (!update) return;
+    this.sendInputFrame(update.frame);
+    this.lastInputSignature = update.signature;
+    this.lastInputAt = performance.now();
+  }
 
   private sendInputFrame(frame: InputFrame): void {
     if (this.channels.input.readyState !== "open") return;
@@ -481,12 +484,14 @@ export class XboxStreamEngine {
     )
       return;
     this.pressedKeys.add(event.key);
+    this.sendCurrentInput();
     event.preventDefault();
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
     if (!this.options.keyboardControls || !(event.key in keyboardMap)) return;
     this.pressedKeys.delete(event.key);
+    this.sendCurrentInput();
     event.preventDefault();
   };
 
@@ -625,16 +630,36 @@ export class XboxStreamEngine {
   }
 }
 
+export function streamErrorMessage(error: unknown): string {
+  const message =
+    error instanceof Error ? error.message : "Video negotiation failed.";
+  return message.replace(
+    /^Error invoking remote method '[^']+':\s*(?:AfterglideError|Error):\s*/,
+    "",
+  );
+}
+
 function preferredVideoCodecs(): RTCRtpCodec[] {
   const codecs = RTCRtpReceiver.getCapabilities("video")?.codecs ?? [];
-  const score = (codec: RTCRtpCodec): number => {
-    if (!codec.mimeType.toLowerCase().includes("h264")) return 10;
-    if (codec.sdpFmtpLine?.includes("profile-level-id=4d")) return 0;
-    if (codec.sdpFmtpLine?.includes("profile-level-id=42e")) return 1;
-    if (codec.sdpFmtpLine?.includes("profile-level-id=420")) return 2;
-    return 3;
-  };
-  return [...codecs].sort((a, b) => score(a) - score(b));
+  const h264Main = codecs.filter(
+    (codec) =>
+      codec.mimeType.toLowerCase().includes("h264") &&
+      codec.sdpFmtpLine?.includes("profile-level-id=4d"),
+  );
+  const h264Constrained = codecs.filter(
+    (codec) =>
+      codec.mimeType.toLowerCase().includes("h264") &&
+      codec.sdpFmtpLine?.includes("profile-level-id=42e"),
+  );
+  const h264Baseline = codecs.filter(
+    (codec) =>
+      codec.mimeType.toLowerCase().includes("h264") &&
+      codec.sdpFmtpLine?.includes("profile-level-id=420"),
+  );
+  const fallbacks = codecs.filter((codec) =>
+    /(?:ulpfec|flexfec|vp8|vp9)/i.test(codec.mimeType),
+  );
+  return [...h264Main, ...h264Constrained, ...h264Baseline, ...fallbacks];
 }
 
 function candidatePayload(candidate: RTCIceCandidate): IceCandidatePayload {

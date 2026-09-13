@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   encodeGamepadPacketForTest,
+  streamErrorMessage,
   streamProtocolTestUtils,
 } from "../../src/renderer/stream/stream-engine";
 
@@ -41,5 +42,15 @@ describe("Xbox input protocol", () => {
     expect(
       streamProtocolTestUtils.chooseInputUpdate(undefined),
     ).toBeUndefined();
+  });
+
+  it("removes Electron's IPC wrapper from safe negotiation errors", () => {
+    expect(
+      streamErrorMessage(
+        new Error(
+          "Error invoking remote method 'afterglide:send-sdp': AfterglideError: The Xbox did not finish negotiating the stream.",
+        ),
+      ),
+    ).toBe("The Xbox did not finish negotiating the stream.");
   });
 });

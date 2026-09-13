@@ -20,6 +20,11 @@ import type {
 } from "./platform-service";
 import { SecureTokenStore } from "./secure-token-store";
 
+const XboxWebApiConstructor =
+  typeof XboxWebApi === "function"
+    ? XboxWebApi
+    : (XboxWebApi as unknown as { default: typeof XboxWebApi }).default;
+
 interface StreamTokenData {
   gsToken: string;
   market: string;
@@ -149,7 +154,7 @@ export class LivePlatformService implements PlatformService {
         "Sign in again to find your Xbox.",
       );
 
-    const client = new XboxWebApi({
+    const client = new XboxWebApiConstructor({
       uhs: web.DisplayClaims.xui[0]?.uhs ?? "",
       token: web.Token,
     });
@@ -253,7 +258,7 @@ export class LivePlatformService implements PlatformService {
         "AUTH_EXPIRED",
         "Sign in again to wake your Xbox.",
       );
-    const client = new XboxWebApi({
+    const client = new XboxWebApiConstructor({
       uhs: web.DisplayClaims.xui[0]?.uhs ?? "",
       token: web.Token,
     });
@@ -435,11 +440,23 @@ export class LivePlatformService implements PlatformService {
     session: SessionContext,
     path: string,
   ): Promise<{ exchangeResponse?: string | null }> {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    const deadline = Date.now() + NETWORK_POLICY.exchangeTimeoutMs;
+    while (Date.now() < deadline) {
       const response = await this.requestJson<
-        { exchangeResponse?: string | null } | undefined
+        | {
+            exchangeResponse?: string | null;
+            errorDetails?: { code?: string | null; message?: string | null };
+          }
+        | undefined
       >(session.host, session.token, path, {}, true);
       if (response?.exchangeResponse) return response;
+      if (response?.errorDetails?.message)
+        throw new AfterglideError(
+          response.errorDetails.code || "EXCHANGE_FAILED",
+          "Xbox could not complete video negotiation. Try again.",
+          true,
+          { cause: new Error(response.errorDetails.message) },
+        );
       await delay(250);
     }
     throw new AfterglideError(
@@ -653,20 +670,20 @@ function deviceInfo(resolution: 720 | 1080): string {
       },
     },
     dev: {
-      hw: { make: "Valve", model: "Steam Deck", sdktype: "web" },
+      hw: { make: "Microsoft", model: "unknown", sdktype: "web" },
       os: {
         name: resolution === 1080 ? "windows" : "android",
-        ver: "1",
+        ver: "22631.2715",
         platform: "desktop",
       },
       displayInfo: {
         dimensions: {
-          widthInPixels: resolution === 1080 ? 1920 : 1280,
-          heightInPixels: resolution,
+          widthInPixels: 1920,
+          heightInPixels: 1080,
         },
-        pixelDensity: { dpiX: 1, dpiY: 1 },
+        pixelDensity: { dpiX: 2, dpiY: 2 },
       },
-      browser: { browserName: "chrome", browserVersion: "128.0" },
+      browser: { browserName: "chrome", browserVersion: "119.0" },
     },
   });
 }
