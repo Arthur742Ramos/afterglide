@@ -18,6 +18,18 @@ export interface XboxConsole {
   outOfHomeWarning: boolean;
 }
 
+export type StreamSource = "home" | "cloud";
+
+export interface CloudTitle {
+  id: string;
+  productId: string;
+  name: string;
+  publisher: string;
+  imageUrl?: string;
+  supportedInputTypes: string[];
+  recentlyPlayed: boolean;
+}
+
 export interface DeviceCode {
   code: string;
   verificationUrl: string;
@@ -42,13 +54,20 @@ export interface SessionSnapshot {
   progress: number;
   sessionId?: string;
   consoleId?: string;
+  titleId?: string;
+  source?: StreamSource;
+  targetName?: string;
   errorCode?: string;
   recoverable?: boolean;
 }
 
 export interface StreamDescriptor {
   sessionId: string;
-  consoleId: string;
+  source: StreamSource;
+  targetId: string;
+  displayName: string;
+  consoleId?: string;
+  titleId?: string;
   mock: boolean;
 }
 
@@ -61,6 +80,7 @@ export interface StreamTelemetry {
   codec: string;
   connection: "local" | "remote" | "unknown";
   videoDecoder: string;
+  networkQuality: "measuring" | "excellent" | "good" | "unstable";
   updatedAt: number;
 }
 
@@ -89,6 +109,13 @@ export interface AppSnapshot {
   consolesStatus: "idle" | "loading" | "ready" | "error";
   consolesError?: string;
   selectedConsoleId?: string;
+  cloud: {
+    available: boolean;
+    titles: CloudTitle[];
+    status: "idle" | "loading" | "ready" | "unavailable" | "error";
+    error?: string;
+    selectedTitleId?: string;
+  };
   session: SessionSnapshot;
   settings: AppSettings;
   telemetry: StreamTelemetry;
@@ -116,8 +143,11 @@ export interface StreamApi {
   copyText(text: string): Promise<void>;
   signOut(): Promise<void>;
   refreshConsoles(): Promise<void>;
+  refreshCloudTitles(): Promise<void>;
   selectConsole(consoleId: string): Promise<void>;
+  selectCloudTitle(titleId: string): Promise<void>;
   startStream(consoleId: string): Promise<StreamDescriptor>;
+  startCloudStream(titleId: string): Promise<StreamDescriptor>;
   retryStream(): Promise<StreamDescriptor>;
   sendSdp(
     sessionId: string,
@@ -165,6 +195,7 @@ export const emptyTelemetry: StreamTelemetry = {
   codec: "Waiting",
   connection: "unknown",
   videoDecoder: "Chromium automatic",
+  networkQuality: "measuring",
   updatedAt: 0,
 };
 
@@ -184,8 +215,11 @@ export const IPC = {
   copyText: "afterglide:copy-text",
   signOut: "afterglide:sign-out",
   refreshConsoles: "afterglide:refresh-consoles",
+  refreshCloudTitles: "afterglide:refresh-cloud-titles",
   selectConsole: "afterglide:select-console",
+  selectCloudTitle: "afterglide:select-cloud-title",
   startStream: "afterglide:start-stream",
+  startCloudStream: "afterglide:start-cloud-stream",
   retryStream: "afterglide:retry-stream",
   sendSdp: "afterglide:send-sdp",
   sendIce: "afterglide:send-ice",

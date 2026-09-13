@@ -1,4 +1,14 @@
-import type { DeviceCode, XboxConsole } from "../shared/contracts";
+import type {
+  CloudTitle,
+  DeviceCode,
+  StreamSource,
+  XboxConsole,
+} from "../shared/contracts";
+
+export interface StreamTarget {
+  source: StreamSource;
+  id: string;
+}
 
 export interface SessionStart {
   sessionId: string;
@@ -20,15 +30,17 @@ export interface ExchangeResult {
 export interface PlatformService {
   readonly mock: boolean;
   readonly hasStoredAuthentication: boolean;
+  readonly cloudAvailable: boolean;
   restore(): Promise<boolean>;
   beginDeviceCode(): Promise<DeviceCode>;
   pollDeviceCode(deviceCode: string, timeoutMs: number): Promise<void>;
   cancelAuthentication(): void;
   signOut(): Promise<void>;
   listConsoles(): Promise<XboxConsole[]>;
+  listCloudTitles(): Promise<CloudTitle[]>;
   wakeConsole(consoleId: string): Promise<void>;
   startSession(
-    consoleId: string,
+    target: StreamTarget,
     resolution: 720 | 1080,
   ): Promise<SessionStart>;
   getSessionState(sessionPath: string): Promise<SessionStateResult>;

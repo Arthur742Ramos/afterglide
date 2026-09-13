@@ -1,9 +1,10 @@
-import type { DeviceCode, XboxConsole } from "../shared/contracts";
+import type { CloudTitle, DeviceCode, XboxConsole } from "../shared/contracts";
 import { AfterglideError } from "./errors";
 import type {
   PlatformService,
   SessionStart,
   SessionStateResult,
+  StreamTarget,
 } from "./platform-service";
 
 const consoles: XboxConsole[] = [
@@ -29,6 +30,33 @@ const consoles: XboxConsole[] = [
   },
 ];
 
+const cloudTitles: CloudTitle[] = [
+  {
+    id: "STARFIELD",
+    productId: "9NCJSXWZTP88",
+    name: "Starfield",
+    publisher: "Bethesda Softworks",
+    supportedInputTypes: ["Controller"],
+    recentlyPlayed: true,
+  },
+  {
+    id: "FORZA-HORIZON-5",
+    productId: "9NNX1VVR3KNQ",
+    name: "Forza Horizon 5",
+    publisher: "Xbox Game Studios",
+    supportedInputTypes: ["Controller"],
+    recentlyPlayed: false,
+  },
+  {
+    id: "SEA-OF-THIEVES",
+    productId: "9P2N57MC619K",
+    name: "Sea of Thieves",
+    publisher: "Xbox Game Studios",
+    supportedInputTypes: ["Controller", "MouseAndKeyboard"],
+    recentlyPlayed: false,
+  },
+];
+
 export class MockPlatformService implements PlatformService {
   readonly mock = true;
   private signedIn: boolean;
@@ -43,6 +71,10 @@ export class MockPlatformService implements PlatformService {
 
   get hasStoredAuthentication(): boolean {
     return this.signedIn;
+  }
+
+  get cloudAvailable(): boolean {
+    return this.signedIn && this.scenario !== "cloud-unavailable";
   }
 
   async restore(): Promise<boolean> {
@@ -87,11 +119,22 @@ export class MockPlatformService implements PlatformService {
     return structuredClone(consoles);
   }
 
+  async listCloudTitles(): Promise<CloudTitle[]> {
+    await delay(160);
+    if (!this.cloudAvailable)
+      throw new AfterglideError(
+        "XCLOUD_UNAVAILABLE",
+        "Cloud gaming is not available for this account or region.",
+        false,
+      );
+    return structuredClone(cloudTitles);
+  }
+
   async wakeConsole(): Promise<void> {
     await delay(240);
   }
 
-  async startSession(): Promise<SessionStart> {
+  async startSession(target: StreamTarget): Promise<SessionStart> {
     await delay(220);
     if (this.scenario === "connect-error" && this.firstConnection) {
       this.firstConnection = false;
@@ -103,7 +146,7 @@ export class MockPlatformService implements PlatformService {
     this.statusChecks = 0;
     return {
       sessionId: "e2e-session-01",
-      sessionPath: "v5/sessions/home/e2e-session-01",
+      sessionPath: `v5/sessions/${target.source}/e2e-session-01`,
     };
   }
 

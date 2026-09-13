@@ -93,9 +93,60 @@ test("console selection, connection stages, stream overlay, and clean exit work"
     await expect(page.getByTestId("mock-stream")).toBeVisible();
     await expect(page.getByText("60 FPS")).toBeVisible();
     await page.screenshot({ path: join(screenshots, "stream-1280x800.png") });
-    await page.getByRole("button", { name: "Leave remote play" }).click();
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
     await expect(
       page.getByRole("heading", { name: "Studio Series S" }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("cloud library selection launches an xCloud stream", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.getByRole("button", { name: "Cloud" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Your library. Ready anywhere." }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Starfield" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", {
+        name: "Forza Horizon 5, Xbox Game Studios",
+      })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Forza Horizon 5" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: join(screenshots, "cloud-library-1280x800.png"),
+    });
+    await page.getByRole("button", { name: /Play from cloud/ }).click();
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+    await expect(page.getByText("Forza Horizon 5")).toBeVisible();
+    await page.screenshot({
+      path: join(screenshots, "cloud-stream-1280x800.png"),
+    });
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+  } finally {
+    await app.close();
+  }
+});
+
+test("cloud eligibility has a clear unavailable state", async () => {
+  const { app, page } = await launch({
+    signedIn: true,
+    scenario: "cloud-unavailable",
+  });
+  try {
+    await page.getByRole("button", { name: "Cloud" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Cloud gaming isn’t active here." }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Cloud gaming requires a supported account and region."),
     ).toBeVisible();
   } finally {
     await app.close();
@@ -109,6 +160,7 @@ test("controller semantics navigate to health and settings persist in the shell"
       page.getByRole("heading", { name: "Pick up where you left off." }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Home" }).focus();
+    await page.evaluate(() => window.afterglideTest!.injectGamepad("down"));
     await page.evaluate(() => window.afterglideTest!.injectGamepad("down"));
     await page.evaluate(() => window.afterglideTest!.injectGamepad("accept"));
     await expect(

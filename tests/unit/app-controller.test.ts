@@ -2,12 +2,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { DeviceCode, XboxConsole } from "../../src/shared/contracts";
+import type {
+  CloudTitle,
+  DeviceCode,
+  XboxConsole,
+} from "../../src/shared/contracts";
 import { AppController } from "../../src/main/app-controller";
 import { AfterglideError } from "../../src/main/errors";
 import type {
   PlatformService,
   SessionStateResult,
+  StreamTarget,
 } from "../../src/main/platform-service";
 import { SettingsStore } from "../../src/main/settings-store";
 
@@ -30,6 +35,7 @@ const consoleFixture: XboxConsole = {
 class FakePlatform implements PlatformService {
   readonly mock = true;
   readonly hasStoredAuthentication = true;
+  readonly cloudAvailable = true;
   states: SessionStateResult[] = [
     { state: "Provisioning" },
     { state: "ReadyToConnect" },
@@ -38,6 +44,7 @@ class FakePlatform implements PlatformService {
   wakeCount = 0;
   authorizeCount = 0;
   failStart = false;
+  startedTarget?: StreamTarget;
   async restore() {
     return true;
   }
@@ -56,13 +63,29 @@ class FakePlatform implements PlatformService {
   async listConsoles() {
     return [consoleFixture];
   }
+  async listCloudTitles(): Promise<CloudTitle[]> {
+    return [
+      {
+        id: "cloud-game",
+        productId: "product",
+        name: "Cloud Game",
+        publisher: "Xbox",
+        supportedInputTypes: ["Controller"],
+        recentlyPlayed: true,
+      },
+    ];
+  }
   async wakeConsole() {
     this.wakeCount += 1;
   }
-  async startSession() {
+  async startSession(target: StreamTarget) {
+    this.startedTarget = target;
     if (this.failStart)
       throw new AfterglideError("UNAVAILABLE", "The console is busy.");
-    return { sessionId: "session", sessionPath: "v5/sessions/home/session" };
+    return {
+      sessionId: "session",
+      sessionPath: `v5/sessions/${target.source}/session`,
+    };
   }
   async getSessionState() {
     return this.states.shift() ?? { state: "Provisioned" };
@@ -104,6 +127,9 @@ describe("AppController", () => {
     const descriptor = await controller.startStream("den");
     expect(descriptor).toEqual({
       sessionId: "session",
+      source: "home",
+      targetId: "den",
+      displayName: "Den Xbox",
       consoleId: "den",
       mock: true,
     });
@@ -112,6 +138,29 @@ describe("AppController", () => {
     expect(controller.getSnapshot().session.phase).toBe("negotiating");
     await controller.reportStreamEvent("session", "connected");
     expect(controller.getSnapshot().session.phase).toBe("streaming");
+  });
+
+  it("discovers and launches a cloud title without waking a console", async () => {
+    const platform = new FakePlatform();
+    const controller = makeController(platform);
+    await controller.initialize();
+    expect(controller.getSnapshot().cloud).toMatchObject({
+      available: true,
+      status: "ready",
+      selectedTitleId: "cloud-game",
+    });
+    const descriptor = await controller.startCloudStream("cloud-game");
+    expect(platform.startedTarget).toEqual({
+      source: "cloud",
+      id: "cloud-game",
+      name: "Cloud Game",
+    });
+    expect(platform.wakeCount).toBe(0);
+    expect(descriptor).toMatchObject({
+      source: "cloud",
+      titleId: "cloud-game",
+      displayName: "Cloud Game",
+    });
   });
 
   it("publishes a recoverable, user-facing failure", async () => {

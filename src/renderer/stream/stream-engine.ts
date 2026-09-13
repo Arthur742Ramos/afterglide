@@ -2,6 +2,10 @@ import type {
   IceCandidatePayload,
   StreamTelemetry,
 } from "../../shared/contracts";
+import {
+  assessNetworkQuality,
+  NETWORK_POLICY,
+} from "../../shared/network-policy";
 
 interface StreamEngineOptions {
   sessionId: string;
@@ -75,7 +79,7 @@ const keyboardMap: Partial<Record<string, keyof InputFrame>> = {
 };
 
 /**
- * Browser WebRTC transport for Xbox home streaming. The protocol shape is
+ * Browser WebRTC transport for Xbox streaming. The protocol shape is
  * derived from Greenlight's MIT-licensed player and kept deliberately small:
  * Chromium owns media decode while Afterglide owns negotiation and input.
  */
@@ -88,8 +92,10 @@ export class XboxStreamEngine {
   private readonly video: HTMLVideoElement;
   private readonly audio: HTMLAudioElement;
   private readonly localCandidates: IceCandidatePayload[] = [];
+  private readonly localCandidateKeys = new Set<string>();
   private readonly pressedKeys = new Set<string>();
   private destroyed = false;
+  private terminal = false;
   private connected = false;
   private inputActive = false;
   private sequence = 0;
@@ -98,7 +104,12 @@ export class XboxStreamEngine {
   private inputFrameId = 0;
   private telemetryTimer = 0;
   private keepaliveTimer = 0;
+  private connectionDeadlineTimer = 0;
+  private disconnectedTimer = 0;
+  private keepaliveFailures = 0;
   private previousBytes = 0;
+  private previousPacketsReceived = 0;
+  private previousPacketsLost = 0;
   private previousStatsAt = 0;
 
   constructor(private readonly options: StreamEngineOptions) {
@@ -150,8 +161,15 @@ export class XboxStreamEngine {
     if (codecs.length > 0) videoTransceiver.setCodecPreferences(codecs);
 
     this.peer.addEventListener("icecandidate", (event) => {
-      if (event.candidate)
-        this.localCandidates.push(candidatePayload(event.candidate));
+      if (!event.candidate) return;
+      const candidate = candidatePayload(event.candidate);
+      if (
+        this.localCandidates.length >= NETWORK_POLICY.maxIceCandidates ||
+        this.localCandidateKeys.has(candidate.candidate)
+      )
+        return;
+      this.localCandidateKeys.add(candidate.candidate);
+      this.localCandidates.push(candidate);
     });
     this.peer.addEventListener("track", (event) => this.attachTrack(event));
     this.peer.addEventListener("connectionstatechange", () =>
@@ -169,6 +187,13 @@ export class XboxStreamEngine {
 
   async connect(): Promise<void> {
     try {
+      this.connectionDeadlineTimer = window.setTimeout(() => {
+        if (!this.connected && !this.destroyed) {
+          this.notifyError(
+            "The video connection timed out. Check your network and try again.",
+          );
+        }
+      }, NETWORK_POLICY.connectionDeadlineMs);
       const offer = await this.peer.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
@@ -179,7 +204,10 @@ export class XboxStreamEngine {
           "useinbandfec=1; stereo=1",
         );
       await this.peer.setLocalDescription(offer);
-      await waitForIceGathering(this.peer, 2_500);
+      await waitForIceGathering(
+        this.peer,
+        NETWORK_POLICY.iceGatheringTimeoutMs,
+      );
 
       const answer = await window.afterglide.sendSdp(
         this.options.sessionId,
@@ -200,16 +228,25 @@ export class XboxStreamEngine {
       this.keepaliveTimer = window.setInterval(() => {
         void window.afterglide
           .keepalive(this.options.sessionId)
-          .catch(() => this.options.onInterrupted());
-      }, 30_000);
+          .then(() => {
+            this.keepaliveFailures = 0;
+          })
+          .catch(() => {
+            this.keepaliveFailures += 1;
+            if (
+              this.keepaliveFailures >= NETWORK_POLICY.keepaliveFailureThreshold
+            )
+              this.notifyInterrupted();
+          });
+      }, NETWORK_POLICY.keepaliveIntervalMs);
       this.telemetryTimer = window.setInterval(
         () => void this.collectTelemetry(),
-        1_000,
+        NETWORK_POLICY.telemetryIntervalMs,
       );
       this.inputFrameId = requestAnimationFrame(this.inputLoop);
     } catch (error) {
       if (this.destroyed) return;
-      this.options.onError(
+      this.notifyError(
         error instanceof Error ? error.message : "Video negotiation failed.",
       );
     }
@@ -221,6 +258,8 @@ export class XboxStreamEngine {
     cancelAnimationFrame(this.inputFrameId);
     clearInterval(this.telemetryTimer);
     clearInterval(this.keepaliveTimer);
+    clearTimeout(this.connectionDeadlineTimer);
+    clearTimeout(this.disconnectedTimer);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.releaseInput);
@@ -242,19 +281,29 @@ export class XboxStreamEngine {
 
   private handleConnectionState(): void {
     if (this.destroyed) return;
-    if (this.peer.connectionState === "connected") this.markConnected();
-    if (
-      this.connected &&
-      ["disconnected", "failed"].includes(this.peer.connectionState)
-    )
-      this.options.onInterrupted();
+    if (this.peer.connectionState === "connected") {
+      clearTimeout(this.disconnectedTimer);
+      this.disconnectedTimer = 0;
+      this.markConnected();
+      return;
+    }
+    if (this.connected && this.peer.connectionState === "disconnected") {
+      clearTimeout(this.disconnectedTimer);
+      this.disconnectedTimer = window.setTimeout(() => {
+        if (!this.destroyed && this.peer.connectionState === "disconnected")
+          this.notifyInterrupted();
+      }, NETWORK_POLICY.disconnectedGraceMs);
+    }
+    if (this.connected && this.peer.connectionState === "failed")
+      this.notifyInterrupted();
     if (!this.connected && this.peer.connectionState === "failed")
-      this.options.onError("A usable route to the Xbox was not found.");
+      this.notifyError("A usable route to the Xbox was not found.");
   }
 
   private markConnected(): void {
-    if (this.connected || this.destroyed) return;
+    if (this.connected || this.destroyed || this.terminal) return;
     this.connected = true;
+    clearTimeout(this.connectionDeadlineTimer);
     this.options.onConnected();
   }
 
@@ -289,7 +338,7 @@ export class XboxStreamEngine {
           id: data.id,
           cv: "",
         });
-        this.options.onInterrupted();
+        this.notifyInterrupted();
       } else if (data.type === "TransactionStart" && data.id) {
         this.send(this.channels.message, {
           type: "TransactionComplete",
@@ -389,7 +438,9 @@ export class XboxStreamEngine {
       const frame = readInputFrame(this.pressedKeys);
       if (frame) {
         const signature = JSON.stringify(frame);
-        const heartbeatDue = performance.now() - this.lastInputAt >= 33;
+        const heartbeatDue =
+          performance.now() - this.lastInputAt >=
+          NETWORK_POLICY.inputHeartbeatMs;
         if (signature !== this.lastInputSignature || heartbeatDue) {
           this.sendInputFrame(frame);
           this.lastInputSignature = signature;
@@ -463,6 +514,8 @@ export class XboxStreamEngine {
     let packetLoss = 0;
     let codec = "H.264";
     let bytes = 0;
+    let packetsReceived = 0;
+    let packetsLost = 0;
     let remoteCandidateId = "";
     let connection: StreamTelemetry["connection"] = "unknown";
     const records = new Map<string, Record<string, unknown>>();
@@ -480,9 +533,8 @@ export class XboxStreamEngine {
         if (width && height) resolution = `${width} × ${height}`;
         fps = Number(record.framesPerSecond ?? 0);
         bytes = Number(record.bytesReceived ?? 0);
-        const received = Number(record.packetsReceived ?? 0);
-        const lost = Number(record.packetsLost ?? 0);
-        packetLoss = received + lost > 0 ? (lost / (received + lost)) * 100 : 0;
+        packetsReceived = Number(record.packetsReceived ?? 0);
+        packetsLost = Number(record.packetsLost ?? 0);
         const codecReport = records.get(String(record.codecId ?? ""));
         if (codecReport?.mimeType)
           codec = String(codecReport.mimeType).replace("video/", "");
@@ -508,7 +560,18 @@ export class XboxStreamEngine {
       seconds > 0
         ? ((bytes - this.previousBytes) * 8) / seconds / 1_000_000
         : 0;
+    const receivedDelta = Math.max(
+      0,
+      packetsReceived - this.previousPacketsReceived,
+    );
+    const lostDelta = Math.max(0, packetsLost - this.previousPacketsLost);
+    packetLoss =
+      receivedDelta + lostDelta > 0
+        ? (lostDelta / (receivedDelta + lostDelta)) * 100
+        : 0;
     this.previousBytes = bytes;
+    this.previousPacketsReceived = packetsReceived;
+    this.previousPacketsLost = packetsLost;
     this.previousStatsAt = now;
     this.options.onTelemetry({
       resolution,
@@ -518,7 +581,8 @@ export class XboxStreamEngine {
       bitrateMbps: Math.max(0, bitrate),
       codec,
       connection,
-      videoDecoder: "Chromium hardware path",
+      videoDecoder: "Chromium WebRTC",
+      networkQuality: assessNetworkQuality(rtt, packetLoss, fps),
       updatedAt: Date.now(),
     });
   }
@@ -536,6 +600,23 @@ export class XboxStreamEngine {
   private send(channel: RTCDataChannel, value: unknown): void {
     if (channel.readyState !== "open") return;
     channel.send(typeof value === "string" ? value : JSON.stringify(value));
+  }
+
+  private notifyInterrupted(): void {
+    if (this.destroyed || this.terminal) return;
+    this.terminal = true;
+    clearTimeout(this.disconnectedTimer);
+    clearInterval(this.keepaliveTimer);
+    this.options.onInterrupted();
+  }
+
+  private notifyError(message: string): void {
+    if (this.destroyed || this.terminal) return;
+    this.terminal = true;
+    clearTimeout(this.connectionDeadlineTimer);
+    clearTimeout(this.disconnectedTimer);
+    clearInterval(this.keepaliveTimer);
+    this.options.onError(message);
   }
 
   private nextSequence(): number {

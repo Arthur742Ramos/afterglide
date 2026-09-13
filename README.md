@@ -3,9 +3,10 @@
 **Your Xbox. Wherever you land.**
 
 Afterglide is an open-source, controller-first Xbox remote-play client designed
-for Steam Deck. The current pre-alpha implements the complete desktop path from
-Microsoft device-code sign-in through console discovery, wake, xHome session
-negotiation, WebRTC video/audio, controller input, rumble, and recovery UI.
+for Steam Deck. The current pre-alpha implements the desktop paths from
+Microsoft device-code sign-in through console discovery and xHome remote play,
+as well as xCloud library discovery and Xbox Cloud Gaming sessions. Both paths
+share WebRTC video/audio, controller input, rumble, telemetry, and recovery UI.
 
 > Afterglide is an independent project. It is not affiliated with or endorsed by
 > Microsoft, Xbox, Valve, or Steam.
@@ -18,6 +19,7 @@ negotiation, WebRTC video/audio, controller input, rumble, and recovery UI.
 - Refresh-token persistence through the operating system encryption service
 - Xbox console discovery, selection, and remote wake
 - Xbox xHome provisioning and authenticated SDP/ICE signaling
+- xCloud entitlement detection, recent games, catalog metadata, and streaming
 - H.264 WebRTC video, audio, keepalive, and connection telemetry
 - Focused-window gamepad input, keyboard opt-in, and controller rumble
 - Controller-first home, setup, settings, diagnostics, error, and recovery flows
@@ -25,9 +27,10 @@ negotiation, WebRTC video/audio, controller input, rumble, and recovery UI.
 
 The live protocol is community maintained and can change upstream. A passing
 automated suite proves Afterglide's desktop behavior; current service compatibility
-still requires a Microsoft account, a remote-play-enabled Xbox, and a live smoke
-test. Hardware decode and power targets must be measured on the packaged Steam
-Deck build before the first supported release.
+still requires a Microsoft account and a live smoke test. Home streaming needs a
+remote-play-enabled Xbox; cloud streaming needs an eligible account and region.
+Hardware decode and power targets must be measured on the packaged Steam Deck
+build before the first supported release.
 
 ## Run it
 
@@ -39,8 +42,9 @@ npm run dev
 ```
 
 Sign in from the opening screen, enter the one-time code on Microsoft's site, and
-choose a console. On Xbox, remote features must be enabled under **Settings →
-Devices & connections → Remote features**.
+choose a console or open the Cloud library. For home streaming, remote features
+must be enabled on Xbox under **Settings → Devices & connections → Remote
+features**.
 
 The renderer never receives Microsoft or Xbox tokens. Afterglide persists a
 refresh token only when Electron reports a real OS encryption backend; Linux's
@@ -56,8 +60,8 @@ npm audit --audit-level=high
 
 The end-to-end suite launches Electron at the Steam Deck's 1280×800 viewport. It
 uses an unpackaged-only deterministic adapter and covers first run, authentication,
-console selection, controller navigation, connection stages, streaming, settings,
-interruption recovery, errors, and retry.
+console and cloud-game selection, controller navigation, connection stages,
+streaming, settings, interruption recovery, errors, and retry.
 
 ## Build a Linux package
 
@@ -79,7 +83,7 @@ React UI + WebRTC + focused controller input
                     │
              Electron controller
           ┌─────────┼──────────┐
-  Microsoft auth  Smartglass  xHome signaling
+  Microsoft auth  Smartglass  xHome / xCloud signaling
           └─────────┼──────────┘
               encrypted store
 ```
@@ -100,6 +104,13 @@ and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 These are release gates rather than current hardware claims. Raw device evidence
 will be published with the first beta.
+
+The runtime applies explicit network bounds: 12-second Xbox API timeouts,
+idempotent-read retries with exponential backoff, a 4-second ICE gathering
+window, candidate and signaling-size caps, a 20-second media connection
+deadline, 3-second tolerance for transient WebRTC disconnects, and recovery only
+after three consecutive keepalive failures. Afterglide leaves incoming bitrate
+adaptation to WebRTC congestion control instead of forcing a fixed bitrate.
 
 ## License
 

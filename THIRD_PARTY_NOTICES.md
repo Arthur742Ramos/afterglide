@@ -5,8 +5,9 @@ protocol behavior from the following MIT-licensed projects.
 
 ## Greenlight
 
-Xbox WebRTC negotiation, data-channel behavior, and controller packet framing in
-`src/renderer/stream/stream-engine.ts` are adapted from Greenlight's player at
+Xbox xHome/xCloud API behavior, catalog hydration, WebRTC negotiation,
+data-channel behavior, and controller packet framing are adapted from
+Greenlight at
 <https://github.com/unknownskl/greenlight>, reviewed at commit
 `bbaacef7436368652e28add8c9134f56d73bd86b`.
 

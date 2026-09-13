@@ -3,6 +3,8 @@ import type { SVGProps } from "react";
 type IconProps = SVGProps<SVGSVGElement> & { name: IconName };
 export type IconName =
   | "home"
+  | "cloud"
+  | "search"
   | "pulse"
   | "settings"
   | "console"
@@ -21,6 +23,12 @@ export type IconName =
 
 const paths: Record<IconName, React.ReactNode> = {
   home: <path d="m3 11 9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
+  cloud: (
+    <path d="M7 18h10a4 4 0 0 0 .7-7.9A6 6 0 0 0 6.2 9 4.5 4.5 0 0 0 7 18Z" />
+  ),
+  search: (
+    <path d="m20 20-4.4-4.4m2.4-5.1a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+  ),
   pulse: <path d="M3 12h4l2.2-6 4.1 12 2.2-6H21" />,
   settings: (
     <>

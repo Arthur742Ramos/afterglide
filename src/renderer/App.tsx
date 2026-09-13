@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AppSettings,
   AppSnapshot,
+  CloudTitle,
   StreamDescriptor,
   XboxConsole,
 } from "../shared/contracts";
@@ -9,7 +10,7 @@ import { Icon, type IconName } from "./icons";
 import { useControllerNavigation } from "./hooks/use-controller-navigation";
 import { StreamSurface } from "./stream/StreamSurface";
 
-type Page = "home" | "diagnostics" | "settings";
+type Page = "home" | "cloud" | "diagnostics" | "settings";
 
 export function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | undefined>(undefined);
@@ -44,6 +45,15 @@ export function App() {
   const startStream = useCallback(async (consoleId: string) => {
     try {
       const stream = await window.afterglide.startStream(consoleId);
+      setDescriptor(stream);
+    } catch {
+      // The main-process snapshot contains the safe, actionable error.
+    }
+  }, []);
+
+  const startCloudStream = useCallback(async (titleId: string) => {
+    try {
+      const stream = await window.afterglide.startCloudStream(titleId);
       setDescriptor(stream);
     } catch {
       // The main-process snapshot contains the safe, actionable error.
@@ -122,6 +132,9 @@ export function App() {
   return (
     <Shell snapshot={snapshot} page={page} onPage={setPage}>
       {page === "home" && <HomePage snapshot={snapshot} onPlay={startStream} />}
+      {page === "cloud" && (
+        <CloudPage snapshot={snapshot} onPlay={startCloudStream} />
+      )}
       {page === "diagnostics" && <DiagnosticsPage snapshot={snapshot} />}
       {page === "settings" && <SettingsPage snapshot={snapshot} />}
     </Shell>
@@ -155,15 +168,15 @@ function WelcomeScreen({
         <span className="independent-label">Open source · Independent</span>
       </div>
       <section className="welcome-copy">
-        <p className="eyebrow">XBOX REMOTE PLAY FOR STEAM DECK</p>
+        <p className="eyebrow">XBOX STREAMING FOR STEAM DECK</p>
         <h1>
           Your Xbox.
           <br />
           <span>Wherever you land.</span>
         </h1>
         <p className="welcome-lede">
-          Sign in once, pick up your Deck, and play from your own console
-          without reaching for a keyboard.
+          Play from your own console or Xbox Cloud Gaming, with a
+          controller-first experience built for your Deck.
         </p>
         {error && (
           <div className="inline-error" role="alert">
@@ -326,6 +339,12 @@ function Shell({
             onClick={() => onPage("home")}
           />
           <RailButton
+            icon="cloud"
+            label="Cloud"
+            active={page === "cloud"}
+            onClick={() => onPage("cloud")}
+          />
+          <RailButton
             icon="pulse"
             label="Health"
             active={page === "diagnostics"}
@@ -359,6 +378,175 @@ function Shell({
         </footer>
       </div>
     </main>
+  );
+}
+
+function CloudPage({
+  snapshot,
+  onPlay,
+}: {
+  snapshot: AppSnapshot;
+  onPlay: (titleId: string) => Promise<void>;
+}) {
+  const [query, setQuery] = useState("");
+  const selected = snapshot.cloud.titles.find(
+    (title) => title.id === snapshot.cloud.selectedTitleId,
+  );
+  const filtered = snapshot.cloud.titles.filter((title) =>
+    `${title.name} ${title.publisher}`
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+
+  return (
+    <section className="page cloud-page">
+      <div className="cloud-heading">
+        <div className="page-heading">
+          <p className="eyebrow">XBOX CLOUD GAMING</p>
+          <h1>Your library. Ready anywhere.</h1>
+          <p>Games available to stream with this Microsoft account.</p>
+        </div>
+        {snapshot.cloud.status === "ready" && (
+          <label className="cloud-search">
+            <Icon name="search" />
+            <span className="sr-only">Search cloud games</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search games"
+              data-focusable
+            />
+          </label>
+        )}
+      </div>
+
+      {snapshot.cloud.status === "loading" && <CloudSkeleton />}
+      {(snapshot.cloud.status === "unavailable" ||
+        snapshot.cloud.status === "error") && (
+        <div className="cloud-unavailable" role="status">
+          <span className="cloud-symbol">
+            <Icon name="cloud" />
+          </span>
+          <div>
+            <p className="eyebrow">
+              {snapshot.cloud.status === "error"
+                ? "COULDN’T LOAD LIBRARY"
+                : "CLOUD UNAVAILABLE"}
+            </p>
+            <h2>
+              {snapshot.cloud.status === "error"
+                ? "Your cloud library didn’t load."
+                : "Cloud gaming isn’t active here."}
+            </h2>
+            <p>{snapshot.cloud.error}</p>
+          </div>
+          <button
+            className="secondary-action"
+            data-focusable
+            onClick={() => void window.afterglide.refreshCloudTitles()}
+          >
+            <Icon name="refresh" /> Check again
+          </button>
+        </div>
+      )}
+
+      {snapshot.cloud.status === "ready" && selected && (
+        <article className="cloud-feature">
+          <GameArtwork title={selected} featured />
+          <div className="cloud-feature-copy">
+            <p className="eyebrow">
+              {selected.recentlyPlayed ? "RECENTLY PLAYED" : "SELECTED GAME"}
+            </p>
+            <h2>{selected.name}</h2>
+            <p>{selected.publisher}</p>
+            <span>
+              <Icon name="controller" /> Controller ready
+            </span>
+          </div>
+          <button
+            className="primary-action cloud-play"
+            data-focusable
+            data-autofocus
+            onClick={() => void onPlay(selected.id)}
+          >
+            <Icon name="play" /> Play from cloud <ControllerHint label="A" />
+          </button>
+        </article>
+      )}
+
+      {snapshot.cloud.status === "ready" && (
+        <div className="cloud-library">
+          <div className="cloud-library-title">
+            <h2>{query ? "Search results" : "All cloud games"}</h2>
+            <span>{filtered.length} titles</span>
+          </div>
+          {filtered.length === 0 ? (
+            <p className="cloud-empty">
+              {query
+                ? `No games match “${query}”.`
+                : "No cloud games are currently available for this account."}
+            </p>
+          ) : (
+            <div className="game-grid">
+              {filtered.map((title) => (
+                <button
+                  key={title.id}
+                  className={title.id === selected?.id ? "selected" : ""}
+                  data-focusable
+                  onClick={() =>
+                    void window.afterglide.selectCloudTitle(title.id)
+                  }
+                  onDoubleClick={() => void onPlay(title.id)}
+                  aria-label={`${title.name}, ${title.publisher}`}
+                >
+                  <GameArtwork title={title} />
+                  <strong>{title.name}</strong>
+                  <span>{title.publisher}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function GameArtwork({
+  title,
+  featured = false,
+}: {
+  title: CloudTitle;
+  featured?: boolean;
+}) {
+  return title.imageUrl ? (
+    <img
+      className={featured ? "featured-art" : "game-art"}
+      src={title.imageUrl}
+      alt=""
+      loading={featured ? "eager" : "lazy"}
+      referrerPolicy="no-referrer"
+    />
+  ) : (
+    <div
+      className={`${featured ? "featured-art" : "game-art"} game-art-fallback`}
+      aria-hidden="true"
+    >
+      <Icon name="cloud" />
+      <span>{title.name.slice(0, 2).toUpperCase()}</span>
+    </div>
+  );
+}
+
+function CloudSkeleton() {
+  return (
+    <div className="cloud-skeleton" aria-label="Loading cloud games">
+      <div />
+      <div />
+      <div />
+      <div />
+      <div />
+    </div>
   );
 }
 
@@ -511,10 +699,13 @@ function ConnectingScreen({
   snapshot: AppSnapshot;
   onCancel: () => void;
 }) {
-  const console = snapshot.consoles.find(
-    (item) => item.id === snapshot.session.consoleId,
-  );
-  const stages = ["waking", "provisioning", "authorizing", "negotiating"];
+  const cloud = snapshot.session.source === "cloud";
+  const stages = cloud
+    ? ["provisioning", "authorizing", "negotiating"]
+    : ["waking", "provisioning", "authorizing", "negotiating"];
+  const stageLabels = cloud
+    ? ["Capacity", "Secure", "Video"]
+    : ["Wake", "Reserve", "Secure", "Video"];
   const current = Math.max(0, stages.indexOf(snapshot.session.phase));
   return (
     <main
@@ -522,14 +713,14 @@ function ConnectingScreen({
     >
       <header>
         <BrandLockup />
-        <span>{console?.name}</span>
+        <span>{snapshot.session.targetName}</span>
       </header>
       <div className="connection-visual" aria-hidden="true">
         <div className="orbit orbit-a" />
         <div className="orbit orbit-b" />
         <div className="orbit orbit-c" />
         <div className="connection-core">
-          <Icon name="console" />
+          <Icon name={cloud ? "cloud" : "console"} />
         </div>
       </div>
       <section className="connection-copy" aria-live="polite">
@@ -540,7 +731,7 @@ function ConnectingScreen({
           <span style={{ width: `${snapshot.session.progress}%` }} />
         </div>
         <div className="stage-list">
-          {["Wake", "Reserve", "Secure", "Video"].map((label, index) => (
+          {stageLabels.map((label, index) => (
             <span
               key={label}
               className={
@@ -623,9 +814,6 @@ function StreamView({
     [],
   );
 
-  const selected = snapshot.consoles.find(
-    (console) => console.id === descriptor.consoleId,
-  );
   const telemetry = snapshot.telemetry;
   return (
     <main className={`stream-view ${overlay ? "overlay-visible" : ""}`}>
@@ -642,9 +830,9 @@ function StreamView({
       <header className="stream-header">
         <BrandWord />
         <div className="stream-console">
-          <span className="live-dot" /> {selected?.name ?? "Xbox"}
+          <span className="live-dot" /> {descriptor.displayName}
         </div>
-        <button aria-label="Leave remote play" onClick={() => void onExit()}>
+        <button aria-label="Leave Xbox stream" onClick={() => void onExit()}>
           <Icon name="power" /> End session
         </button>
       </header>
@@ -671,7 +859,10 @@ function StreamView({
             label="QUALITY"
             value={telemetry.resolution.replace(" × ", "×")}
           />
-          <Metric label="ROUTE" value={telemetry.connection.toUpperCase()} />
+          <Metric
+            label="NETWORK"
+            value={telemetry.networkQuality.toUpperCase()}
+          />
         </div>
       )}
       <footer className="stream-controls">
@@ -715,7 +906,7 @@ function SessionErrorScreen({
             </button>
           )}
           <button className="secondary-action" data-focusable onClick={onBack}>
-            <Icon name="back" /> Back to consoles
+            <Icon name="back" /> Back to library
           </button>
         </div>
       </section>

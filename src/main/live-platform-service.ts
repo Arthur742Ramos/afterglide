@@ -1,15 +1,22 @@
 import { Msal } from "xal-node";
 import XboxWebApi from "xbox-webapi";
 import type {
+  CloudTitle,
   DeviceCode,
   IceCandidatePayload,
   XboxConsole,
 } from "../shared/contracts";
+import {
+  isTransientHttpStatus,
+  NETWORK_POLICY,
+  retryDelayMs,
+} from "../shared/network-policy";
 import { AfterglideError } from "./errors";
 import type {
   PlatformService,
   SessionStart,
   SessionStateResult,
+  StreamTarget,
 } from "./platform-service";
 import { SecureTokenStore } from "./secure-token-store";
 
@@ -17,8 +24,34 @@ interface StreamTokenData {
   gsToken: string;
   market: string;
   offeringSettings: {
-    regions: Array<{ baseUri: string; isDefault: boolean }>;
+    regions: Array<{
+      baseUri: string;
+      isDefault: boolean;
+      name?: string;
+      networkTestHostname?: string;
+    }>;
   };
+}
+
+interface CloudTitleResult {
+  titleId?: string;
+  details?: {
+    productId?: string;
+    supportedInputTypes?: string[];
+  };
+}
+
+interface CloudTitlesResponse {
+  results?: CloudTitleResult[];
+}
+
+interface CatalogProduct {
+  StoreId?: string;
+  XCloudTitleId?: string;
+  ProductTitle?: string;
+  PublisherName?: string;
+  Image_Tile?: { URL?: string };
+  Image_Poster?: { URL?: string };
 }
 
 interface XstsTokenData {
@@ -37,8 +70,10 @@ export class LivePlatformService implements PlatformService {
   readonly mock = false;
   private readonly msal: Msal;
   private homeToken?: StreamTokenData;
+  private cloudToken?: StreamTokenData;
   private webToken?: XstsTokenData;
   private currentSession?: SessionContext;
+  private cloudCatalog?: { expiresAt: number; titles: CloudTitle[] };
   private authGeneration = 0;
 
   constructor(private readonly tokenStore: SecureTokenStore) {
@@ -48,6 +83,10 @@ export class LivePlatformService implements PlatformService {
 
   get hasStoredAuthentication(): boolean {
     return this.tokenStore.getUserToken() !== undefined;
+  }
+
+  get cloudAvailable(): boolean {
+    return this.cloudToken !== undefined;
   }
 
   async restore(): Promise<boolean> {
@@ -94,8 +133,10 @@ export class LivePlatformService implements PlatformService {
   async signOut(): Promise<void> {
     this.cancelAuthentication();
     this.homeToken = undefined;
+    this.cloudToken = undefined;
     this.webToken = undefined;
     this.currentSession = undefined;
+    this.cloudCatalog = undefined;
     this.tokenStore.removeAll();
   }
 
@@ -125,6 +166,85 @@ export class LivePlatformService implements PlatformService {
     }));
   }
 
+  async listCloudTitles(): Promise<CloudTitle[]> {
+    await this.ensureTokens();
+    if (!this.cloudToken) await this.refreshServiceTokens();
+    const cloud = this.cloudToken;
+    if (!cloud)
+      throw new AfterglideError(
+        "XCLOUD_UNAVAILABLE",
+        "Cloud gaming is not available for this account or region.",
+        false,
+      );
+    if (this.cloudCatalog && this.cloudCatalog.expiresAt > Date.now())
+      return structuredClone(this.cloudCatalog.titles);
+
+    const region = chooseRegion(cloud);
+    const host = normalizeHost(region.baseUri);
+    const [all, recent] = await Promise.all([
+      this.requestJson<CloudTitlesResponse>(host, cloud.gsToken, "/v2/titles"),
+      this.requestJson<CloudTitlesResponse>(
+        host,
+        cloud.gsToken,
+        "/v2/titles/mru?mr=25",
+      ).catch(() => ({ results: [] })),
+    ]);
+    const rows = (all.results ?? []).filter(
+      (row): row is CloudTitleResult & { titleId: string } =>
+        typeof row.titleId === "string" && row.titleId.length > 0,
+    );
+    const productIds = [
+      ...new Set(
+        rows
+          .map((row) => row.details?.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const batches = Array.from(
+      { length: Math.ceil(productIds.length / 100) },
+      (_, index) => productIds.slice(index * 100, index * 100 + 100),
+    );
+    const catalogResults = await Promise.all(
+      batches.map((batch) =>
+        this.requestJson<{
+          Products?: CatalogProduct[] | Record<string, CatalogProduct>;
+        }>(
+          "https://catalog.gamepass.com",
+          "",
+          `/v3/products?hydration=RemoteHighSapphire0&market=${encodeURIComponent(cloud.market || "US")}&language=en-US`,
+          {
+            method: "POST",
+            headers: {
+              "ms-cv": "0.0",
+              "calling-app-name": "Afterglide",
+              "calling-app-version": "0.2.0",
+            },
+            body: JSON.stringify({ Products: batch }),
+          },
+        )
+          .then((catalog) => ({ catalog, complete: true }))
+          .catch(() => ({ catalog: { Products: [] }, complete: false })),
+      ),
+    );
+    const products = catalogResults.flatMap(({ catalog }) =>
+      Array.isArray(catalog.Products)
+        ? catalog.Products
+        : Object.values(catalog.Products ?? {}),
+    );
+    const recentIds = new Set(
+      (recent.results ?? [])
+        .map((row) => row.titleId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const titles = mapCloudTitles(rows, products, recentIds);
+    if (catalogResults.every((result) => result.complete))
+      this.cloudCatalog = {
+        expiresAt: Date.now() + NETWORK_POLICY.cloudCatalogCacheMs,
+        titles,
+      };
+    return structuredClone(titles);
+  }
+
   async wakeConsole(consoleId: string): Promise<void> {
     await this.ensureTokens();
     const web = this.webToken;
@@ -141,19 +261,19 @@ export class LivePlatformService implements PlatformService {
   }
 
   async startSession(
-    consoleId: string,
+    target: StreamTarget,
     resolution: 720 | 1080,
   ): Promise<SessionStart> {
     await this.ensureTokens();
-    const home = this.homeToken;
-    if (!home)
+    const token = target.source === "cloud" ? this.cloudToken : this.homeToken;
+    if (!token)
       throw new AfterglideError(
-        "AUTH_EXPIRED",
-        "Sign in again to start remote play.",
+        target.source === "cloud" ? "XCLOUD_UNAVAILABLE" : "AUTH_EXPIRED",
+        target.source === "cloud"
+          ? "Cloud gaming is not available for this account or region."
+          : "Sign in again to start remote play.",
       );
-    const region =
-      home.offeringSettings.regions.find((candidate) => candidate.isDefault) ??
-      home.offeringSettings.regions[0];
+    const region = chooseRegion(token);
     if (!region)
       throw new AfterglideError(
         "NO_REGION",
@@ -164,35 +284,18 @@ export class LivePlatformService implements PlatformService {
     const host = normalizeHost(region.baseUri);
     const response = await this.requestJson<SessionStart>(
       host,
-      home.gsToken,
-      "/v5/sessions/home/play",
+      token.gsToken,
+      `/v5/sessions/${target.source}/play`,
       {
         method: "POST",
-        body: JSON.stringify({
-          clientSessionId: "",
-          titleId: "",
-          systemUpdateGroup: "",
-          settings: {
-            nanoVersion: "V3;WebrtcTransport.dll",
-            enableOptionalDataCollection: false,
-            enableTextToSpeech: false,
-            highContrast: 0,
-            locale: "en-US",
-            useIceConnection: false,
-            timezoneOffsetMinutes: new Date().getTimezoneOffset(),
-            sdkType: "web",
-            osName: resolution === 1080 ? "windows" : "android",
-          },
-          serverId: consoleId,
-          fallbackRegionNames: [],
-        }),
+        body: JSON.stringify(buildSessionPayload(target, resolution)),
         headers: { "X-MS-Device-Info": deviceInfo(resolution) },
       },
     );
 
     this.currentSession = {
       host,
-      token: home.gsToken,
+      token: token.gsToken,
       sessionPath: response.sessionPath,
       resolution,
     };
@@ -305,6 +408,9 @@ export class LivePlatformService implements PlatformService {
       this.msal.getWebToken(),
     ]);
     this.homeToken = streaming.xHomeToken.data as StreamTokenData;
+    this.cloudToken = streaming.xCloudToken?.data as
+      | StreamTokenData
+      | undefined;
     this.webToken = web.data as XstsTokenData;
   }
 
@@ -349,41 +455,165 @@ export class LivePlatformService implements PlatformService {
     init: RequestInit = {},
     allowEmpty = false,
   ): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    try {
-      const response = await fetch(`${host}${path}`, {
-        ...init,
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-Gssv-Client": "XboxComBrowser",
-          Authorization: `Bearer ${token}`,
-          "X-MS-Device-Info": deviceInfo(
-            this.currentSession?.resolution ?? 1080,
-          ),
-          ...init.headers,
-        },
-      });
-      if (!response.ok) {
-        throw new AfterglideError(
-          `XBOX_HTTP_${response.status}`,
-          `Xbox remote play returned status ${response.status}.`,
-        );
+    const method = init.method?.toUpperCase() ?? "GET";
+    const attempts = method === "GET" ? NETWORK_POLICY.maxReadRetries + 1 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        host.includes("catalog.gamepass.com")
+          ? NETWORK_POLICY.catalogTimeoutMs
+          : NETWORK_POLICY.requestTimeoutMs,
+      );
+      try {
+        const response = await fetch(`${host}${path}`, {
+          ...init,
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-Gssv-Client": "XboxComBrowser",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            "X-MS-Device-Info": deviceInfo(
+              this.currentSession?.resolution ?? 1080,
+            ),
+            ...init.headers,
+          },
+        });
+        if (!response.ok) {
+          if (
+            attempt + 1 < attempts &&
+            isTransientHttpStatus(response.status)
+          ) {
+            await delay(
+              retryDelayMs(attempt, response.headers.get("retry-after")),
+            );
+            continue;
+          }
+          throw new AfterglideError(
+            `XBOX_HTTP_${response.status}`,
+            `Xbox streaming returned status ${response.status}.`,
+          );
+        }
+        if (
+          response.status === 204 ||
+          response.headers.get("content-length") === "0"
+        ) {
+          return (allowEmpty ? undefined : {}) as T;
+        }
+        const body = await response.text();
+        if (!body) return (allowEmpty ? undefined : {}) as T;
+        return JSON.parse(body) as T;
+      } catch (error) {
+        if (attempt + 1 < attempts && isTransientRequestError(error)) {
+          await delay(retryDelayMs(attempt));
+          continue;
+        }
+        if (error instanceof DOMException && error.name === "AbortError")
+          throw new AfterglideError(
+            "XBOX_TIMEOUT",
+            "Xbox services took too long to respond. Check your network and try again.",
+          );
+        throw error;
+      } finally {
+        clearTimeout(timeout);
       }
-      if (
-        response.status === 204 ||
-        response.headers.get("content-length") === "0"
-      ) {
-        return (allowEmpty ? undefined : {}) as T;
-      }
-      const body = await response.text();
-      if (!body) return (allowEmpty ? undefined : {}) as T;
-      return JSON.parse(body) as T;
-    } finally {
-      clearTimeout(timeout);
     }
+    throw new AfterglideError("XBOX_NETWORK", "Xbox services did not respond.");
+  }
+}
+
+function chooseRegion(token: StreamTokenData) {
+  return (
+    token.offeringSettings.regions.find((candidate) => candidate.isDefault) ??
+    token.offeringSettings.regions[0]
+  );
+}
+
+export function buildSessionPayload(
+  target: StreamTarget,
+  resolution: 720 | 1080,
+) {
+  return {
+    clientSessionId: "",
+    titleId: target.source === "cloud" ? target.id : "",
+    systemUpdateGroup: "",
+    settings: {
+      nanoVersion: "V3;WebrtcTransport.dll",
+      enableOptionalDataCollection: false,
+      enableTextToSpeech: false,
+      highContrast: 0,
+      locale: "en-US",
+      useIceConnection: false,
+      timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+      sdkType: "web",
+      osName: resolution === 1080 ? "windows" : "android",
+    },
+    serverId: target.source === "home" ? target.id : "",
+    fallbackRegionNames: [],
+  };
+}
+
+function isTransientRequestError(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof DOMException && error.name === "AbortError")
+  );
+}
+
+export function mapCloudTitles(
+  rows: CloudTitleResult[],
+  products: CatalogProduct[],
+  recentIds: ReadonlySet<string>,
+): CloudTitle[] {
+  const byProduct = new Map(
+    products
+      .filter((product) => product.StoreId)
+      .map((product) => [product.StoreId as string, product]),
+  );
+  const byTitle = new Map(
+    products
+      .filter((product) => product.XCloudTitleId)
+      .map((product) => [product.XCloudTitleId as string, product]),
+  );
+  return rows
+    .map((row) => {
+      const titleId = row.titleId ?? "";
+      const productId = row.details?.productId ?? "";
+      const product = byTitle.get(titleId) ?? byProduct.get(productId);
+      return {
+        id: titleId,
+        productId,
+        name: product?.ProductTitle?.trim() || `Xbox Cloud Game ${titleId}`,
+        publisher: product?.PublisherName?.trim() || "Xbox Cloud Gaming",
+        imageUrl: safeCatalogImageUrl(
+          product?.Image_Tile?.URL ?? product?.Image_Poster?.URL,
+        ),
+        supportedInputTypes: row.details?.supportedInputTypes ?? [],
+        recentlyPlayed: recentIds.has(titleId),
+      };
+    })
+    .sort((left, right) =>
+      left.recentlyPlayed === right.recentlyPlayed
+        ? left.name.localeCompare(right.name)
+        : left.recentlyPlayed
+          ? -1
+          : 1,
+    );
+}
+
+function safeCatalogImageUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value.startsWith("//") ? `https:${value}` : value);
+    const allowed =
+      url.protocol === "https:" &&
+      (url.hostname.endsWith(".microsoft.com") ||
+        url.hostname.endsWith(".s-microsoft.com") ||
+        url.hostname.endsWith(".xboxlive.com"));
+    return allowed ? url.toString() : undefined;
+  } catch {
+    return undefined;
   }
 }
 

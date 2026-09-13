@@ -24,6 +24,7 @@ export function MockStreamSurface({
         codec: "H264 High",
         connection: "local",
         videoDecoder: "E2E deterministic surface",
+        networkQuality: "excellent",
         updatedAt: Date.now(),
       });
     publish();

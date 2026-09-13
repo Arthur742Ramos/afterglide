@@ -2,6 +2,7 @@ import type { BrowserWindow } from "electron";
 import type {
   AppSettings,
   AppSnapshot,
+  CloudTitle,
   HardwareInfo,
   IceCandidatePayload,
   StreamDescriptor,
@@ -9,14 +10,21 @@ import type {
   XboxConsole,
 } from "../shared/contracts";
 import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
+import { NETWORK_POLICY } from "../shared/network-policy";
 import { errorForLog, safeError } from "./errors";
-import type { PlatformService } from "./platform-service";
+import type { PlatformService, StreamTarget } from "./platform-service";
 import { SettingsStore } from "./settings-store";
 
 interface ActiveSession {
   id: string;
   path: string;
-  consoleId: string;
+  source: StreamTarget["source"];
+  targetId: string;
+  targetName: string;
+}
+
+interface NamedTarget extends StreamTarget {
+  name: string;
 }
 
 export class AppController {
@@ -24,7 +32,7 @@ export class AppController {
   private activeSession?: ActiveSession;
   private connectionGeneration = 0;
   private authGeneration = 0;
-  private lastConsoleId?: string;
+  private lastTarget?: StreamTarget;
   private snapshot: AppSnapshot;
 
   constructor(
@@ -38,6 +46,11 @@ export class AppController {
       consoles: [],
       consolesStatus: "idle",
       selectedConsoleId: preferences.selectedConsoleId,
+      cloud: {
+        available: false,
+        titles: [],
+        status: "idle",
+      },
       session: idleSession(),
       settings: preferences.settings,
       telemetry: { ...emptyTelemetry },
@@ -59,7 +72,7 @@ export class AppController {
       return;
     }
     this.patch({ auth: { status: "signed-in" } });
-    await this.refreshConsoles();
+    await Promise.all([this.refreshConsoles(), this.refreshCloudTitles()]);
   }
 
   getSnapshot(): AppSnapshot {
@@ -90,7 +103,10 @@ export class AppController {
         .then(async () => {
           if (generation !== this.authGeneration) return;
           this.patch({ auth: { status: "signed-in" } });
-          await this.refreshConsoles();
+          await Promise.all([
+            this.refreshConsoles(),
+            this.refreshCloudTitles(),
+          ]);
         })
         .catch((error: unknown) => {
           if (generation !== this.authGeneration) return;
@@ -114,6 +130,7 @@ export class AppController {
 
   async signOut(): Promise<void> {
     await this.stopStream();
+    this.lastTarget = undefined;
     this.authGeneration += 1;
     await this.platform.signOut();
     this.preferences.setSelectedConsole(undefined);
@@ -122,6 +139,11 @@ export class AppController {
       consoles: [],
       consolesStatus: "idle",
       selectedConsoleId: undefined,
+      cloud: {
+        available: false,
+        titles: [],
+        status: "idle",
+      },
       session: idleSession(),
       telemetry: { ...emptyTelemetry },
     });
@@ -153,6 +175,65 @@ export class AppController {
     this.patch({ selectedConsoleId: consoleId });
   }
 
+  async refreshCloudTitles(): Promise<void> {
+    if (
+      !this.platform.cloudAvailable &&
+      this.snapshot.cloud.status === "idle"
+    ) {
+      this.patch({
+        cloud: {
+          available: false,
+          titles: [],
+          status: "unavailable",
+          error: "Cloud gaming requires a supported account and region.",
+        },
+      });
+      return;
+    }
+    this.patch({
+      cloud: {
+        ...this.snapshot.cloud,
+        available: this.platform.cloudAvailable,
+        status: "loading",
+        error: undefined,
+      },
+    });
+    try {
+      const titles = await this.platform.listCloudTitles();
+      const selectedTitleId = chooseCloudTitle(
+        titles,
+        this.snapshot.cloud.selectedTitleId,
+      )?.id;
+      this.patch({
+        cloud: {
+          available: true,
+          titles,
+          status: "ready",
+          selectedTitleId,
+        },
+      });
+    } catch (error) {
+      const safe = safeError(error);
+      console.error("Cloud title discovery failed", errorForLog(error));
+      this.patch({
+        cloud: {
+          ...this.snapshot.cloud,
+          available: this.platform.cloudAvailable,
+          status: safe.code === "XCLOUD_UNAVAILABLE" ? "unavailable" : "error",
+          error: safe.message,
+        },
+      });
+    }
+  }
+
+  async selectCloudTitle(titleId: string): Promise<void> {
+    if (!this.snapshot.cloud.titles.some((title) => title.id === titleId))
+      return;
+    this.patch({
+      cloud: { ...this.snapshot.cloud, selectedTitleId: titleId },
+    });
+  }
+
   async startStream(consoleId: string): Promise<StreamDescriptor> {
     const selectedConsole = this.snapshot.consoles.find(
       (candidate) => candidate.id === consoleId,
@@ -164,51 +245,85 @@ export class AppController {
         "REMOTE_PLAY_DISABLED",
         "Remote play is disabled on this Xbox. Enable it under Devices & connections.",
         false,
+        { source: "home", id: consoleId, name: selectedConsole.name },
       );
       throw new Error("Remote play is disabled on this Xbox.");
     }
 
-    const generation = ++this.connectionGeneration;
-    this.lastConsoleId = consoleId;
     this.preferences.setSelectedConsole(consoleId);
     this.patch({
       selectedConsoleId: consoleId,
       telemetry: { ...emptyTelemetry },
     });
 
+    return this.startTarget(
+      { source: "home", id: consoleId, name: selectedConsole.name },
+      selectedConsole.power !== "on",
+    );
+  }
+
+  async startCloudStream(titleId: string): Promise<StreamDescriptor> {
+    const title = this.snapshot.cloud.titles.find(
+      (candidate) => candidate.id === titleId,
+    );
+    if (!title) throw new Error("Choose a cloud game before starting.");
+    this.patch({
+      cloud: { ...this.snapshot.cloud, selectedTitleId: titleId },
+      telemetry: { ...emptyTelemetry },
+    });
+    return this.startTarget(
+      { source: "cloud", id: titleId, name: title.name },
+      false,
+    );
+  }
+
+  private async startTarget(
+    target: NamedTarget,
+    shouldWake: boolean,
+  ): Promise<StreamDescriptor> {
+    const generation = ++this.connectionGeneration;
+    this.lastTarget = { source: target.source, id: target.id };
+
     try {
-      if (selectedConsole.power !== "on") {
+      if (shouldWake) {
         this.setSession(
           "waking",
           "Waking your Xbox",
           "Sending a wake request to the console.",
           14,
-          consoleId,
+          target,
         );
-        await this.platform.wakeConsole(consoleId);
+        await this.platform.wakeConsole(target.id);
         this.assertCurrent(generation);
       }
 
       this.setSession(
         "provisioning",
-        "Preparing remote play",
-        "Xbox is reserving a secure streaming session.",
+        target.source === "cloud"
+          ? "Launching from the cloud"
+          : "Preparing remote play",
+        target.source === "cloud"
+          ? "Xbox Cloud Gaming is finding capacity for your game."
+          : "Xbox is reserving a secure streaming session.",
         34,
-        consoleId,
+        target,
       );
       const started = await this.platform.startSession(
-        consoleId,
+        target,
         this.snapshot.settings.resolution,
       );
       this.assertCurrent(generation);
       this.activeSession = {
         id: started.sessionId,
         path: started.sessionPath,
-        consoleId,
+        source: target.source,
+        targetId: target.id,
+        targetName: target.name,
       };
 
       let authorized = false;
-      const deadline = Date.now() + 60_000;
+      const deadline =
+        Date.now() + (target.source === "cloud" ? 180_000 : 60_000);
       while (Date.now() < deadline) {
         this.assertCurrent(generation);
         const state = await this.platform.getSessionState(started.sessionPath);
@@ -218,14 +333,21 @@ export class AppController {
           this.setSession(
             "negotiating",
             "Starting video",
-            "Finding the fastest route between this device and your Xbox.",
+            target.source === "cloud"
+              ? "Connecting this device to the Xbox cloud stream."
+              : "Finding the fastest route between this device and your Xbox.",
             78,
-            consoleId,
+            target,
             started.sessionId,
           );
           return {
             sessionId: started.sessionId,
-            consoleId,
+            source: target.source,
+            targetId: target.id,
+            displayName: target.name,
+            ...(target.source === "home"
+              ? { consoleId: target.id }
+              : { titleId: target.id }),
             mock: this.platform.mock,
           };
         }
@@ -236,43 +358,49 @@ export class AppController {
             "Securing the connection",
             "Confirming this remote-play session with Xbox.",
             58,
-            consoleId,
+            target,
             started.sessionId,
           );
           await this.platform.authorizeSession(started.sessionPath);
         } else if (state.state === "Failed") {
           throw new Error(
             state.errorDetails?.message ??
-              "Xbox could not provision the remote-play session.",
+              "Xbox could not provision the streaming session.",
           );
         } else {
           this.setSession(
             "provisioning",
-            "Preparing remote play",
-            "Xbox is reserving a secure streaming session.",
+            target.source === "cloud"
+              ? "Launching from the cloud"
+              : "Preparing remote play",
+            target.source === "cloud"
+              ? "Xbox Cloud Gaming is finding capacity for your game."
+              : "Xbox is reserving a secure streaming session.",
             42,
-            consoleId,
+            target,
             started.sessionId,
           );
         }
         await delay(this.platform.mock ? 40 : 750);
       }
-      throw new Error("Remote-play provisioning timed out.");
+      throw new Error("Xbox streaming provisioning timed out.");
     } catch (error) {
       if (generation !== this.connectionGeneration)
         throw new Error("Connection cancelled.");
       const safe = safeError(error);
       console.error("Stream start failed", errorForLog(error));
-      this.failSession(safe.code, safe.message, safe.recoverable, consoleId);
+      this.failSession(safe.code, safe.message, safe.recoverable, target);
       throw safe;
     }
   }
 
   async retryStream(): Promise<StreamDescriptor> {
-    const consoleId = this.lastConsoleId ?? this.snapshot.selectedConsoleId;
-    if (!consoleId) throw new Error("Choose an Xbox before retrying.");
+    const target = this.lastTarget;
+    if (!target) throw new Error("Choose something to play before retrying.");
     await this.stopActiveSession();
-    return this.startStream(consoleId);
+    return target.source === "home"
+      ? this.startStream(target.id)
+      : this.startCloudStream(target.id);
   }
 
   async sendSdp(
@@ -280,7 +408,11 @@ export class AppController {
     offer: RTCSessionDescriptionInit,
   ): Promise<{ sdp: string }> {
     const session = this.requireSession(sessionId);
+    if ((offer.sdp?.length ?? 0) > NETWORK_POLICY.maxSdpBytes)
+      throw new Error("The video offer is too large.");
     const exchange = await this.platform.exchangeSdp(session.path, offer);
+    if (exchange.length > NETWORK_POLICY.maxSdpBytes)
+      throw new Error("The Xbox returned an oversized video response.");
     const answer = JSON.parse(exchange) as { sdp?: string };
     if (typeof answer.sdp !== "string")
       throw new Error("The Xbox returned an invalid video response.");
@@ -292,9 +424,19 @@ export class AppController {
     candidates: IceCandidatePayload[],
   ): Promise<IceCandidatePayload[]> {
     const session = this.requireSession(sessionId);
-    const payload = candidates.map((candidate) => JSON.stringify(candidate));
+    const bounded = candidates.slice(0, NETWORK_POLICY.maxIceCandidates);
+    const payload = bounded.map((candidate) => JSON.stringify(candidate));
+    if (payload.join("").length > NETWORK_POLICY.maxIcePayloadBytes)
+      throw new Error("The network route list is too large.");
     const exchange = await this.platform.exchangeIce(session.path, payload);
-    return JSON.parse(exchange) as IceCandidatePayload[];
+    if (exchange.length > NETWORK_POLICY.maxIcePayloadBytes)
+      throw new Error("The Xbox returned too many network routes.");
+    const parsed = JSON.parse(exchange) as unknown;
+    if (!Array.isArray(parsed))
+      throw new Error("The Xbox returned invalid network routes.");
+    return parsed
+      .filter(isIceCandidatePayload)
+      .slice(0, NETWORK_POLICY.maxIceCandidates);
   }
 
   async keepalive(sessionId: string): Promise<void> {
@@ -314,7 +456,11 @@ export class AppController {
         "Streaming",
         "Video and controls are live.",
         100,
-        session.consoleId,
+        {
+          source: session.source,
+          id: session.targetId,
+          name: session.targetName,
+        },
         session.id,
       );
       return;
@@ -325,7 +471,11 @@ export class AppController {
         "Restoring the stream",
         "The connection changed. Afterglide is reconnecting.",
         28,
-        session.consoleId,
+        {
+          source: session.source,
+          id: session.targetId,
+          name: session.targetName,
+        },
         session.id,
       );
       return;
@@ -334,7 +484,11 @@ export class AppController {
       "MEDIA_FAILED",
       detail ?? "Video could not start. Try the connection again.",
       true,
-      session.consoleId,
+      {
+        source: session.source,
+        id: session.targetId,
+        name: session.targetName,
+      },
     );
   }
 
@@ -355,6 +509,7 @@ export class AppController {
         codec: String(telemetry.codec).slice(0, 48),
         connection: telemetry.connection,
         videoDecoder: String(telemetry.videoDecoder).slice(0, 80),
+        networkQuality: telemetry.networkQuality,
         updatedAt: Date.now(),
       },
     });
@@ -383,7 +538,11 @@ export class AppController {
       "Restoring the stream",
       "A test interruption was detected. Reconnecting now.",
       28,
-      session.consoleId,
+      {
+        source: session.source,
+        id: session.targetId,
+        name: session.targetName,
+      },
       session.id,
     );
   }
@@ -405,11 +564,24 @@ export class AppController {
     label: string,
     detail: string,
     progress: number,
-    consoleId?: string,
+    target?: NamedTarget,
     sessionId?: string,
   ): void {
     this.patch({
-      session: { phase, label, detail, progress, consoleId, sessionId },
+      session: {
+        phase,
+        label,
+        detail,
+        progress,
+        sessionId,
+        source: target?.source,
+        targetName: target?.name,
+        ...(target?.source === "home"
+          ? { consoleId: target.id }
+          : target?.source === "cloud"
+            ? { titleId: target.id }
+            : {}),
+      },
     });
   }
 
@@ -417,7 +589,7 @@ export class AppController {
     code: string,
     message: string,
     recoverable: boolean,
-    consoleId?: string,
+    target?: NamedTarget,
   ): void {
     this.patch({
       session: {
@@ -427,7 +599,13 @@ export class AppController {
         progress: 0,
         errorCode: code,
         recoverable,
-        consoleId,
+        source: target?.source,
+        targetName: target?.name,
+        ...(target?.source === "home"
+          ? { consoleId: target.id }
+          : target?.source === "cloud"
+            ? { titleId: target.id }
+            : {}),
       },
     });
   }
@@ -442,6 +620,29 @@ export class AppController {
     if (!this.window?.isDestroyed())
       this.window?.webContents.send(IPC.snapshot, this.getSnapshot());
   }
+}
+
+function chooseCloudTitle(
+  titles: CloudTitle[],
+  preferred?: string,
+): CloudTitle | undefined {
+  return (
+    titles.find((title) => title.id === preferred) ??
+    titles.find((title) => title.recentlyPlayed) ??
+    titles[0]
+  );
+}
+
+function isIceCandidatePayload(value: unknown): value is IceCandidatePayload {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<IceCandidatePayload>;
+  return (
+    typeof candidate.candidate === "string" &&
+    candidate.candidate.length <= 8_192 &&
+    (candidate.sdpMid === null || typeof candidate.sdpMid === "string") &&
+    (candidate.sdpMLineIndex === null ||
+      typeof candidate.sdpMLineIndex === "number")
+  );
 }
 
 function chooseConsole(

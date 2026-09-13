@@ -20,9 +20,15 @@ const api: StreamApi = {
   signOut: () => ipcRenderer.invoke(IPC.signOut) as Promise<void>,
   refreshConsoles: () =>
     ipcRenderer.invoke(IPC.refreshConsoles) as Promise<void>,
+  refreshCloudTitles: () =>
+    ipcRenderer.invoke(IPC.refreshCloudTitles) as Promise<void>,
   selectConsole: (consoleId) =>
     ipcRenderer.invoke(IPC.selectConsole, consoleId) as Promise<void>,
+  selectCloudTitle: (titleId) =>
+    ipcRenderer.invoke(IPC.selectCloudTitle, titleId) as Promise<void>,
   startStream: (consoleId) => ipcRenderer.invoke(IPC.startStream, consoleId),
+  startCloudStream: (titleId) =>
+    ipcRenderer.invoke(IPC.startCloudStream, titleId),
   retryStream: () => ipcRenderer.invoke(IPC.retryStream),
   sendSdp: (sessionId, offer) =>
     ipcRenderer.invoke(IPC.sendSdp, sessionId, offer),

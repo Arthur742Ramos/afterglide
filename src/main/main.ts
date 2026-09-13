@@ -116,7 +116,7 @@ function configureSessionSecurity(): void {
       responseHeaders: {
         ...details.responseHeaders,
         "Content-Security-Policy": [
-          `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src ${connectSources}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
+          `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.microsoft.com https://*.s-microsoft.com https://*.xboxlive.com; media-src 'self' blob:; connect-src ${connectSources}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
         ],
       },
     });
@@ -139,11 +139,18 @@ function registerIpc(appController: AppController): void {
   handle(IPC.cancelSignIn, () => appController.cancelSignIn());
   handle(IPC.signOut, () => appController.signOut());
   handle(IPC.refreshConsoles, () => appController.refreshConsoles());
+  handle(IPC.refreshCloudTitles, () => appController.refreshCloudTitles());
   handle(IPC.selectConsole, (consoleId: string) =>
     appController.selectConsole(consoleId),
   );
+  handle(IPC.selectCloudTitle, (titleId: string) =>
+    appController.selectCloudTitle(titleId),
+  );
   handle(IPC.startStream, (consoleId: string) =>
     appController.startStream(consoleId),
+  );
+  handle(IPC.startCloudStream, (titleId: string) =>
+    appController.startCloudStream(titleId),
   );
   handle(IPC.retryStream, () => appController.retryStream());
   handle(IPC.sendSdp, (sessionId: string, offer: RTCSessionDescriptionInit) =>
