@@ -24,7 +24,7 @@
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "package": "npm run build && electron-builder --dir",
-    "package:linux": "npm run build && electron-builder --linux AppImage tar.gz --x64",
+    "package:linux": "npm run build && electron-builder --linux AppImage tar.gz --x64 --publish never",
     "check:installer": "bash -n packaging/install-steam-deck.sh tests/installer.test.sh && bash tests/installer.test.sh",
     "verify": "npm run format:check && npm run check:installer && npm run typecheck && npm test && npm run build"
   },
