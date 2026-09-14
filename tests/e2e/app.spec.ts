@@ -50,13 +50,44 @@ async function launch(
       AFTERGLIDE_E2E_ONBOARDING: options.onboarding ? "show" : "skip",
     },
   });
-  const page = await app.firstWindow();
-  page.on("pageerror", (error) => rendererErrors.push(error.message));
-  page.on("console", (message) => {
-    if (message.type() === "error") rendererErrors.push(message.text());
-  });
-  await page.setViewportSize({ width: 1280, height: 800 });
-  return { app, page, userData };
+  try {
+    const page = await app.firstWindow();
+    page.on("pageerror", (error) => rendererErrors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") rendererErrors.push(message.text());
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    if (process.env.AFTERGLIDE_E2E_HEADED !== "1")
+      await expectBackgroundWindow(app);
+    return { app, page, userData };
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
+}
+
+async function expectBackgroundWindow(app: ElectronApplication): Promise<void> {
+  expect(
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().map((window) => ({
+        visible: window.isVisible(),
+        focused: window.isFocused(),
+        focusable: window.isFocusable(),
+        fullscreen: window.isFullScreen(),
+        backgroundThrottling: window.webContents.getBackgroundThrottling(),
+      })),
+    ),
+  ).toEqual([
+    {
+      visible: false,
+      focused: false,
+      focusable: false,
+      fullscreen: false,
+      backgroundThrottling: false,
+    },
+  ]);
+  if (process.platform === "darwin")
+    expect(await app.evaluate(({ app }) => app.dock?.isVisible())).toBe(false);
 }
 
 async function expectNoAccessibilityViolations(
@@ -99,6 +130,27 @@ async function expectNoAccessibilityViolations(
     `${surface} accessibility violations`,
   ).toEqual([]);
 }
+
+test("background windows stay hidden after startup, reactivation, and fullscreen requests", async () => {
+  test.skip(process.env.AFTERGLIDE_E2E_HEADED === "1", "Background mode only");
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await expect(
+      page.getByRole("heading", { name: "Studio Series S" }),
+    ).toBeVisible();
+    await expectBackgroundWindow(app);
+    await app.evaluate(({ app, BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0].emit("ready-to-show");
+      app.emit("second-instance", {}, [], "", {});
+    });
+    await page.evaluate(() => window.afterglide.setFullscreen(true));
+    await expectBackgroundWindow(app);
+    await page.evaluate(() => window.afterglide.setFullscreen(false));
+    await expectBackgroundWindow(app);
+  } finally {
+    await app.close();
+  }
+});
 
 test("first run signs in, checks readiness, and lands on the console stage", async () => {
   const { app, page } = await launch({ onboarding: true });

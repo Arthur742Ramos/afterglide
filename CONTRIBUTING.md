@@ -15,9 +15,21 @@ npm audit --audit-level=high
 ```
 
 The end-to-end suite launches the real Electron application with a deterministic
-platform adapter. It never needs Microsoft credentials or a console. Changes to
-the live streaming path must also record the network, Xbox model, device, decoder
-status, and session length used for manual verification.
+platform adapter. By default, native windows stay hidden and cannot take focus;
+fullscreen requests are suppressed, including saved launch-fullscreen settings.
+Rendering, screenshots, and traces still work in the background. This applies
+to both `npm run test:e2e` and direct `npx playwright test` runs. Electron still
+requires a display server on Linux; use `xvfb-run --auto-servernum npm run test:e2e`
+on a headless host, as CI does.
+
+Only when you want visible windows for debugging, run `npm run test:e2e:headed`
+(or set `AFTERGLIDE_E2E_HEADED=1` for a direct Playwright run). Playwright's
+`--headed` flag alone does not control Electron windows. The background policy
+applies only to unpackaged E2E runs, not normal development or packaged apps.
+
+The suite never needs Microsoft credentials or a console. Changes to the live
+streaming path must also record the network, Xbox model, device, decoder status,
+and session length used for manual verification.
 
 Normal user flows must work with a controller and preserve accessible names,
 visible focus, reduced motion, and keyboard parity.

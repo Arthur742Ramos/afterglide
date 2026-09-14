@@ -119,7 +119,11 @@ npm run test:e2e
 npm audit --audit-level=high
 ```
 
-The end-to-end suite launches Electron at the Steam Deck's 1280×800 viewport,
+The end-to-end suite keeps Electron windows hidden and unfocused by default,
+so it does not interrupt desktop work. Use `npm run test:e2e:headed` only when
+you explicitly want visible windows for debugging.
+
+The suite runs at the Steam Deck's 1280×800 viewport,
 the 960×600 minimum, and a 1600×1000 desktop viewport. It uses an unpackaged-only
 deterministic adapter and covers authentication races, large cloud libraries,
 spatial controller navigation, editable keyboard input, connection cancellation,
