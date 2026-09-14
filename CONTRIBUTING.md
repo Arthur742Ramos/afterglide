@@ -17,7 +17,8 @@ npm audit --audit-level=high
 The end-to-end suite launches the real Electron application with a deterministic
 platform adapter. By default, native windows stay hidden and cannot take focus;
 fullscreen requests are suppressed, including saved launch-fullscreen settings.
-Rendering, screenshots, and traces still work in the background. This applies
+Offscreen rendering keeps animation frames and screenshots working independently
+of native-window visibility, including under Xvfb. This applies
 to both `npm run test:e2e` and direct `npx playwright test` runs. Electron still
 requires a display server on Linux; use `xvfb-run --auto-servernum npm run test:e2e`
 on a headless host, as CI does.

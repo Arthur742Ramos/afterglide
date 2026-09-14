@@ -162,6 +162,8 @@ function createWindow(fullscreen: boolean): BrowserWindow {
       spellcheck: false,
       // Hidden E2E windows still need animation frames and renderer timers.
       backgroundThrottling: !isBackgroundTest,
+      // Render independently of native-window visibility, including under Xvfb.
+      offscreen: isBackgroundTest,
     },
   });
 

@@ -80,6 +80,7 @@ async function expectBackgroundWindow(app: ElectronApplication): Promise<void> {
         focusable: window.isFocusable(),
         fullscreen: window.isFullScreen(),
         backgroundThrottling: window.webContents.getBackgroundThrottling(),
+        offscreen: window.webContents.isOffscreen(),
       })),
     ),
   ).toEqual([
@@ -89,6 +90,7 @@ async function expectBackgroundWindow(app: ElectronApplication): Promise<void> {
       focusable: false,
       fullscreen: false,
       backgroundThrottling: false,
+      offscreen: true,
     },
   ]);
   if (process.platform === "darwin")
@@ -101,6 +103,17 @@ async function expectNoAccessibilityViolations(
 ): Promise<void> {
   await page.evaluate(axeSource);
   const violations = await page.evaluate(async () => {
+    // Audit settled colors without disabling transitions or looping animations.
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.playState === "running" &&
+            Number.isFinite(animation.effect?.getComputedTiming().endTime),
+        )
+        .map((animation) => animation.finished),
+    );
     const axe = (
       window as unknown as {
         axe: {
@@ -144,6 +157,25 @@ test("background windows stay hidden after startup, reactivation, and fullscreen
       page.getByRole("heading", { name: "Studio Series S" }),
     ).toBeVisible();
     await expectBackgroundWindow(app);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(
+            () =>
+              reject(new Error("Hidden renderer stopped producing frames.")),
+            2_000,
+          );
+          let frames = 0;
+          const next = () => {
+            if (++frames < 10) requestAnimationFrame(next);
+            else {
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          requestAnimationFrame(next);
+        }),
+    );
     await app.evaluate(({ app, BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0].emit("ready-to-show");
       app.emit("second-instance", {}, [], "", {});
@@ -716,6 +748,7 @@ test("controller semantics navigate to health and settings persist in the shell"
     await expect(
       page.getByRole("heading", { name: "Pick up where you left off." }),
     ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Play now/ })).toBeFocused();
     await page.getByRole("button", { name: "Home" }).focus();
     await page.evaluate(() => window.afterglideTest!.injectGamepad("down"));
     await expect(page.getByRole("button", { name: "Cloud" })).toBeFocused();
@@ -947,11 +980,13 @@ test("an interrupted stream recovers autonomously", async () => {
     await page.getByRole("button", { name: /Den Series X/ }).click();
     await page.getByRole("button", { name: /Wake & play/ }).click();
     await expect(page.getByTestId("mock-stream")).toBeVisible();
+    const sessionId = await streamingSessionId(page);
     await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
     await expect(page.getByText("Restoring the stream")).toBeVisible();
     await expect(page.getByTestId("mock-stream")).toBeVisible({
       timeout: 10_000,
     });
+    expect(await streamingSessionId(page)).not.toBe(sessionId);
   } finally {
     await app.close();
   }
@@ -1244,6 +1279,15 @@ test("Health reports unavailable metrics and accessible export outcomes", async 
     await page.getByRole("button", { name: /Play now/ }).click();
     const sessionId = await streamingSessionId(page);
     const snapshot = await page.evaluate(() => window.afterglide.getSnapshot());
+    // The first mock sample precedes connection; reports record streaming samples.
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const current = await window.afterglide.getSnapshot();
+          return current.telemetry.updatedAt;
+        }),
+      )
+      .toBeGreaterThan(snapshot.telemetry.updatedAt);
     await page.keyboard.press("F10");
     await page.getByRole("button", { name: "Leave Xbox stream" }).click();
     await page.getByRole("button", { name: "Health", exact: true }).click();
