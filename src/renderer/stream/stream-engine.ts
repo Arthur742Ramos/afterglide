@@ -1,3 +1,9 @@
+import {
+  intervalMeanMs,
+  selectedCandidatePair,
+  requestInteractivePlayout,
+  type MediaCounters,
+} from "./media-metrics";
 import type {
   AppSettings,
   IceCandidatePayload,
@@ -67,12 +73,16 @@ export class XboxStreamEngine {
   private sequence = 0;
   private lastInputAt = 0;
   private lastInputSignature = "";
-  private inputFrameId = 0;
+  private inputTimer = 0;
+  private neutralPending = false;
+  private handshakeAcknowledged = false;
   private telemetryTimer = 0;
   private keepaliveTimer = 0;
   private connectionDeadlineTimer = 0;
   private disconnectedTimer = 0;
   private keepaliveFailures = 0;
+  private previousVideo?: MediaCounters;
+  private telemetryCollecting = false;
   private previousBytes = 0;
   private previousPacketsReceived = 0;
   private previousPacketsLost = 0;
@@ -100,6 +110,13 @@ export class XboxStreamEngine {
       }),
     };
     this.channels.input.binaryType = "arraybuffer";
+    for (const channel of [this.channels.control, this.channels.input]) {
+      channel.addEventListener("open", () => this.activateInput());
+    }
+    this.channels.input.bufferedAmountLowThreshold = 0;
+    this.channels.input.addEventListener("bufferedamountlow", () =>
+      this.inputLoop(),
+    );
     this.channels.input.addEventListener("message", (event) =>
       this.handleInputMessage(event),
     );
@@ -166,34 +183,41 @@ export class XboxStreamEngine {
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
       });
+      if (this.destroyed || this.terminal) return;
       if (offer.sdp)
         offer.sdp = offer.sdp.replace(
           "useinbandfec=1",
           "useinbandfec=1; stereo=1",
         );
       await this.peer.setLocalDescription(offer);
+      if (this.destroyed || this.terminal) return;
 
       const answer = await window.afterglide.sendSdp(
         this.options.sessionId,
         offer,
       );
+      if (this.destroyed || this.terminal) return;
       await this.peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
+      if (this.destroyed || this.terminal) return;
 
       await waitForIceGathering(
         this.peer,
         NETWORK_POLICY.iceGatheringTimeoutMs,
       );
 
+      if (this.destroyed || this.terminal) return;
       const remoteCandidates = await window.afterglide.sendIce(
         this.options.sessionId,
         this.localCandidates,
       );
+      if (this.destroyed || this.terminal) return;
       await Promise.all(
         remoteCandidates
           .flatMap(withTeredoFallback)
           .map((candidate) => this.addIceCandidate(candidate)),
       );
 
+      if (this.destroyed || this.terminal) return;
       this.keepaliveTimer = window.setInterval(() => {
         void window.afterglide
           .keepalive(this.options.sessionId)
@@ -212,7 +236,10 @@ export class XboxStreamEngine {
         () => void this.collectTelemetry(),
         NETWORK_POLICY.telemetryIntervalMs,
       );
-      this.inputFrameId = requestAnimationFrame(this.inputLoop);
+      this.inputTimer = window.setInterval(
+        this.inputLoop,
+        NETWORK_POLICY.inputPollMs,
+      );
     } catch (error) {
       if (this.destroyed) return;
       this.notifyError(streamErrorMessage(error));
@@ -228,7 +255,7 @@ export class XboxStreamEngine {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    cancelAnimationFrame(this.inputFrameId);
+    clearInterval(this.inputTimer);
     clearInterval(this.telemetryTimer);
     clearInterval(this.keepaliveTimer);
     clearTimeout(this.connectionDeadlineTimer);
@@ -247,6 +274,7 @@ export class XboxStreamEngine {
   }
 
   private attachTrack(event: RTCTrackEvent): void {
+    requestInteractivePlayout(event.receiver);
     const stream = event.streams[0] ?? new MediaStream([event.track]);
     if (event.track.kind === "video") this.video.srcObject = stream;
     if (event.track.kind === "audio") this.audio.srcObject = stream;
@@ -257,7 +285,8 @@ export class XboxStreamEngine {
     if (this.peer.connectionState === "connected") {
       clearTimeout(this.disconnectedTimer);
       this.disconnectedTimer = 0;
-      this.markConnected();
+      // Transport connectivity alone does not prove video is decoding.
+      // Keep the startup deadline until the video element actually plays.
       return;
     }
     if (this.connected && this.peer.connectionState === "disconnected") {
@@ -298,8 +327,8 @@ export class XboxStreamEngine {
         content?: string;
       };
       if (data.type === "HandshakeAck") {
-        this.authorizeControl();
-        this.startInput();
+        this.handshakeAcknowledged = true;
+        this.activateInput();
         this.sendClientConfiguration();
       } else if (
         data.target ===
@@ -323,6 +352,20 @@ export class XboxStreamEngine {
     } catch {
       // Ignore messages from newer server capabilities that this client does not advertise.
     }
+  }
+
+  private activateInput(): void {
+    if (
+      this.destroyed ||
+      this.terminal ||
+      this.inputActive ||
+      !this.handshakeAcknowledged ||
+      this.channels.control.readyState !== "open" ||
+      this.channels.input.readyState !== "open"
+    )
+      return;
+    this.authorizeControl();
+    this.startInput();
   }
 
   private authorizeControl(): void {
@@ -402,7 +445,11 @@ export class XboxStreamEngine {
   }
 
   private inputLoop = (): void => {
-    if (this.destroyed) return;
+    if (this.destroyed || this.terminal) return;
+    if (this.neutralPending && this.inputActive) {
+      if (!this.sendInputFrame(emptyXboxInputFrame())) return;
+      this.neutralPending = false;
+    }
     if (
       this.inputActive &&
       !this.inputSuspended &&
@@ -413,11 +460,19 @@ export class XboxStreamEngine {
         performance.now() - this.lastInputAt >= NETWORK_POLICY.inputHeartbeatMs,
       );
     }
-    this.inputFrameId = requestAnimationFrame(this.inputLoop);
   };
 
   private sendCurrentInput(heartbeatDue = false): void {
-    if (!this.inputActive || this.inputSuspended) return;
+    if (
+      !this.inputActive ||
+      this.inputSuspended ||
+      this.terminal ||
+      this.destroyed ||
+      this.neutralPending ||
+      !document.hasFocus() ||
+      document.visibilityState !== "visible"
+    )
+      return;
     const gamepad = this.resolveGamepad();
     const update = chooseInputUpdate(
       readInputFrame(
@@ -432,13 +487,19 @@ export class XboxStreamEngine {
       heartbeatDue,
     );
     if (!update) return;
-    this.sendInputFrame(update.frame);
+    if (!this.sendInputFrame(update.frame)) return;
     this.lastInputSignature = update.signature;
     this.lastInputAt = performance.now();
   }
 
-  private sendInputFrame(frame: InputFrame): void {
-    if (this.channels.input.readyState !== "open") return;
+  private sendInputFrame(frame: InputFrame): boolean {
+    // Do not enqueue historical stick positions behind a congested SCTP send queue.
+    // The next poll reads fresh state; a release is retried even while unfocused.
+    if (
+      this.channels.input.readyState !== "open" ||
+      this.channels.input.bufferedAmount > 0
+    )
+      return false;
     const bytes = new Uint8Array(38);
     const packet = new DataView(bytes.buffer);
     packet.setUint16(0, 2, true);
@@ -446,12 +507,18 @@ export class XboxStreamEngine {
     packet.setFloat64(6, performance.now(), true);
     packet.setUint8(14, 1);
     writeGamepad(packet, 15, frame);
-    this.channels.input.send(packet);
+    try {
+      this.channels.input.send(packet);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private releaseInput = (): void => {
     this.pressedKeys.clear();
-    if (this.inputActive) this.sendInputFrame(emptyXboxInputFrame());
+    if (this.inputActive)
+      this.neutralPending = !this.sendInputFrame(emptyXboxInputFrame());
     this.lastInputSignature = "";
   };
 
@@ -467,6 +534,10 @@ export class XboxStreamEngine {
       !document.hasFocus()
     )
       return;
+    if (event.repeat) {
+      event.preventDefault();
+      return;
+    }
     this.pressedKeys.add(event.code);
     this.sendCurrentInput();
     event.preventDefault();
@@ -482,6 +553,13 @@ export class XboxStreamEngine {
   };
 
   private handleInputMessage(event: MessageEvent): void {
+    if (
+      this.destroyed ||
+      this.terminal ||
+      this.inputSuspended ||
+      !document.hasFocus()
+    )
+      return;
     if (!(event.data instanceof ArrayBuffer)) return;
     const report = new DataView(event.data);
     if (report.byteLength < 13 || report.getUint8(0) !== 128) return;
@@ -493,12 +571,16 @@ export class XboxStreamEngine {
     const actuator = gamepad?.vibrationActuator;
     if (!actuator || !("playEffect" in actuator)) return;
     const intensity = tuning.rumble === "low" ? 0.45 : 1;
-    void actuator.playEffect("dual-rumble", {
-      startDelay: report.getUint16(10, true),
-      duration: report.getUint16(8, true),
-      weakMagnitude: (report.getUint8(5) / 100) * intensity,
-      strongMagnitude: (report.getUint8(4) / 100) * intensity,
-    });
+    void actuator
+      .playEffect("dual-rumble", {
+        startDelay: report.getUint16(10, true),
+        duration: report.getUint16(8, true),
+        weakMagnitude: (report.getUint8(5) / 100) * intensity,
+        strongMagnitude: (report.getUint8(4) / 100) * intensity,
+      })
+      .catch(() => {
+        /* Devices may disconnect during vibration. */
+      });
   }
 
   private resolveGamepad(): GamepadLike | undefined {
@@ -511,7 +593,7 @@ export class XboxStreamEngine {
     );
     if (gamepad?.index === previousIndex) return gamepad;
     if (previousIndex !== undefined && this.inputActive) {
-      this.sendInputFrame(emptyXboxInputFrame());
+      this.neutralPending = !this.sendInputFrame(emptyXboxInputFrame());
       this.lastInputSignature = "";
     }
     this.activeGamepadIndex = gamepad?.index;
@@ -531,86 +613,114 @@ export class XboxStreamEngine {
   }
 
   private async collectTelemetry(): Promise<void> {
-    if (this.destroyed) return;
-    const reports = await this.peer.getStats();
-    if (this.destroyed) return;
-    let resolution = "Waiting for video";
-    let fps = 0;
-    let rtt = 0;
-    let packetLoss = 0;
-    let codec = "H.264";
-    let bytes = 0;
-    let packetsReceived = 0;
-    let packetsLost = 0;
-    let remoteCandidateId = "";
-    let connection: StreamTelemetry["connection"] = "unknown";
-    const records = new Map<string, Record<string, unknown>>();
-    reports.forEach((report) =>
-      records.set(report.id, report as unknown as Record<string, unknown>),
-    );
-    reports.forEach((report) => {
-      const record = report as unknown as Record<string, unknown>;
-      if (
-        record.type === "inbound-rtp" &&
-        (record.kind === "video" || record.mediaType === "video")
-      ) {
-        const width = Number(record.frameWidth ?? 0);
-        const height = Number(record.frameHeight ?? 0);
-        if (width && height) resolution = `${width} × ${height}`;
-        fps = Number(record.framesPerSecond ?? 0);
-        bytes = Number(record.bytesReceived ?? 0);
-        packetsReceived = Number(record.packetsReceived ?? 0);
-        packetsLost = Number(record.packetsLost ?? 0);
-        const codecReport = records.get(String(record.codecId ?? ""));
-        if (codecReport?.mimeType)
-          codec = String(codecReport.mimeType).replace("video/", "");
+    if (this.destroyed || this.telemetryCollecting) return;
+    this.telemetryCollecting = true;
+    try {
+      const reports = await this.peer.getStats();
+      if (this.destroyed) return;
+      let resolution = "Waiting for video";
+      let fps = 0;
+      let rtt = 0;
+      let packetLoss = 0;
+      let codec = "H.264";
+      let bytes = 0;
+      let packetsReceived = 0;
+      let packetsLost = 0;
+      let remoteCandidateId = "";
+      let videoReport: MediaCounters | undefined;
+      let connection: StreamTelemetry["connection"] = "unknown";
+      const records = new Map<string, Record<string, unknown>>();
+      reports.forEach((report) =>
+        records.set(report.id, report as unknown as Record<string, unknown>),
+      );
+      reports.forEach((report) => {
+        const record = report as unknown as Record<string, unknown>;
+        if (
+          record.type === "inbound-rtp" &&
+          (record.kind === "video" || record.mediaType === "video")
+        ) {
+          videoReport = record;
+          const width = Number(record.frameWidth ?? 0);
+          const height = Number(record.frameHeight ?? 0);
+          if (width && height) resolution = `${width} × ${height}`;
+          fps = Number(record.framesPerSecond ?? 0);
+          bytes = Number(record.bytesReceived ?? 0);
+          packetsReceived = Number(record.packetsReceived ?? 0);
+          packetsLost = Number(record.packetsLost ?? 0);
+          const codecReport = records.get(String(record.codecId ?? ""));
+          if (codecReport?.mimeType)
+            codec = String(codecReport.mimeType).replace("video/", "");
+        }
+      });
+      const pair = selectedCandidatePair(records);
+      if (pair) {
+        rtt = Number(pair.currentRoundTripTime ?? 0) * 1000;
+        remoteCandidateId = String(pair.remoteCandidateId ?? "");
       }
-      if (
-        record.type === "candidate-pair" &&
-        (record.state === "succeeded" || record.nominated === true)
-      ) {
-        rtt = Number(record.currentRoundTripTime ?? 0) * 1_000;
-        remoteCandidateId = String(record.remoteCandidateId ?? "");
-      }
-    });
-    const remote = records.get(remoteCandidateId);
-    if (remote?.address)
-      connection = isPrivateAddress(String(remote.address))
-        ? "local"
-        : "remote";
-    const now = performance.now();
-    const seconds = this.previousStatsAt
-      ? (now - this.previousStatsAt) / 1_000
-      : 0;
-    const bitrate =
-      seconds > 0
-        ? ((bytes - this.previousBytes) * 8) / seconds / 1_000_000
+      const remote = records.get(remoteCandidateId);
+      if (remote?.address)
+        connection = isPrivateAddress(String(remote.address))
+          ? "local"
+          : "remote";
+      const now = performance.now();
+      const seconds = this.previousStatsAt
+        ? (now - this.previousStatsAt) / 1_000
         : 0;
-    const receivedDelta = Math.max(
-      0,
-      packetsReceived - this.previousPacketsReceived,
-    );
-    const lostDelta = Math.max(0, packetsLost - this.previousPacketsLost);
-    packetLoss =
-      receivedDelta + lostDelta > 0
-        ? (lostDelta / (receivedDelta + lostDelta)) * 100
-        : 0;
-    this.previousBytes = bytes;
-    this.previousPacketsReceived = packetsReceived;
-    this.previousPacketsLost = packetsLost;
-    this.previousStatsAt = now;
-    this.options.onTelemetry({
-      resolution,
-      framesPerSecond: fps,
-      roundTripMs: rtt,
-      packetLossPercent: packetLoss,
-      bitrateMbps: Math.max(0, bitrate),
-      codec,
-      connection,
-      videoDecoder: "Chromium WebRTC",
-      networkQuality: assessNetworkQuality(rtt, packetLoss, fps),
-      updatedAt: Date.now(),
-    });
+      const bitrate =
+        seconds > 0
+          ? ((bytes - this.previousBytes) * 8) / seconds / 1_000_000
+          : 0;
+      const receivedDelta = Math.max(
+        0,
+        packetsReceived - this.previousPacketsReceived,
+      );
+      const lostDelta = Math.max(0, packetsLost - this.previousPacketsLost);
+      packetLoss =
+        receivedDelta + lostDelta > 0
+          ? (lostDelta / (receivedDelta + lostDelta)) * 100
+          : 0;
+      this.previousBytes = bytes;
+      this.previousPacketsReceived = packetsReceived;
+      this.previousPacketsLost = packetsLost;
+      this.previousStatsAt = now;
+      this.options.onTelemetry({
+        resolution,
+        framesPerSecond: fps,
+        roundTripMs: rtt,
+        packetLossPercent: packetLoss,
+        bitrateMbps: Math.max(0, bitrate),
+        codec,
+        connection,
+        videoDecoder:
+          typeof videoReport?.decoderImplementation === "string"
+            ? videoReport.decoderImplementation
+            : "Not reported",
+        decodeMs: videoReport
+          ? intervalMeanMs(
+              videoReport,
+              this.previousVideo,
+              "totalDecodeTime",
+              "framesDecoded",
+            )
+          : undefined,
+        jitterBufferMs: videoReport
+          ? intervalMeanMs(
+              videoReport,
+              this.previousVideo,
+              "jitterBufferDelay",
+              "jitterBufferEmittedCount",
+            )
+          : undefined,
+        inputQueueBytes: this.channels.input.bufferedAmount,
+        networkQuality: assessNetworkQuality(rtt, packetLoss, fps),
+        updatedAt: Date.now(),
+      });
+      this.previousVideo = videoReport;
+    } catch {
+      // A stats failure during shutdown must not interrupt play or reject unhandled.
+    } finally {
+      this.telemetryCollecting = false;
+    }
   }
 
   private async addIceCandidate(candidate: IceCandidatePayload): Promise<void> {
@@ -646,7 +756,7 @@ export class XboxStreamEngine {
   }
 
   private nextSequence(): number {
-    this.sequence += 1;
+    this.sequence = (this.sequence + 1) >>> 0;
     return this.sequence;
   }
 }

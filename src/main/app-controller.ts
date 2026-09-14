@@ -517,6 +517,12 @@ export class AppController {
           ? telemetry.connection
           : "unknown",
         videoDecoder: String(telemetry.videoDecoder).slice(0, 80),
+        decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
+        jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
+        inputQueueBytes: optionalMeasurement(
+          telemetry.inputQueueBytes,
+          16_777_216,
+        ),
         networkQuality: isNetworkQuality(telemetry.networkQuality)
           ? telemetry.networkQuality
           : "measuring",
@@ -700,4 +706,13 @@ function isNetworkQuality(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function optionalMeasurement(
+  value: unknown,
+  maximum: number,
+): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.min(value, maximum)
+    : undefined;
 }
