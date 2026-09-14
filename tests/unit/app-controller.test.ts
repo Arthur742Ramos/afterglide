@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CloudTitle,
   DeviceCode,
@@ -16,6 +16,7 @@ import type {
   StreamTarget,
 } from "../../src/main/platform-service";
 import { SettingsStore } from "../../src/main/settings-store";
+import { emptyTelemetry } from "../../src/shared/contracts";
 
 let directory = "";
 afterEach(() => {
@@ -200,6 +201,12 @@ describe("AppController", () => {
       connection: "spoofed",
       videoDecoder: "decoder".repeat(20),
       networkQuality: "perfect",
+      frameIntervalP95Ms: Number.NaN,
+      frameIntervalP99Ms: -4,
+      framesDropped: 12,
+      freezeCount: Number.POSITIVE_INFINITY,
+      freezeDurationMs: 1200,
+      recoveryMs: 999,
       updatedAt: 1,
     } as unknown as StreamTelemetry);
 
@@ -213,6 +220,125 @@ describe("AppController", () => {
       connection: "unknown",
       videoDecoder: "decoder".repeat(11) + "dec",
       networkQuality: "measuring",
+      frameIntervalP95Ms: undefined,
+      frameIntervalP99Ms: undefined,
+      framesDropped: 12,
+      freezeCount: undefined,
+      freezeDurationMs: 1200,
+      recoveryMs: undefined,
     });
+  });
+
+  it("deduplicates wake interruptions and rejects a late connected event", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    controller.handleSystemResume();
+    expect(controller.getSnapshot().session.phase).toBe("idle");
+    await controller.startStream("den");
+    controller.handleSystemResume();
+    expect(controller.getSnapshot().session.phase).toBe("negotiating");
+    await controller.reportStreamEvent("session", "connected");
+    controller.handleSystemResume();
+    const recovery = controller.getSnapshot().session;
+    expect(recovery.phase).toBe("recovering");
+    controller.handleSystemResume();
+    await controller.reportStreamEvent("session", "connected");
+    expect(controller.getSnapshot().session).toEqual(recovery);
+    await controller.retryStream();
+    await controller.reportStreamEvent("session", "connected");
+    controller.updateTelemetry({ ...emptyTelemetry });
+    expect(
+      controller.getSnapshot().telemetry.recoveryMs,
+    ).toBeGreaterThanOrEqual(0);
+    expect(controller.exportPerformanceReport().recoveries).toHaveLength(1);
+    await controller.stopStream();
+    controller.handleSystemResume();
+    expect(controller.getSnapshot().session.phase).toBe("idle");
+  });
+
+  it("does not restart if the user leaves while recovery is stopping the old session", async () => {
+    const platform = new FakePlatform();
+    const controller = makeController(platform);
+    await controller.initialize();
+    await controller.startStream("den");
+    let finishStop!: () => void;
+    vi.spyOn(platform, "stopSession").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStop = resolve;
+        }),
+    );
+    const start = vi.spyOn(platform, "startSession");
+    const retry = controller.retryStream();
+    const rejected = expect(retry).rejects.toThrow("Connection cancelled");
+    await controller.stopStream();
+    finishStop();
+    await rejected;
+    expect(start).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().session.phase).toBe("idle");
+  });
+
+  it("cleans up a service session that finishes provisioning after cancellation", async () => {
+    const platform = new FakePlatform();
+    const controller = makeController(platform);
+    await controller.initialize();
+    let finishStart!: (value: {
+      sessionId: string;
+      sessionPath: string;
+    }) => void;
+    const startCalled = new Promise<void>((resolveCalled) => {
+      vi.spyOn(platform, "startSession").mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishStart = resolve;
+            resolveCalled();
+          }),
+      );
+    });
+    const stop = vi.spyOn(platform, "stopSession");
+    const starting = controller.startStream("den");
+    const rejected = expect(starting).rejects.toThrow("Connection cancelled");
+    await startCalled;
+    await controller.stopStream();
+    finishStart({ sessionId: "late", sessionPath: "late-path" });
+    await rejected;
+    expect(stop).toHaveBeenCalledWith("late-path");
+    expect(controller.getSnapshot().session.phase).toBe("idle");
+  });
+
+  it("exports only sanitized active telemetry and preserves evidence after exit", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    controller.updateTelemetry({ ...emptyTelemetry });
+    expect(controller.exportPerformanceReport().retainedSamples).toBe(0);
+    await controller.startStream("den");
+    await controller.reportStreamEvent("session", "connected");
+    controller.updateTelemetry({ ...emptyTelemetry, framesDropped: 2 });
+    await controller.stopStream();
+    controller.updateTelemetry({ ...emptyTelemetry, framesDropped: 1234 });
+    const report = controller.exportPerformanceReport();
+    expect(report.retainedSamples).toBe(1);
+    expect(report.samples[0].telemetry.framesDropped).toBe(2);
+    expect(JSON.stringify(report)).not.toContain("Den Xbox");
+    expect(JSON.stringify(report)).not.toContain("sessionPath");
+  });
+
+  it("does not attribute a cached device reading to a new polling configuration", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    await controller.startStream("den");
+    await controller.reportStreamEvent("session", "connected");
+    controller.updateDeviceMetrics({
+      observedAt: 100,
+      batteryWatts: 10,
+      unavailable: [],
+    });
+    controller.updateTelemetry({ ...emptyTelemetry });
+    controller.updateSettings({ inputPolling: "efficient" });
+    controller.updateTelemetry({ ...emptyTelemetry });
+    const samples = controller.exportPerformanceReport().samples;
+    expect(samples[0].device?.batteryWatts).toBe(10);
+    expect(samples[1].device).toBeUndefined();
+    expect(samples[1].settings.inputPolling).toBe("efficient");
   });
 });

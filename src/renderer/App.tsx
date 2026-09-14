@@ -22,6 +22,8 @@ import {
   selectController,
 } from "./stream/controller-input";
 import type { ControllerStatus } from "./stream/stream-engine";
+import { QuickSettings } from "./components/QuickSettings";
+import { StreamRecovery, type RecoveryState } from "./recovery";
 
 type Page = "home" | "cloud" | "diagnostics" | "settings";
 const CLOUD_PAGE_SIZE = 48;
@@ -103,12 +105,60 @@ export function App() {
   const [descriptor, setDescriptor] = useState<StreamDescriptor | undefined>(
     undefined,
   );
-  const recovery = useRef<string | undefined>(undefined);
+  const launchVersion = useRef(0);
+  const [online, setOnline] = useState(navigator.onLine);
+  const [recoveryState, setRecoveryState] = useState<RecoveryState>({
+    status: "idle",
+    attempts: 0,
+  });
+  const [recovery] = useState(
+    () =>
+      new StreamRecovery<StreamDescriptor>({
+        retry: () => window.afterglide.retryStream(),
+        onAttempt: () => setDescriptor(undefined),
+        onRecovered: setDescriptor,
+        onState: setRecoveryState,
+      }),
+  );
 
   useEffect(() => {
-    void window.afterglide.getSnapshot().then(setSnapshot);
-    return window.afterglide.onSnapshot(setSnapshot);
-  }, []);
+    let active = true;
+    let receivedSnapshot = false;
+    const unsubscribe = window.afterglide.onSnapshot((value) => {
+      receivedSnapshot = true;
+      if (active) setSnapshot(value);
+    });
+    void window.afterglide.getSnapshot().then((value) => {
+      if (active && !receivedSnapshot) setSnapshot(value);
+    });
+    return () => {
+      active = false;
+      launchVersion.current++;
+      recovery.cancel();
+      unsubscribe();
+    };
+  }, [recovery]);
+
+  useEffect(() => {
+    const update = () => {
+      setOnline(navigator.onLine);
+      recovery.setOnline(navigator.onLine);
+    };
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, [recovery]);
+
+  const stopStream = useCallback(async () => {
+    launchVersion.current++;
+    recovery.cancel();
+    setDescriptor(undefined);
+    await window.afterglide.stopStream();
+  }, [recovery]);
 
   const signedIn = snapshot?.auth.status === "signed-in";
   const inStream = Boolean(descriptor) && snapshot?.session.phase !== "error";
@@ -124,6 +174,8 @@ export function App() {
       signedIn &&
       snapshot.settings.onboardingComplete &&
       !inStream &&
+      recoveryState.status === "idle" &&
+      snapshot.session.phase !== "error" &&
       !isConnecting(snapshot),
     ),
     focusScope,
@@ -132,54 +184,69 @@ export function App() {
 
   useEffect(() => {
     const onBack = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !signedIn || descriptor || !snapshot)
+      if (
+        event.key !== "Escape" ||
+        !signedIn ||
+        descriptor ||
+        !snapshot ||
+        recoveryState.status !== "idle"
+      )
         return;
-      if (isConnecting(snapshot)) void window.afterglide.stopStream();
+      if (isConnecting(snapshot)) void stopStream();
       else if (page !== "home") setPage("home");
     };
     window.addEventListener("keydown", onBack);
     return () => window.removeEventListener("keydown", onBack);
-  }, [signedIn, descriptor, page, snapshot]);
+  }, [signedIn, descriptor, page, snapshot, stopStream, recoveryState.status]);
 
-  const startStream = useCallback(async (consoleId: string) => {
-    try {
-      const stream = await window.afterglide.startStream(consoleId);
-      setDescriptor(stream);
-    } catch {
-      // The main-process snapshot contains the safe, actionable error.
-    }
-  }, []);
+  const startStream = useCallback(
+    async (consoleId: string) => {
+      const version = ++launchVersion.current;
+      recovery.begin();
+      try {
+        const stream = await window.afterglide.startStream(consoleId);
+        if (version === launchVersion.current) setDescriptor(stream);
+      } catch {
+        // The main-process snapshot contains the safe, actionable error.
+      }
+    },
+    [recovery],
+  );
 
-  const startCloudStream = useCallback(async (titleId: string) => {
-    try {
-      const stream = await window.afterglide.startCloudStream(titleId);
-      setDescriptor(stream);
-    } catch {
-      // The main-process snapshot contains the safe, actionable error.
-    }
-  }, []);
+  const startCloudStream = useCallback(
+    async (titleId: string) => {
+      const version = ++launchVersion.current;
+      recovery.begin();
+      try {
+        const stream = await window.afterglide.startCloudStream(titleId);
+        if (version === launchVersion.current) setDescriptor(stream);
+      } catch {
+        // The main-process snapshot contains the safe, actionable error.
+      }
+    },
+    [recovery],
+  );
 
-  const retryStream = useCallback(async () => {
+  const retryStream = useCallback(() => {
+    launchVersion.current++;
     setDescriptor(undefined);
-    try {
-      const stream = await window.afterglide.retryStream();
-      setDescriptor(stream);
-    } catch {
-      // The error screen updates through the snapshot subscription.
-    }
-  }, []);
+    recovery.begin();
+    recovery.interrupt("manual");
+  }, [recovery]);
 
   useEffect(() => {
-    if (!snapshot || snapshot.session.phase !== "recovering" || !descriptor) {
-      if (snapshot?.session.phase !== "recovering")
-        recovery.current = undefined;
-      return;
+    if (snapshot?.session.phase === "recovering" && descriptor) {
+      recovery.interrupt(descriptor.sessionId);
     }
-    if (recovery.current === descriptor.sessionId) return;
-    recovery.current = descriptor.sessionId;
-    const timer = window.setTimeout(() => void retryStream(), 700);
-    return () => clearTimeout(timer);
-  }, [snapshot, descriptor, retryStream]);
+    if (
+      snapshot?.session.phase === "idle" ||
+      (snapshot && snapshot.auth.status !== "signed-in")
+    ) {
+      launchVersion.current++;
+      recovery.cancel();
+      setDescriptor(undefined);
+    }
+  }, [snapshot?.session.phase, snapshot?.auth.status, descriptor, recovery]);
 
   if (!snapshot || snapshot.auth.status === "restoring") return <BootScreen />;
   if (
@@ -206,12 +273,26 @@ export function App() {
       />
     );
   }
+  if (
+    recoveryState.status !== "idle" &&
+    (!descriptor || recoveryState.status === "exhausted")
+  ) {
+    return (
+      <RecoveryScreen
+        state={recoveryState}
+        online={online}
+        preferredControllerId={snapshot.settings.preferredControllerId}
+        onRetry={retryStream}
+        onExit={() => void stopStream()}
+      />
+    );
+  }
   if (snapshot.session.phase === "error") {
     return (
       <SessionErrorScreen
         snapshot={snapshot}
         onRetry={() => void retryStream()}
-        onBack={() => void window.afterglide.stopStream()}
+        onBack={() => void stopStream()}
       />
     );
   }
@@ -223,10 +304,9 @@ export function App() {
       <StreamView
         snapshot={snapshot}
         descriptor={descriptor}
-        onExit={async () => {
-          await window.afterglide.stopStream();
-          setDescriptor(undefined);
-        }}
+        online={online}
+        recoveryState={recoveryState}
+        onExit={stopStream}
       />
     );
   }
@@ -234,7 +314,7 @@ export function App() {
     return (
       <ConnectingScreen
         snapshot={snapshot}
-        onCancel={() => void window.afterglide.stopStream()}
+        onCancel={() => void stopStream()}
       />
     );
 
@@ -1086,10 +1166,14 @@ function ConnectingScreen({
 function StreamView({
   snapshot,
   descriptor,
+  online,
+  recoveryState,
   onExit,
 }: {
   snapshot: AppSnapshot;
   descriptor: StreamDescriptor;
+  online: boolean;
+  recoveryState: RecoveryState;
   onExit: () => Promise<void>;
 }) {
   const [overlay, setOverlay] = useState(true);
@@ -1097,12 +1181,14 @@ function StreamView({
     snapshot.settings.showPerformance,
   );
   const [performanceAnnouncement, setPerformanceAnnouncement] = useState("");
+  const [settingsError, setSettingsError] = useState("");
   const [controlsCaptured, setControlsCaptured] = useState(false);
   const [controllerNotice, setControllerNotice] = useState("");
   const overlayRef = useRef(true);
   const performanceVisibleRef = useRef(snapshot.settings.showPerformance);
   const controlsCapturedRef = useRef(false);
   const streamEventsEnabled = useRef(true);
+  const interruptionReported = useRef<string | undefined>(undefined);
   const root = useRef<HTMLElement>(null);
   const header = useRef<HTMLElement>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -1114,7 +1200,7 @@ function StreamView({
       return;
     timer.current = window.setTimeout(() => {
       if (controlsCapturedRef.current) return;
-      if (header.current?.contains(document.activeElement)) {
+      if (root.current?.contains(document.activeElement)) {
         root.current?.focus({ preventScroll: true });
       }
       overlayRef.current = false;
@@ -1132,7 +1218,7 @@ function StreamView({
     focusFrame.current = undefined;
     overlayRef.current = false;
     setOverlay(false);
-    if (header.current?.contains(document.activeElement))
+    if (root.current?.contains(document.activeElement))
       root.current?.focus({ preventScroll: true });
   }, []);
   const captureControls = useCallback((focusFirst = false) => {
@@ -1174,11 +1260,16 @@ function StreamView({
     setPerformanceAnnouncement(
       `Performance stats ${visible ? "shown" : "hidden"}.`,
     );
-    void window.afterglide.updateSettings({ showPerformance: visible });
+    setSettingsError("");
+    void window.afterglide
+      .updateSettings({ showPerformance: visible })
+      .catch(() => {
+        setSettingsError("Couldn’t save the stats preference. Try again.");
+      });
   }, []);
   useControllerNavigation(
     controlsCaptured,
-    `stream:${performanceVisible ? "stats" : "no-stats"}`,
+    "stream-controls",
     snapshot.settings.preferredControllerId,
   );
   useEffect(() => {
@@ -1200,7 +1291,9 @@ function StreamView({
       } else if (event.key === "Tab") {
         event.preventDefault();
         const buttons = Array.from(
-          header.current?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+          root.current?.querySelectorAll<HTMLButtonElement>(
+            "button:not([disabled])",
+          ) ?? [],
         );
         if (!controlsCapturedRef.current) {
           captureControls(true);
@@ -1267,12 +1360,12 @@ function StreamView({
     toggleControls,
   ]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    streamEventsEnabled.current = true;
+    return () => {
       streamEventsEnabled.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const exitStream = useCallback(async () => {
     streamEventsEnabled.current = false;
@@ -1284,7 +1377,12 @@ function StreamView({
     void window.afterglide.reportStreamEvent(descriptor.sessionId, "connected");
   }, [descriptor.sessionId]);
   const onInterrupted = useCallback(() => {
-    if (!streamEventsEnabled.current) return;
+    if (
+      !streamEventsEnabled.current ||
+      interruptionReported.current === descriptor.sessionId
+    )
+      return;
+    interruptionReported.current = descriptor.sessionId;
     void window.afterglide.reportStreamEvent(
       descriptor.sessionId,
       "interrupted",
@@ -1330,7 +1428,7 @@ function StreamView({
       aria-keyshortcuts={LOCAL_CONTROL_SHORTCUTS.controls.join(" ")}
       className={`stream-view ${overlay ? "overlay-visible" : ""} ${
         controlsCaptured ? "controls-captured" : ""
-      }`}
+      } ${snapshot.settings.reducedMotion ? "reduced-motion" : ""}`}
     >
       <StreamSurface
         descriptor={descriptor}
@@ -1340,7 +1438,10 @@ function StreamView({
           snapshot.settings.controllerMenuShortcut === "stick-chord"
         }
         controllerSettings={snapshot.settings}
-        inputSuspended={controlsCaptured}
+        playbackSettings={snapshot.settings}
+        inputSuspended={
+          controlsCaptured || !online || snapshot.session.phase === "recovering"
+        }
         onConnected={onConnected}
         onInterrupted={onInterrupted}
         onError={onError}
@@ -1353,7 +1454,13 @@ function StreamView({
           <Icon name="controller" /> {controllerNotice}
         </div>
       )}
-      <header ref={header} className="stream-header" aria-hidden={!overlay}>
+      <header
+        ref={header}
+        className="stream-header"
+        aria-hidden={!overlay}
+        onPointerDown={() => captureControls()}
+        onFocus={() => captureControls()}
+      >
         <BrandWord />
         <div className="stream-console">
           <span className="live-dot" /> {descriptor.displayName}
@@ -1385,12 +1492,26 @@ function StreamView({
           </button>
         </div>
       </header>
-      {snapshot.session.phase === "recovering" && (
+      {controlsCaptured && <QuickSettings settings={snapshot.settings} />}
+      {settingsError && (
+        <p className="stream-settings-error" role="alert">
+          {settingsError}
+        </p>
+      )}
+      {snapshot.session.phase === "recovering" && !controlsCaptured && (
         <div className="recovery-panel" role="status">
           <span className="waiting-dot" />
           <div>
-            <strong>{snapshot.session.label}</strong>
-            <small>{snapshot.session.detail}</small>
+            <strong>
+              {recoveryState.status === "offline"
+                ? "You’re offline"
+                : snapshot.session.label}
+            </strong>
+            <small>
+              {recoveryState.status === "offline"
+                ? "Reconnect to your network to try again."
+                : "Trying a new Xbox streaming session. Game progress may not be preserved."}
+            </small>
           </div>
         </div>
       )}
@@ -1476,6 +1597,76 @@ function StreamView({
   );
 }
 
+function RecoveryScreen({
+  state,
+  online,
+  preferredControllerId,
+  onRetry,
+  onExit,
+}: {
+  state: RecoveryState;
+  online: boolean;
+  preferredControllerId: string;
+  onRetry: () => void;
+  onExit: () => void;
+}) {
+  useControllerNavigation(true, "recovery", preferredControllerId);
+  useEffect(() => {
+    const back = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onExit();
+    };
+    window.addEventListener("keydown", back);
+    return () => window.removeEventListener("keydown", back);
+  }, [onExit]);
+  const exhausted = state.status === "exhausted";
+  return (
+    <main className="error-screen recovery-screen">
+      <BrandLockup />
+      <section>
+        <p className="eyebrow">CONNECTION INTERRUPTED</p>
+        <h1>
+          {exhausted
+            ? "Automatic retries paused"
+            : !online
+              ? "You’re offline"
+              : "Restoring the stream"}
+        </h1>
+        <p role="status">
+          {exhausted
+            ? "Three attempts didn’t restore a lasting connection. Check your network before trying again."
+            : !online
+              ? "Reconnect to your network. No attempts will start while you’re offline."
+              : `Starting a new Xbox streaming session · attempt ${Math.min(3, state.attempts + (state.status === "waiting" ? 1 : 0))} of 3.`}
+        </p>
+        <p>
+          Retrying starts a new Xbox streaming session. Game progress may not be
+          preserved.
+        </p>
+        <div className="error-actions">
+          {exhausted && (
+            <button
+              className="primary-action"
+              data-focusable
+              disabled={!online}
+              onClick={onRetry}
+            >
+              Try again
+            </button>
+          )}
+          <button
+            className="secondary-action"
+            data-focusable
+            data-autofocus
+            onClick={onExit}
+          >
+            End session
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function SessionErrorScreen({
   snapshot,
   onRetry,
@@ -1521,6 +1712,25 @@ function SessionErrorScreen({
 }
 
 function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
+  const [exportStatus, setExportStatus] = useState("");
+  const [exportError, setExportError] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    setExportError(false);
+    setExportStatus("");
+    try {
+      const saved = await window.afterglide.exportPerformanceReport();
+      setExportStatus(
+        saved ? "Performance report saved." : "Export cancelled.",
+      );
+    } catch {
+      setExportError(true);
+      setExportStatus("Couldn’t save the performance report. Try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
   const health =
     snapshot.hardware.acceleration === "enabled" ? "Ready" : "Check driver";
   return (
@@ -1547,6 +1757,27 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
         </div>
       </div>
       <div className="diagnostic-grid">
+        {(
+          [
+            ["Frame interval p95", snapshot.telemetry.frameIntervalP95Ms, "ms"],
+            ["Frame interval p99", snapshot.telemetry.frameIntervalP99Ms, "ms"],
+            ["Dropped frames", snapshot.telemetry.framesDropped, ""],
+            ["Video freezes", snapshot.telemetry.freezeCount, ""],
+            ["Time frozen", snapshot.telemetry.freezeDurationMs, "ms"],
+            ["Last recovery", snapshot.telemetry.recoveryMs, "ms"],
+          ] as const
+        ).map(([label, value, unit]) => (
+          <DiagnosticRow
+            key={label}
+            icon="pulse"
+            label={label}
+            value={
+              value === undefined
+                ? "Unavailable"
+                : `${unit ? value.toFixed(1) : value}${unit ? ` ${unit}` : ""}`
+            }
+          />
+        ))}
         <DiagnosticRow
           icon="display"
           label="Video decode"
@@ -1619,6 +1850,15 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
       <p className="credential-note">
         <Icon name="shield" /> {snapshot.hardware.credentialStorage.detail}
       </p>
+      <button
+        className="secondary-action refresh-health"
+        data-focusable
+        disabled={exporting}
+        onClick={() => void exportReport()}
+      >
+        {exporting ? "Saving report…" : "Export performance report"}
+      </button>
+      <p role={exportError ? "alert" : "status"}>{exportStatus}</p>
       <button
         className="secondary-action refresh-health"
         data-focusable

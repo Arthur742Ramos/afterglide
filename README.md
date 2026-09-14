@@ -44,6 +44,8 @@ to validate end-to-end compatibility and performance.
 - Per-controller vibration, deadzone, trigger-travel, and face-button profiles
 - Live controller identity, button, axis, mapping, and rumble diagnostics
 - L3 + R3 access to stream controls with game input paused while they are open
+- Live volume, mute, fit/fill, and input-polling preferences without reconnecting
+- Frame-pacing diagnostics and local performance reports with Linux battery/thermal readings
 - Controller-first home, setup, settings, diagnostics, error, and recovery flows
 - Deterministic Playwright coverage of the real Electron desktop shell
 
@@ -53,6 +55,21 @@ still requires a Microsoft account and a live smoke test. Home streaming needs a
 remote-play-enabled Xbox; cloud streaming needs an eligible account and region.
 Hardware decode and power targets must be measured on the packaged Steam Deck
 build before the first supported release.
+
+Open the in-stream controls to adjust audio, fit the whole image or fill the
+display (cropping its edges), and compare Responsive (4 ms) with Efficient
+(8 ms) input polling. Efficient is an experimental sampling option, not a
+measured battery-life claim. Controls remain local and release game input while
+open. Preferences persist across launches without restarting the current stream.
+
+Health can export a local JSON performance report after play. It includes a
+bounded sample history, frame cadence, actual decoder identity when available,
+recovery time, and periodic Electron CPU readings. On Linux, supported sysfs
+sensors also provide whole-device battery discharge power and CPU/GPU temperature.
+Unsupported readings are marked unavailable rather than reported as zero.
+Reports contain no account, console, session, or controller identifiers and
+are never uploaded automatically. See [streaming performance and validation](docs/STREAMING-PERFORMANCE.md)
+for measurement definitions and a repeatable hardware comparison procedure.
 
 ## Develop from source
 
@@ -170,7 +187,7 @@ will be published with the first beta.
 
 The runtime applies explicit network bounds: 12-second Xbox API timeouts,
 idempotent-read retries with exponential backoff, a 4-second ICE gathering
-window, candidate and signaling-size caps, a 20-second media connection
+window, candidate and signaling-size caps, a 60-second media connection
 deadline, 3-second tolerance for transient WebRTC disconnects, and recovery only
 after three consecutive keepalive failures. Afterglide leaves incoming bitrate
 adaptation to WebRTC congestion control instead of forcing a fixed bitrate.

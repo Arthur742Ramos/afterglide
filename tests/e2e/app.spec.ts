@@ -1,5 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   _electron as electron,
@@ -36,7 +41,7 @@ async function launch(
 ): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
   mkdirSync(screenshots, { recursive: true });
   const userData =
-    options.userData ?? mkdtempSync(join(tmpdir(), "afterglide-e2e-"));
+    options.userData ?? mkdtempSync(join(screenshots, "afterglide-e2e-"));
   if (!options.userData) temporaryDirectories.push(userData);
   const app = await electron.launch({
     args: ["."],
@@ -218,7 +223,6 @@ test("console selection, connection stages, stream overlay, and clean exit work"
     await page.getByRole("button", { name: "Show performance stats" }).click();
     await expect(page.getByText("60 FPS")).toBeVisible();
     await page.screenshot({ path: join(screenshots, "stream-1280x800.png") });
-    await page.keyboard.press("F10");
     await expect(page.locator(".stream-view")).toHaveClass(/controls-captured/);
     await page.keyboard.press("F10");
     await expect(page.locator(".stream-header")).toHaveAttribute(
@@ -816,6 +820,13 @@ test("controller diagnostics and device profiles are usable", async () => {
     await expect(diagnostics).toContainText("0.25 · -0.50");
     await expect(diagnostics).toContainText("Rumble ready");
 
+    // Release the diagnostic sample before making this controller drive the UI.
+    await page.evaluate(() => {
+      for (const gamepad of navigator.getGamepads()) {
+        for (const button of gamepad?.buttons ?? [])
+          Object.assign(button, { pressed: false, touched: false, value: 0 });
+      }
+    });
     await page
       .getByLabel("Active controller")
       .selectOption({ label: "Xbox Wireless Controller · slot 3" });
@@ -889,6 +900,364 @@ test("an interrupted stream recovers autonomously", async () => {
     await expect(page.getByTestId("mock-stream")).toBeVisible({
       timeout: 10_000,
     });
+  } finally {
+    await app.close();
+  }
+});
+
+async function setRendererOnline(page: Page, online: boolean) {
+  await page.evaluate((value) => {
+    Object.defineProperty(navigator, "onLine", {
+      configurable: true,
+      get: () => value,
+    });
+    window.dispatchEvent(new Event(value ? "online" : "offline"));
+  }, online);
+}
+
+async function streamingSessionId(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        (await page.evaluate(() => window.afterglide.getSnapshot())).session
+          .phase,
+    )
+    .toBe("streaming");
+  return (await page.evaluate(() => window.afterglide.getSnapshot())).session
+    .sessionId!;
+}
+
+test("quick settings support controller focus, compact windows, and persisted live preferences", async () => {
+  const first = await launch({ signedIn: true });
+  try {
+    await first.page.getByRole("button", { name: /Play now/ }).click();
+    const sessionId = await streamingSessionId(first.page);
+    await expect(
+      first.page.getByRole("heading", { name: "Quick settings" }),
+    ).toHaveCount(0);
+    await first.page.keyboard.press("F10");
+    await expect(first.page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "true",
+    );
+    await expect(
+      first.page.getByRole("button", { name: "Show performance stats" }),
+    ).toBeFocused();
+    await first.page.keyboard.press("Tab");
+    await expect(
+      first.page.getByRole("button", { name: "Leave Xbox stream" }),
+    ).toBeFocused();
+    await first.page.keyboard.press("Tab");
+    await expect(
+      first.page.getByRole("button", { name: "Decrease volume" }),
+    ).toBeFocused();
+    await first.page.evaluate(() =>
+      window.afterglideTest!.injectGamepad("accept"),
+    );
+    await expect(first.page.getByText("90%", { exact: true })).toBeVisible();
+    await expect(
+      first.page.getByRole("button", { name: "Decrease volume" }),
+    ).toBeFocused();
+    await first.page.getByRole("button", { name: "Mute", exact: true }).click();
+    await expect(
+      first.page.getByRole("button", { name: "Unmute", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await first.page.getByRole("button", { name: "Fill", exact: true }).click();
+    await expect(
+      first.page.getByRole("button", { name: "Fill", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await first.page.getByRole("button", { name: "Efficient 8 ms" }).focus();
+    await first.page.evaluate(() =>
+      window.afterglideTest!.injectGamepad("accept"),
+    );
+    await expect(
+      first.page.getByRole("button", { name: "Efficient 8 ms" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      first.page.getByText("Savings have not been measured.", { exact: false }),
+    ).toBeVisible();
+    await first.page.keyboard.press("F3");
+    for (const viewport of [
+      { width: 1280, height: 800 },
+      { width: 960, height: 600 },
+    ]) {
+      await first.page.setViewportSize(viewport);
+      await expect(first.page.getByLabel("Stream performance")).toBeVisible();
+      for (const name of [
+        "Leave Xbox stream",
+        "Hide performance stats",
+        "Efficient 8 ms",
+      ]) {
+        const box = await first.page
+          .getByRole("button", { name })
+          .boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeGreaterThanOrEqual(56);
+        expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+      }
+      await expectNoAccessibilityViolations(
+        first.page,
+        `quick settings ${viewport.width}`,
+      );
+      mkdirSync(join(root, "test-results"), { recursive: true });
+      await first.page.screenshot({
+        path: join(
+          root,
+          "test-results",
+          `stream-quick-settings-${viewport.width}x${viewport.height}.png`,
+        ),
+      });
+    }
+    await first.page.waitForTimeout(4_200);
+    await expect(
+      first.page.getByRole("heading", { name: "Quick settings" }),
+    ).toBeVisible();
+    expect(await streamingSessionId(first.page)).toBe(sessionId);
+    await first.page.evaluate(() =>
+      window.afterglideTest!.injectGamepad("back"),
+    );
+    await expect(
+      first.page.getByRole("heading", { name: "Quick settings" }),
+    ).toHaveCount(0);
+    await expect(first.page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "false",
+    );
+  } finally {
+    await first.app.close();
+  }
+  const second = await launch({ signedIn: true, userData: first.userData });
+  try {
+    const settings = (
+      await second.page.evaluate(() => window.afterglide.getSnapshot())
+    ).settings;
+    expect(settings).toMatchObject({
+      volume: 0.9,
+      muted: true,
+      videoFit: "fill",
+      inputPolling: "efficient",
+      showPerformance: true,
+    });
+  } finally {
+    await second.app.close();
+  }
+});
+
+test("quick settings show save failures without dropping controller focus or reconnecting", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.getByRole("button", { name: /Play now/ }).click();
+    const sessionId = await streamingSessionId(page);
+    await app.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler("afterglide:update-settings");
+      ipcMain.handle("afterglide:update-settings", () => {
+        throw new Error("Simulated settings write failure");
+      });
+    });
+    await page.keyboard.press("F10");
+    await page.getByRole("button", { name: "Decrease volume" }).click();
+    await expect(page.getByRole("alert")).toHaveText(
+      "Couldn’t save this setting. Try again.",
+    );
+    await expect(
+      page.getByRole("button", { name: "Decrease volume" }),
+    ).toBeFocused();
+    expect(await streamingSessionId(page)).toBe(sessionId);
+  } finally {
+    await app.close();
+  }
+});
+
+test("recovery waits offline and retries once online without duplicate interruptions", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.getByRole("button", { name: /Play now/ }).click();
+    const sessionId = await streamingSessionId(page);
+    await setRendererOnline(page, false);
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "true",
+    );
+    await page.evaluate(async () => {
+      await window.afterglideTest!.simulateNetworkDrop();
+      await window.afterglideTest!.simulateNetworkDrop();
+    });
+    await expect(
+      page.getByText("You’re offline", { exact: true }),
+    ).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(
+      (await page.evaluate(() => window.afterglide.getSnapshot())).session
+        .sessionId,
+    ).toBe(sessionId);
+    await setRendererOnline(page, true);
+    await expect
+      .poll(
+        async () =>
+          (await page.evaluate(() => window.afterglide.getSnapshot())).session
+            .sessionId,
+      )
+      .not.toBe(sessionId);
+    expect(await streamingSessionId(page)).not.toBe(sessionId);
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "false",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("repeated media interruptions exhaust the automatic budget across replacement sessions", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.getByRole("button", { name: /Play now/ }).click();
+    let sessionId = await streamingSessionId(page);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
+      await expect
+        .poll(
+          async () =>
+            (await page.evaluate(() => window.afterglide.getSnapshot())).session
+              .sessionId,
+          { timeout: 10_000 },
+        )
+        .not.toBe(sessionId);
+      sessionId = await streamingSessionId(page);
+    }
+    await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
+    await expect(
+      page.getByRole("heading", { name: "Automatic retries paused" }),
+    ).toBeVisible();
+    await setRendererOnline(page, false);
+    await setRendererOnline(page, true);
+    await page.waitForTimeout(1_000);
+    expect(
+      (await page.evaluate(() => window.afterglide.getSnapshot())).session
+        .sessionId,
+    ).toBe(sessionId);
+    await page
+      .getByRole("button", { name: "End session", exact: true })
+      .click();
+    await expect(page.getByRole("button", { name: /Play now/ })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("ending offline recovery cancels future reconnects after online returns", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.getByRole("button", { name: /Play now/ }).click();
+    await streamingSessionId(page);
+    await setRendererOnline(page, false);
+    await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
+    await expect(
+      page.getByText("You’re offline", { exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("F10");
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+    await expect(page.getByRole("button", { name: /Play now/ })).toBeVisible();
+    await setRendererOnline(page, true);
+    await page.waitForTimeout(1_100);
+    expect(
+      (await page.evaluate(() => window.afterglide.getSnapshot())).session
+        .phase,
+    ).toBe("idle");
+    await expect(page.getByTestId("mock-stream")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("Health reports unavailable metrics and accessible export outcomes", async () => {
+  const { app, page, userData } = await launch({ signedIn: true });
+  const exportPath = join(userData, "performance-report.json");
+  try {
+    await page.getByRole("button", { name: "Health", exact: true }).click();
+    for (const label of [
+      "Frame interval p95",
+      "Frame interval p99",
+      "Dropped frames",
+      "Video freezes",
+      "Time frozen",
+      "Last recovery",
+    ]) {
+      await expect(
+        page.locator(".diagnostic-row").filter({ hasText: label }),
+      ).toContainText("Unavailable");
+    }
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await page.getByRole("button", { name: /Play now/ }).click();
+    const sessionId = await streamingSessionId(page);
+    const snapshot = await page.evaluate(() => window.afterglide.getSnapshot());
+    await page.keyboard.press("F10");
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+    await page.getByRole("button", { name: "Health", exact: true }).click();
+    for (const outcome of ["cancel", "success", "failure"]) {
+      await app.evaluate(
+        ({ dialog }, { result, path }) => {
+          dialog.showSaveDialog = async () => ({
+            canceled: result === "cancel",
+            filePath: result === "cancel" ? "" : path,
+          });
+        },
+        {
+          result: outcome,
+          path:
+            outcome === "failure"
+              ? join(userData, "missing-export-parent", "report.json")
+              : exportPath,
+        },
+      );
+      await page
+        .getByRole("button", { name: "Export performance report" })
+        .click();
+      await expect(
+        page.getByRole(outcome === "failure" ? "alert" : "status"),
+      ).toContainText(
+        outcome === "failure"
+          ? "Couldn’t save the performance report. Try again."
+          : outcome === "success"
+            ? "Performance report saved."
+            : "Export cancelled.",
+      );
+      if (outcome === "cancel") {
+        expect(existsSync(exportPath)).toBe(false);
+        await expect(
+          page.getByText("Performance report saved.", { exact: true }),
+        ).toHaveCount(0);
+      }
+      if (outcome === "success") {
+        const raw = readFileSync(exportPath, "utf8");
+        const report = JSON.parse(raw);
+        expect(report).toMatchObject({
+          schemaVersion: 1,
+          application: { name: "Afterglide", environment: "test" },
+          source: "home",
+        });
+        expect(report.totalSamples).toBeGreaterThan(0);
+        expect(report.retainedSamples).toBe(report.samples.length);
+        expect(report.samples[0]).toMatchObject({
+          telemetry: { framesPerSecond: 60 },
+          settings: {
+            resolution: 1080,
+            inputPolling: "responsive",
+            videoFit: "fit",
+          },
+        });
+        expect(raw).not.toMatch(
+          /"(?:auth|accountId|userId|xuid|gamertag|token|accessToken|refreshToken|sessionId|consoleId|targetId|preferredControllerId)"\s*:/i,
+        );
+        for (const identifier of [
+          sessionId,
+          ...snapshot.consoles.map((console) => console.id),
+        ]) {
+          expect(raw).not.toContain(identifier);
+        }
+      }
+    }
   } finally {
     await app.close();
   }
@@ -1135,6 +1504,10 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
         preferredControllerId: 42,
         controllerDefaults: { rumble: "loud" },
         controllerProfiles: "all",
+        volume: "loud",
+        muted: "yes",
+        videoFit: "stretch",
+        inputPolling: "maximum",
         unknownSetting: true,
       } as never);
       return (await window.afterglide.getSnapshot()).settings;
@@ -1155,6 +1528,43 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
       controllerProfiles: [],
       launchFullscreen: false,
       onboardingComplete: true,
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+    });
+    const clamped = await page.evaluate(async () => {
+      await window.afterglide.updateSettings({ volume: -1 });
+      const low = (await window.afterglide.getSnapshot()).settings.volume;
+      await window.afterglide.updateSettings({ volume: 2 });
+      const high = (await window.afterglide.getSnapshot()).settings.volume;
+      await window.afterglide.updateSettings({
+        volume: 0.4,
+        muted: true,
+        videoFit: "fill",
+        inputPolling: "efficient",
+      });
+      await window.afterglide.updateSettings({
+        volume: Number.NaN,
+        muted: 0,
+        videoFit: "stretch",
+        inputPolling: "maximum",
+      } as never);
+      return {
+        low,
+        high,
+        settings: (await window.afterglide.getSnapshot()).settings,
+      };
+    });
+    expect(clamped).toMatchObject({
+      low: 0,
+      high: 1,
+      settings: {
+        volume: 0.4,
+        muted: true,
+        videoFit: "fill",
+        inputPolling: "efficient",
+      },
     });
 
     const externalError = await page.evaluate(async () => {

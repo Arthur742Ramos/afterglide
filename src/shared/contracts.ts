@@ -83,6 +83,12 @@ export interface StreamTelemetry {
   decodeMs?: number;
   jitterBufferMs?: number;
   inputQueueBytes?: number;
+  frameIntervalP95Ms?: number;
+  frameIntervalP99Ms?: number;
+  framesDropped?: number;
+  freezeCount?: number;
+  freezeDurationMs?: number;
+  recoveryMs?: number;
   networkQuality: "measuring" | "excellent" | "good" | "unstable";
   updatedAt: number;
 }
@@ -145,6 +151,10 @@ export interface AppSettings {
   controllerProfiles: ControllerProfile[];
   launchFullscreen: boolean;
   onboardingComplete: boolean;
+  volume: number;
+  muted: boolean;
+  videoFit: "fit" | "fill";
+  inputPolling: "responsive" | "efficient";
 }
 
 export interface AppSnapshot {
@@ -216,6 +226,7 @@ export interface StreamApi {
   updateTelemetry(telemetry: StreamTelemetry): Promise<void>;
   updateSettings(settings: Partial<AppSettings>): Promise<void>;
   checkForUpdates(): Promise<void>;
+  exportPerformanceReport(): Promise<boolean>;
   setFullscreen(fullscreen: boolean): Promise<void>;
   quit(): Promise<void>;
   onSnapshot(listener: (snapshot: AppSnapshot) => void): () => void;
@@ -246,6 +257,10 @@ export const defaultSettings: AppSettings = {
   controllerProfiles: [],
   launchFullscreen: false,
   onboardingComplete: false,
+  volume: 1,
+  muted: false,
+  videoFit: "fit",
+  inputPolling: "responsive",
 };
 
 export const emptyTelemetry: StreamTelemetry = {
@@ -291,6 +306,7 @@ export const IPC = {
   updateTelemetry: "afterglide:update-telemetry",
   updateSettings: "afterglide:update-settings",
   checkForUpdates: "afterglide:check-for-updates",
+  exportPerformanceReport: "afterglide:export-performance-report",
   setFullscreen: "afterglide:set-fullscreen",
   quit: "afterglide:quit",
   testNetworkDrop: "afterglide:test-network-drop",

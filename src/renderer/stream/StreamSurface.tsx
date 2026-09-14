@@ -5,13 +5,18 @@ import type {
   StreamTelemetry,
 } from "../../shared/contracts";
 import { MockStreamSurface } from "./MockStreamSurface";
-import { XboxStreamEngine, type ControllerStatus } from "./stream-engine";
+import {
+  XboxStreamEngine,
+  type ControllerStatus,
+  type PlaybackSettings,
+} from "./stream-engine";
 
 interface Props {
   descriptor: StreamDescriptor;
   reducedMotion: boolean;
   keyboardControls: boolean;
   reserveControlChord: boolean;
+  playbackSettings: PlaybackSettings;
   controllerSettings: Pick<
     AppSettings,
     "preferredControllerId" | "controllerDefaults" | "controllerProfiles"
@@ -43,6 +48,7 @@ export function StreamSurface(props: Props) {
       keyboardControls: props.keyboardControls,
       reserveControlChord: props.reserveControlChord,
       controllerSettings: props.controllerSettings,
+      playbackSettings: props.playbackSettings,
       onConnected,
       onInterrupted,
       onError,
@@ -50,6 +56,7 @@ export function StreamSurface(props: Props) {
       onControllerStatus,
     });
     engine.current = streamEngine;
+    streamEngine.setInputSuspended(props.inputSuspended);
     void streamEngine.connect();
     return () => {
       engine.current = undefined;
@@ -68,13 +75,22 @@ export function StreamSurface(props: Props) {
 
   useEffect(() => {
     engine.current?.setInputSuspended(props.inputSuspended);
-  }, [props.inputSuspended]);
+  }, [props.inputSuspended, props.descriptor]);
+
+  useEffect(() => {
+    engine.current?.setPlaybackSettings(props.playbackSettings);
+  }, [props.playbackSettings, props.descriptor]);
+
+  useEffect(() => {
+    engine.current?.setControllerSettings(props.controllerSettings);
+  }, [props.controllerSettings, props.descriptor]);
 
   if (props.descriptor.mock) {
     return (
       <MockStreamSurface
         reducedMotion={props.reducedMotion}
         inputSuspended={props.inputSuspended}
+        playbackSettings={props.playbackSettings}
         onConnected={onConnected}
         onTelemetry={onTelemetry}
       />

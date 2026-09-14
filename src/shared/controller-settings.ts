@@ -100,6 +100,17 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       typeof candidate.onboardingComplete === "boolean"
         ? candidate.onboardingComplete
         : defaultSettings.onboardingComplete,
+    volume:
+      typeof candidate.volume === "number" && Number.isFinite(candidate.volume)
+        ? Math.min(1, Math.max(0, candidate.volume))
+        : defaultSettings.volume,
+    muted:
+      typeof candidate.muted === "boolean"
+        ? candidate.muted
+        : defaultSettings.muted,
+    videoFit: candidate.videoFit === "fill" ? "fill" : "fit",
+    inputPolling:
+      candidate.inputPolling === "efficient" ? "efficient" : "responsive",
   };
 }
 
@@ -121,9 +132,19 @@ export function sanitizeSettingsUpdate(
     "keyboardControls",
     "launchFullscreen",
     "onboardingComplete",
+    "muted",
   ] as const) {
     if (typeof update[key] === "boolean") allowed[key] = update[key];
   }
+  if (typeof update.volume === "number" && Number.isFinite(update.volume))
+    allowed.volume = Math.min(1, Math.max(0, update.volume));
+  if (update.videoFit === "fit" || update.videoFit === "fill")
+    allowed.videoFit = update.videoFit;
+  if (
+    update.inputPolling === "responsive" ||
+    update.inputPolling === "efficient"
+  )
+    allowed.inputPolling = update.inputPolling;
   if (
     typeof update.preferredControllerId === "string" &&
     update.preferredControllerId.length <= 256
