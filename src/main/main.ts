@@ -37,10 +37,13 @@ import { readDeviceMetrics } from "./device-metrics";
 app.commandLine.appendSwitch("enable-accelerated-video-decode");
 app.commandLine.appendSwitch("enable-zero-copy");
 
-if (
-  process.env.AFTERGLIDE_E2E === "1" &&
-  process.env.AFTERGLIDE_E2E_USER_DATA
-) {
+const isTest = !app.isPackaged && process.env.AFTERGLIDE_E2E === "1";
+const isBackgroundTest = isTest && process.env.AFTERGLIDE_E2E_HEADED !== "1";
+
+if (isBackgroundTest && process.platform === "darwin")
+  app.setActivationPolicy("accessory");
+
+if (isTest && process.env.AFTERGLIDE_E2E_USER_DATA) {
   app.setPath("userData", process.env.AFTERGLIDE_E2E_USER_DATA);
 }
 
@@ -51,14 +54,13 @@ const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 
 app.on("second-instance", () => {
-  if (!mainWindow) return;
+  if (!mainWindow || isBackgroundTest) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
 });
 
 app.whenReady().then(async () => {
-  const isTest = !app.isPackaged && process.env.AFTERGLIDE_E2E === "1";
   const userData = app.getPath("userData");
   const platform: PlatformService = isTest
     ? new MockPlatformService(process.env.AFTERGLIDE_E2E_SIGNED_IN === "1")
@@ -145,7 +147,9 @@ function createWindow(fullscreen: boolean): BrowserWindow {
     minWidth: 960,
     minHeight: 600,
     show: false,
-    fullscreen,
+    focusable: !isBackgroundTest,
+    skipTaskbar: isBackgroundTest,
+    fullscreen: fullscreen && !isBackgroundTest,
     autoHideMenuBar: true,
     backgroundColor: "#090a0f",
     title: "Afterglide",
@@ -156,6 +160,10 @@ function createWindow(fullscreen: boolean): BrowserWindow {
       sandbox: true,
       webSecurity: true,
       spellcheck: false,
+      // Hidden E2E windows still need animation frames and renderer timers.
+      backgroundThrottling: !isBackgroundTest,
+      // Render independently of native-window visibility, including under Xvfb.
+      offscreen: isBackgroundTest,
     },
   });
 
@@ -163,7 +171,7 @@ function createWindow(fullscreen: boolean): BrowserWindow {
   window.webContents.on("will-navigate", (event, url) => {
     if (!isTrustedRendererUrl(url)) event.preventDefault();
   });
-  window.once("ready-to-show", () => window.show());
+  if (!isBackgroundTest) window.once("ready-to-show", () => window.show());
 
   const developmentUrl = process.env.AFTERGLIDE_DEV_URL;
   if (developmentUrl && !app.isPackaged) void window.loadURL(developmentUrl);
@@ -267,9 +275,9 @@ function registerIpc(appController: AppController): void {
       exporting = false;
     }
   });
-  handle(IPC.setFullscreen, (fullscreen: boolean) =>
-    mainWindow?.setFullScreen(Boolean(fullscreen)),
-  );
+  handle(IPC.setFullscreen, (fullscreen: boolean) => {
+    if (!isBackgroundTest) mainWindow?.setFullScreen(Boolean(fullscreen));
+  });
   handle(IPC.quit, () => app.quit());
   handle(IPC.copyText, (text: string) =>
     clipboard.writeText(String(text).slice(0, 2_048)),

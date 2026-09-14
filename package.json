@@ -23,6 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
+    "test:e2e:headed": "cross-env AFTERGLIDE_E2E_HEADED=1 npm run test:e2e",
     "package": "npm run build && electron-builder --dir",
     "package:linux": "npm run build && electron-builder --linux AppImage tar.gz --x64 --publish never",
     "check:installer": "bash -n packaging/install-steam-deck.sh tests/installer.test.sh && bash tests/installer.test.sh",
