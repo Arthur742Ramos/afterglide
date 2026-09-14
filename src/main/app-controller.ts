@@ -16,6 +16,7 @@ import { errorForLog, safeError } from "./errors";
 import type { PlatformService, StreamTarget } from "./platform-service";
 import type { ReleaseCheckPort } from "./release-checker";
 import { SettingsStore } from "./settings-store";
+import { PerformanceReport, type DeviceMetrics } from "./performance-report";
 
 interface ActiveSession {
   id: string;
@@ -37,6 +38,12 @@ export class AppController {
   private lastTarget?: StreamTarget;
   private updateCheck?: Promise<void>;
   private snapshot: AppSnapshot;
+  private readonly performanceReport = new PerformanceReport();
+  private deviceMetrics?: DeviceMetrics;
+  private recoveryStartedAt?: number;
+  private recoveryMs?: number;
+  private retryPending = false;
+  private startingTarget = false;
 
   constructor(
     private readonly platform: PlatformService,
@@ -286,8 +293,18 @@ export class AppController {
     target: NamedTarget,
     shouldWake: boolean,
   ): Promise<StreamDescriptor> {
+    if (this.startingTarget)
+      throw new Error(
+        "The previous connection is still finishing. Try again shortly.",
+      );
+    this.startingTarget = true;
     const generation = ++this.connectionGeneration;
     this.lastTarget = { source: target.source, id: target.id };
+    if (this.recoveryStartedAt === undefined) {
+      this.performanceReport.reset(target.source);
+      this.recoveryMs = undefined;
+    }
+    this.deviceMetrics = undefined;
 
     try {
       if (shouldWake) {
@@ -317,6 +334,9 @@ export class AppController {
         target,
         this.snapshot.settings.resolution,
       );
+      if (generation !== this.connectionGeneration) {
+        await this.platform.stopSession(started.sessionPath);
+      }
       this.assertCurrent(generation);
       this.activeSession = {
         id: started.sessionId,
@@ -396,16 +416,27 @@ export class AppController {
       console.error("Stream start failed", errorForLog(error));
       this.failSession(safe.code, safe.message, safe.recoverable, target);
       throw safe;
+    } finally {
+      this.startingTarget = false;
     }
   }
 
   async retryStream(): Promise<StreamDescriptor> {
     const target = this.lastTarget;
     if (!target) throw new Error("Choose something to play before retrying.");
-    await this.stopActiveSession();
-    return target.source === "home"
-      ? this.startStream(target.id)
-      : this.startCloudStream(target.id);
+    if (this.retryPending)
+      throw new Error("A reconnection is already running.");
+    this.retryPending = true;
+    const generation = ++this.connectionGeneration;
+    try {
+      await this.stopActiveSession();
+      this.assertCurrent(generation);
+      return await (target.source === "home"
+        ? this.startStream(target.id)
+        : this.startCloudStream(target.id));
+    } finally {
+      this.retryPending = false;
+    }
   }
 
   async sendSdp(
@@ -457,6 +488,18 @@ export class AppController {
     const session = this.activeSession;
     if (!session || session.id !== sessionId) return;
     if (event === "connected") {
+      if (!["negotiating", "streaming"].includes(this.snapshot.session.phase))
+        return;
+      if (this.snapshot.session.phase === "negotiating")
+        this.performanceReport.connected();
+      if (this.recoveryStartedAt !== undefined) {
+        this.recoveryMs = Math.max(0, Date.now() - this.recoveryStartedAt);
+        this.performanceReport.recovered(
+          this.recoveryStartedAt,
+          this.recoveryMs,
+        );
+        this.recoveryStartedAt = undefined;
+      }
       this.setSession(
         "streaming",
         "Streaming",
@@ -472,10 +515,12 @@ export class AppController {
       return;
     }
     if (event === "interrupted") {
+      if (this.snapshot.session.phase !== "streaming") return;
+      this.recoveryStartedAt ??= Date.now();
       this.setSession(
         "recovering",
         "Restoring the stream",
-        "The connection changed. Afterglide is reconnecting.",
+        "The connection changed. Afterglide will try a new streaming connection. Cloud game progress may not be preserved.",
         28,
         {
           source: session.source,
@@ -500,8 +545,38 @@ export class AppController {
 
   async stopStream(): Promise<void> {
     this.connectionGeneration += 1;
-    await this.stopActiveSession();
+    this.recoveryStartedAt = undefined;
+    this.recoveryMs = undefined;
+    this.deviceMetrics = undefined;
     this.patch({ session: idleSession(), telemetry: { ...emptyTelemetry } });
+    await this.stopActiveSession();
+  }
+
+  handleSystemResume(): void {
+    if (this.activeSession && this.snapshot.session.phase === "streaming")
+      void this.reportStreamEvent(this.activeSession.id, "interrupted");
+  }
+
+  updateDeviceMetrics(metrics: DeviceMetrics): void {
+    if (this.snapshot.session.phase === "streaming")
+      this.deviceMetrics = structuredClone(metrics);
+  }
+
+  getDeviceSampleContext() {
+    return {
+      streaming: this.snapshot.session.phase === "streaming",
+      sessionId: this.snapshot.session.sessionId,
+      inputPolling: this.snapshot.settings.inputPolling,
+      resolution: this.snapshot.settings.resolution,
+    };
+  }
+
+  exportPerformanceReport() {
+    return this.performanceReport.export(
+      this.version,
+      this.snapshot.environment,
+      this.snapshot.hardware,
+    );
   }
 
   updateTelemetry(telemetry: StreamTelemetry): void {
@@ -523,16 +598,50 @@ export class AppController {
           telemetry.inputQueueBytes,
           16_777_216,
         ),
+        frameIntervalP95Ms: optionalMeasurement(
+          telemetry.frameIntervalP95Ms,
+          60_000,
+        ),
+        frameIntervalP99Ms: optionalMeasurement(
+          telemetry.frameIntervalP99Ms,
+          60_000,
+        ),
+        framesDropped: optionalMeasurement(
+          telemetry.framesDropped,
+          Number.MAX_SAFE_INTEGER,
+        ),
+        freezeCount: optionalMeasurement(
+          telemetry.freezeCount,
+          Number.MAX_SAFE_INTEGER,
+        ),
+        freezeDurationMs: optionalMeasurement(
+          telemetry.freezeDurationMs,
+          Number.MAX_SAFE_INTEGER,
+        ),
+        recoveryMs: this.recoveryMs,
         networkQuality: isNetworkQuality(telemetry.networkQuality)
           ? telemetry.networkQuality
           : "measuring",
         updatedAt: Date.now(),
       },
     });
+    if (this.activeSession && this.snapshot.session.phase === "streaming")
+      this.performanceReport.add(
+        this.snapshot.telemetry,
+        this.snapshot.settings,
+        this.deviceMetrics,
+      );
   }
 
   updateSettings(update: Partial<AppSettings>): void {
     const allowed = sanitizeSettingsUpdate(update, this.snapshot.settings);
+    if (
+      (allowed.inputPolling !== undefined &&
+        allowed.inputPolling !== this.snapshot.settings.inputPolling) ||
+      (allowed.resolution !== undefined &&
+        allowed.resolution !== this.snapshot.settings.resolution)
+    )
+      this.deviceMetrics = undefined;
     this.patch({ settings: this.preferences.updateSettings(allowed) });
   }
 
@@ -554,19 +663,7 @@ export class AppController {
 
   simulateNetworkDrop(): void {
     if (!this.platform.mock || !this.activeSession) return;
-    const session = this.activeSession;
-    this.setSession(
-      "recovering",
-      "Restoring the stream",
-      "A test interruption was detected. Reconnecting now.",
-      28,
-      {
-        source: session.source,
-        id: session.targetId,
-        name: session.targetName,
-      },
-      session.id,
-    );
+    void this.reportStreamEvent(this.activeSession.id, "interrupted");
   }
 
   private async stopActiveSession(): Promise<void> {

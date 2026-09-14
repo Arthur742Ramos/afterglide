@@ -27,6 +27,20 @@ import {
   tuningForGamepad,
   type GamepadLike,
 } from "./controller-input";
+import { InputTransitionBuffer, type InputBufferFailure } from "./input-buffer";
+import { FrameMetricsTracker } from "./frame-metrics";
+
+export type PlaybackSettings = Pick<
+  AppSettings,
+  "volume" | "muted" | "videoFit" | "inputPolling"
+>;
+
+const defaultPlaybackSettings: PlaybackSettings = {
+  volume: 1,
+  muted: false,
+  videoFit: "fit",
+  inputPolling: "responsive",
+};
 
 export interface ControllerStatus {
   state: "connected" | "switched" | "disconnected";
@@ -38,6 +52,7 @@ interface StreamEngineOptions {
   container: HTMLElement;
   keyboardControls: boolean;
   reserveControlChord: boolean;
+  playbackSettings?: PlaybackSettings;
   controllerSettings: Pick<
     AppSettings,
     "preferredControllerId" | "controllerDefaults" | "controllerProfiles"
@@ -62,6 +77,9 @@ export class XboxStreamEngine {
   >;
   private readonly video: HTMLVideoElement;
   private readonly audio: HTMLAudioElement;
+  private readonly frameMetrics: FrameMetricsTracker;
+  private readonly inputBuffer = new InputTransitionBuffer();
+  private playbackSettings?: PlaybackSettings;
   private readonly localCandidates: IceCandidatePayload[] = [];
   private readonly localCandidateKeys = new Set<string>();
   private readonly pressedKeys = new Set<string>();
@@ -72,7 +90,6 @@ export class XboxStreamEngine {
   private inputSuspended = false;
   private sequence = 0;
   private lastInputAt = 0;
-  private lastInputSignature = "";
   private inputTimer = 0;
   private neutralPending = false;
   private handshakeAcknowledged = false;
@@ -88,7 +105,9 @@ export class XboxStreamEngine {
   private previousPacketsLost = 0;
   private previousStatsAt = 0;
   private activeGamepadIndex?: number;
+  private activeGamepadId = "";
   private activeGamepadLabel = "";
+  private sampledInput = false;
 
   constructor(private readonly options: StreamEngineOptions) {
     this.channels = {
@@ -137,6 +156,11 @@ export class XboxStreamEngine {
     this.audio.autoplay = true;
     this.audio.setAttribute("aria-hidden", "true");
     options.container.replaceChildren(this.video, this.audio);
+    this.setPlaybackSettings(
+      options.playbackSettings ?? defaultPlaybackSettings,
+    );
+    this.frameMetrics = new FrameMetricsTracker(this.video);
+    this.frameMetrics.start(document.visibilityState === "visible");
 
     this.peer.addTransceiver("audio", { direction: "sendrecv" });
     const videoTransceiver = this.peer.addTransceiver("video", {
@@ -166,7 +190,10 @@ export class XboxStreamEngine {
 
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
-    window.addEventListener("blur", this.releaseInput);
+    window.addEventListener("blur", this.onBlur);
+    window.addEventListener("focus", this.updateInputPolling);
+    window.addEventListener("gamepadconnected", this.onGamepadChange);
+    window.addEventListener("gamepaddisconnected", this.onGamepadChange);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
@@ -236,10 +263,7 @@ export class XboxStreamEngine {
         () => void this.collectTelemetry(),
         NETWORK_POLICY.telemetryIntervalMs,
       );
-      this.inputTimer = window.setInterval(
-        this.inputLoop,
-        NETWORK_POLICY.inputPollMs,
-      );
+      this.updateInputPolling();
     } catch (error) {
       if (this.destroyed) return;
       this.notifyError(streamErrorMessage(error));
@@ -250,7 +274,79 @@ export class XboxStreamEngine {
     if (suspended === this.inputSuspended) return;
     this.inputSuspended = suspended;
     if (suspended) this.releaseInput();
+    this.updateInputPolling();
   }
+
+  setPlaybackSettings(settings: PlaybackSettings): void {
+    if (
+      this.playbackSettings?.volume === settings.volume &&
+      this.playbackSettings.muted === settings.muted &&
+      this.playbackSettings.videoFit === settings.videoFit &&
+      this.playbackSettings.inputPolling === settings.inputPolling
+    )
+      return;
+    const pollingChanged =
+      this.playbackSettings?.inputPolling !== settings.inputPolling;
+    this.playbackSettings = { ...settings };
+    this.audio.volume = settings.volume;
+    this.audio.muted = settings.muted;
+    this.video.style.objectFit =
+      settings.videoFit === "fill" ? "cover" : "contain";
+    if (pollingChanged) this.updateInputPolling();
+  }
+
+  setControllerSettings(
+    settings: StreamEngineOptions["controllerSettings"],
+  ): void {
+    const relevant = (value: StreamEngineOptions["controllerSettings"]) =>
+      JSON.stringify([
+        value.preferredControllerId,
+        value.controllerDefaults,
+        value.controllerProfiles,
+      ]);
+    if (relevant(settings) === relevant(this.options.controllerSettings))
+      return;
+    this.options.controllerSettings = settings;
+    // A live mapping/profile change must not leave old logical buttons held.
+    this.releaseInput();
+  }
+
+  private updateInputPolling = (): void => {
+    clearInterval(this.inputTimer);
+    this.inputTimer = 0;
+    if (this.destroyed || (!this.inputActive && !this.neutralPending)) return;
+    if (this.terminal && !this.neutralPending) return;
+    const active =
+      !this.terminal &&
+      !this.inputSuspended &&
+      document.hasFocus() &&
+      document.visibilityState === "visible";
+    // Paused/hidden streams only retry neutral. Wake promptly on focus/visibility.
+    if (!active && !this.neutralPending) return;
+    const idle =
+      this.sampledInput &&
+      this.activeGamepadIndex === undefined &&
+      this.pressedKeys.size === 0;
+    this.inputTimer = window.setInterval(
+      this.inputLoop,
+      active && !idle
+        ? this.playbackSettings?.inputPolling === "efficient"
+          ? 8
+          : 4
+        : 50,
+    );
+  };
+
+  private onBlur = (): void => {
+    this.releaseInput();
+    this.updateInputPolling();
+  };
+
+  private onGamepadChange = (): void => {
+    this.sampledInput = false;
+    this.updateInputPolling();
+    this.inputLoop();
+  };
 
   destroy(): void {
     if (this.destroyed) return;
@@ -262,9 +358,15 @@ export class XboxStreamEngine {
     clearTimeout(this.disconnectedTimer);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
-    window.removeEventListener("blur", this.releaseInput);
+    window.removeEventListener("blur", this.onBlur);
+    window.removeEventListener("focus", this.updateInputPolling);
+    window.removeEventListener("gamepadconnected", this.onGamepadChange);
+    window.removeEventListener("gamepaddisconnected", this.onGamepadChange);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     this.releaseInput();
+    this.inputBuffer.clear();
+    this.neutralPending = false;
+    this.frameMetrics.stop();
     Object.values(this.channels).forEach((channel) => channel.close());
     this.peer.getReceivers().forEach((receiver) => receiver.track?.stop());
     this.peer.close();
@@ -389,6 +491,7 @@ export class XboxStreamEngine {
     packet.setUint8(14, Math.max(1, navigator.maxTouchPoints));
     this.channels.input.send(packet);
     this.inputActive = true;
+    this.updateInputPolling();
   }
 
   private sendClientConfiguration(): void {
@@ -445,11 +548,13 @@ export class XboxStreamEngine {
   }
 
   private inputLoop = (): void => {
-    if (this.destroyed || this.terminal) return;
+    if (this.destroyed) return;
     if (this.neutralPending && this.inputActive) {
       if (!this.sendInputFrame(emptyXboxInputFrame())) return;
       this.neutralPending = false;
+      this.updateInputPolling();
     }
+    if (this.terminal) return;
     if (
       this.inputActive &&
       !this.inputSuspended &&
@@ -474,7 +579,12 @@ export class XboxStreamEngine {
     )
       return;
     const gamepad = this.resolveGamepad();
-    const update = chooseInputUpdate(
+    if (!this.sampledInput) {
+      this.sampledInput = true;
+      this.updateInputPolling();
+    }
+    if (this.neutralPending) return;
+    const frame =
       readInputFrame(
         gamepad,
         this.pressedKeys,
@@ -482,19 +592,33 @@ export class XboxStreamEngine {
           ? tuningForGamepad(this.options.controllerSettings, gamepad)
           : undefined,
         this.options.reserveControlChord,
-      ),
-      this.lastInputSignature,
-      heartbeatDue,
+      ) ?? emptyXboxInputFrame();
+    const now = performance.now();
+    const failure =
+      this.inputBuffer.observe(frame, now) ??
+      this.inputBuffer.flush(
+        now,
+        (next) => {
+          if (!this.sendInputFrame(next)) return false;
+          this.lastInputAt = now;
+          return true;
+        },
+        heartbeatDue,
+      );
+    if (failure) this.failInputBuffer(failure);
+  }
+
+  private failInputBuffer(reason: InputBufferFailure): void {
+    this.notifyError(
+      reason === "overflow"
+        ? "Controller input congestion exceeded 32 queued button/trigger transitions. The stream stopped to avoid losing controls; reconnect to continue."
+        : "Controller input was delayed over 250 ms. The stream stopped rather than replaying stale controls; reconnect to continue.",
     );
-    if (!update) return;
-    if (!this.sendInputFrame(update.frame)) return;
-    this.lastInputSignature = update.signature;
-    this.lastInputAt = performance.now();
   }
 
   private sendInputFrame(frame: InputFrame): boolean {
-    // Do not enqueue historical stick positions behind a congested SCTP send queue.
-    // The next poll reads fresh state; a release is retried even while unfocused.
+    // The bounded digital buffer sits above SCTP; never add historical analog
+    // positions to the browser's reliable, ordered transport queue.
     if (
       this.channels.input.readyState !== "open" ||
       this.channels.input.bufferedAmount > 0
@@ -517,13 +641,16 @@ export class XboxStreamEngine {
 
   private releaseInput = (): void => {
     this.pressedKeys.clear();
+    this.inputBuffer.clear();
     if (this.inputActive)
       this.neutralPending = !this.sendInputFrame(emptyXboxInputFrame());
-    this.lastInputSignature = "";
+    this.updateInputPolling();
   };
 
   private onVisibilityChange = (): void => {
     if (document.visibilityState !== "visible") this.releaseInput();
+    this.frameMetrics.setVisible(document.visibilityState === "visible");
+    this.updateInputPolling();
   };
 
   private onKeyDown = (event: KeyboardEvent): void => {
@@ -539,6 +666,7 @@ export class XboxStreamEngine {
       return;
     }
     this.pressedKeys.add(event.code);
+    this.updateInputPolling();
     this.sendCurrentInput();
     event.preventDefault();
   };
@@ -547,6 +675,7 @@ export class XboxStreamEngine {
     if (!this.options.keyboardControls || !isKeyboardControlCode(event.code))
       return;
     this.pressedKeys.delete(event.code);
+    this.updateInputPolling();
     if (this.inputSuspended) return;
     this.sendCurrentInput();
     event.preventDefault();
@@ -591,13 +720,18 @@ export class XboxStreamEngine {
       this.options.controllerSettings.preferredControllerId,
       previousIndex,
     );
-    if (gamepad?.index === previousIndex) return gamepad;
+    if (
+      gamepad?.index === previousIndex &&
+      (gamepad?.id ?? "") === this.activeGamepadId
+    )
+      return gamepad;
     if (previousIndex !== undefined && this.inputActive) {
-      this.neutralPending = !this.sendInputFrame(emptyXboxInputFrame());
-      this.lastInputSignature = "";
+      this.releaseInput();
     }
     this.activeGamepadIndex = gamepad?.index;
+    this.activeGamepadId = gamepad?.id ?? "";
     this.activeGamepadLabel = gamepad ? friendlyControllerName(gamepad.id) : "";
+    this.updateInputPolling();
     if (gamepad) {
       this.options.onControllerStatus({
         state: previousIndex === undefined ? "connected" : "switched",
@@ -613,11 +747,11 @@ export class XboxStreamEngine {
   }
 
   private async collectTelemetry(): Promise<void> {
-    if (this.destroyed || this.telemetryCollecting) return;
+    if (this.destroyed || this.terminal || this.telemetryCollecting) return;
     this.telemetryCollecting = true;
     try {
       const reports = await this.peer.getStats();
-      if (this.destroyed) return;
+      if (this.destroyed || this.terminal) return;
       let resolution = "Waiting for video";
       let fps = 0;
       let rtt = 0;
@@ -712,6 +846,7 @@ export class XboxStreamEngine {
             )
           : undefined,
         inputQueueBytes: this.channels.input.bufferedAmount,
+        ...this.frameMetrics.snapshot(videoReport),
         networkQuality: assessNetworkQuality(rtt, packetLoss, fps),
         updatedAt: Date.now(),
       });
@@ -741,17 +876,23 @@ export class XboxStreamEngine {
   private notifyInterrupted(): void {
     if (this.destroyed || this.terminal) return;
     this.terminal = true;
+    this.releaseInput();
+    this.frameMetrics.stop();
     clearTimeout(this.disconnectedTimer);
     clearInterval(this.keepaliveTimer);
+    clearInterval(this.telemetryTimer);
     this.options.onInterrupted();
   }
 
   private notifyError(message: string): void {
     if (this.destroyed || this.terminal) return;
     this.terminal = true;
+    this.releaseInput();
+    this.frameMetrics.stop();
     clearTimeout(this.connectionDeadlineTimer);
     clearTimeout(this.disconnectedTimer);
     clearInterval(this.keepaliveTimer);
+    clearInterval(this.telemetryTimer);
     this.options.onError(message);
   }
 
@@ -911,7 +1052,10 @@ function normalizeAxis(value: number): number {
 }
 
 function normalizeTrigger(value: number): number {
-  return Math.max(0, Math.min(65_535, Math.round(value * 65_535)));
+  return Math.max(
+    value > 0 ? 1 : 0,
+    Math.min(65_535, Math.round(value * 65_535)),
+  );
 }
 
 function withTeredoFallback(

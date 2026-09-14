@@ -28,6 +28,10 @@ describe("Xbox input protocol", () => {
     );
     expect(decoded).toEqual({ address: "192.0.2.45", port: 40_000 });
   });
+  it("preserves a positive tuned trigger edge at minimum wire precision", () => {
+    const bytes = encodeGamepadPacketForTest({ RightTrigger: 0.000001 });
+    expect(new DataView(bytes.buffer).getUint16(28, true)).toBe(1);
+  });
 
   it("sends one neutral frame when the active controller disappears", () => {
     const active = streamProtocolTestUtils.chooseInputUpdate({ A: 1 });

@@ -81,3 +81,17 @@ light or dark sculpted console silhouette, with a single rounded stage and no
 colored side stripe. Authentication uses the same rounded panel geometry and
 circular step markers. Compact 960×600 windows reduce the console illustration
 and stage height; the main 1280×800 composition retains generous spacing.
+
+## Stream controls
+
+Quick settings appear only while Afterglide has captured local controls. Use one
+legible panel over the video, not nested cards. Audio, fit/fill, and input-polling
+choices use the existing button and focus vocabulary; visible state and labels
+must not depend on color alone. Fit preserves the full image, while Fill clearly
+discloses cropping. Smaller windows scroll the panel without hiding focused
+controls or the route back to play.
+
+Recovery copy distinguishes waiting for the network from attempting a new
+connection and keeps End session available. It must not promise that a cloud game
+will survive a replacement session. Diagnostic values show unavailable data
+explicitly; performance export remains a deliberate local save action.

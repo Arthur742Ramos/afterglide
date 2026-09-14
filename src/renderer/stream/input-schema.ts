@@ -139,12 +139,16 @@ export function applyKeyboardInput(
     const name = digitalKeyboardMap[code];
     if (name) frame[name] = 1;
   });
-  frame.LeftThumbXAxis = axis(codes, "KeyA", "KeyD");
-  frame.LeftThumbYAxis = axis(codes, "KeyW", "KeyS");
-  frame.RightThumbXAxis = axis(codes, "KeyJ", "KeyL");
-  frame.RightThumbYAxis = axis(codes, "KeyI", "KeyK");
-  frame.LeftTrigger = codes.has("KeyZ") ? 1 : 0;
-  frame.RightTrigger = codes.has("KeyC") ? 1 : 0;
+  if (codes.has("KeyA") || codes.has("KeyD"))
+    frame.LeftThumbXAxis = axis(codes, "KeyA", "KeyD");
+  if (codes.has("KeyW") || codes.has("KeyS"))
+    frame.LeftThumbYAxis = axis(codes, "KeyW", "KeyS");
+  if (codes.has("KeyJ") || codes.has("KeyL"))
+    frame.RightThumbXAxis = axis(codes, "KeyJ", "KeyL");
+  if (codes.has("KeyI") || codes.has("KeyK"))
+    frame.RightThumbYAxis = axis(codes, "KeyI", "KeyK");
+  if (codes.has("KeyZ")) frame.LeftTrigger = 1;
+  if (codes.has("KeyC")) frame.RightTrigger = 1;
 }
 
 function axis(

@@ -124,12 +124,46 @@ See [ADR 0001](adr/0001-electron-webrtc-desktop.md) for the stack decision.
 
 ## Latency and input scheduling
 
-Controller sampling targets a 4 ms interval independently of rendering. Input
-frames are only queued when the SCTP send queue is empty; neutral releases are
-retried while focus or overlay capture suspends gameplay. Input activation waits
-for both channels and the message handshake. Receiver buffering uses the standard
+Controller sampling targets a 4 ms interval independently of rendering, with an
+optional 8 ms mode for measured power/latency comparisons. Input frames are only
+sent when the SCTP send queue is empty. A bounded transition buffer preserves
+short button and trigger presses across temporary congestion without queuing historical
+analog positions; neutral releases take priority and remain retryable while
+focus or overlay capture suspends gameplay. Input activation waits for both
+channels and the message handshake. Receiver buffering uses the standard
 interactive playout hint where supported. Health exposes interval decode and
 buffer measurements, while Ping explicitly means network round trip.
+
+Playback preferences are validated and persisted by the main process, then
+applied to the existing media engine without renegotiating. Volume/mute affect
+the audio element; fit/fill controls contain/cover on the video surface.
+Controller profile changes also update the active engine rather than leaving
+stale constructor settings behind.
+
+## Performance evidence and recovery
+
+The main process sanitizes renderer telemetry and retains a bounded performance
+history separate from the visible snapshot. Reports survive End session but are
+reset by a fresh launch; automatic reconnections retain the history. The export
+IPC accepts no path from the renderer: Electron's native save dialog selects the
+destination, and the main process writes only the curated report. Authentication
+data, Xbox session identifiers, console names, and controller profiles are never
+included. No report is uploaded automatically.
+
+While streaming, a five-second sampler records Electron process CPU usage and,
+on Linux, read-only battery/thermal sysfs values. Unsupported sources and sensor
+failures are marked unavailable. Device readings carry their own timestamp so
+repeated samples are not counted as independent measurements. Configuration
+changes clear cached device readings. Reports group summary statistics by
+resolution and polling mode and label simulated adapters explicitly.
+
+Operating-system resume publishes one interruption for an established stream;
+late events cannot turn a recovering session back into a connected one. The
+renderer manages bounded recovery attempts and waits for network availability.
+Retrying creates a new Xbox session and does not guarantee preservation of a
+cloud game. Main-process generation checks prevent an awaited stop from starting
+another stream after the user has left, and late provisioning results are
+cleaned up. Recovery timing ends at playable video, not at successful signaling.
 
 See [streaming performance](STREAMING-PERFORMANCE.md) for limitations and the
 repeatable comparison protocol required before a market-leading claim.

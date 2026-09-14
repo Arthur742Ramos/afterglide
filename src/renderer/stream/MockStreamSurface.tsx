@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import type { StreamTelemetry } from "../../shared/contracts";
+import type { PlaybackSettings } from "./stream-engine";
 
 interface Props {
   reducedMotion: boolean;
   inputSuspended: boolean;
+  playbackSettings: PlaybackSettings;
   onConnected: () => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
 }
@@ -11,6 +13,7 @@ interface Props {
 export function MockStreamSurface({
   reducedMotion,
   inputSuspended,
+  playbackSettings,
   onConnected,
   onTelemetry,
 }: Props) {
@@ -39,18 +42,36 @@ export function MockStreamSurface({
 
   return (
     <div
-      className={`mock-stream ${reducedMotion ? "reduced" : ""}`}
-      data-testid="mock-stream"
-      data-input-suspended={inputSuspended}
-      role="img"
-      aria-label="Test remote-play video"
+      className="stream-media"
+      style={{ containerType: "size", background: "#000" }}
     >
-      <div className="mock-sky" />
-      <div className="mock-sun" />
-      <div className="mock-ridge ridge-back" />
-      <div className="mock-ridge ridge-front" />
-      <div className="mock-road" />
-      <div className="mock-stars" />
+      <div
+        className={`mock-stream ${reducedMotion ? "reduced" : ""}`}
+        data-testid="mock-stream"
+        data-input-suspended={inputSuspended}
+        data-video-fit={playbackSettings.videoFit}
+        data-volume={playbackSettings.volume}
+        data-muted={playbackSettings.muted}
+        data-input-polling={playbackSettings.inputPolling}
+        style={
+          playbackSettings.videoFit === "fit"
+            ? {
+                width: "min(100cqw, calc(100cqh * 16 / 9))",
+                height: "min(100cqh, calc(100cqw * 9 / 16))",
+                margin: "auto",
+              }
+            : undefined
+        }
+        role="img"
+        aria-label="Test remote-play video"
+      >
+        <div className="mock-sky" />
+        <div className="mock-sun" />
+        <div className="mock-ridge ridge-back" />
+        <div className="mock-ridge ridge-front" />
+        <div className="mock-road" />
+        <div className="mock-stars" />
+      </div>
     </div>
   );
 }

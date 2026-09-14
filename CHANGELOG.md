@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Preserve bounded button and trigger edges during input congestion while keeping
+  analog movement fresh and giving neutral releases priority.
+- Add presented-frame cadence percentiles, dropped-frame and freeze diagnostics,
+  with unavailable measurements kept distinct from zero.
+- Add controller-accessible in-stream audio, fit/fill, and 4 ms / 8 ms input
+  polling preferences that apply without restarting the stream.
+- Bound automatic recovery, cancel stale retries when leaving, and detect
+  operating-system resume without promising cloud-game preservation.
+- Export local, identifier-free performance histories and configuration-grouped
+  summaries with Electron CPU usage and supported Linux battery/thermal sensors.
+
+Physical Steam Deck power, hardware decoding, live service recovery, and
+competitor latency comparisons remain unverified; automated fixtures are not
+evidence of market-leading performance.
+
 ## 0.3.0-alpha.1 — 2026-09-13
 
 This first public prerelease makes Afterglide installable without a development
