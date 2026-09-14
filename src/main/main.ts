@@ -19,7 +19,15 @@ import { AppController } from "./app-controller";
 import { LivePlatformService } from "./live-platform-service";
 import { MockPlatformService } from "./mock-platform-service";
 import type { PlatformService } from "./platform-service";
-import { canPersistSecurely, SecureTokenStore } from "./secure-token-store";
+import {
+  GitHubReleaseChecker,
+  isAfterglideReleaseUrl,
+} from "./release-checker";
+import type { ReleaseCheckPort } from "./release-checker";
+import {
+  getCredentialStorageInfo,
+  SecureTokenStore,
+} from "./secure-token-store";
 import { SettingsStore } from "./settings-store";
 
 app.commandLine.appendSwitch("enable-accelerated-video-decode");
@@ -54,12 +62,29 @@ app.whenReady().then(async () => {
         new SecureTokenStore(join(userData, "auth.tokens")),
       );
   const preferences = new SettingsStore(join(userData, "preferences.json"));
+  if (isTest && process.env.AFTERGLIDE_E2E_ONBOARDING !== "show")
+    preferences.updateSettings({ onboardingComplete: true });
   const hardware = await readHardwareInfo();
+  const releaseChecker: ReleaseCheckPort | undefined = isTest
+    ? process.env.AFTERGLIDE_E2E_SCENARIO === "update-available"
+      ? {
+          check: async () => ({
+            status: "available",
+            checkedAt: Date.now(),
+            version: "0.3.0-alpha.2",
+            releaseUrl:
+              "https://github.com/Arthur742Ramos/afterglide/releases/tag/v0.3.0-alpha.2",
+            publishedAt: "2026-09-14T12:00:00Z",
+          }),
+        }
+      : undefined
+    : new GitHubReleaseChecker();
   controller = new AppController(
     platform,
     preferences,
     hardware,
     app.getVersion(),
+    releaseChecker,
   );
 
   registerIpc(controller);
@@ -67,6 +92,13 @@ app.whenReady().then(async () => {
   mainWindow = createWindow(preferences.settings.launchFullscreen);
   controller.attachWindow(mainWindow);
   await controller.initialize();
+  if (releaseChecker) {
+    const updateTimer = setTimeout(
+      () => void controller?.checkForUpdates(),
+      750,
+    );
+    updateTimer.unref();
+  }
 });
 
 app.on("window-all-closed", () => app.quit());
@@ -177,6 +209,7 @@ function registerIpc(appController: AppController): void {
   handle(IPC.updateSettings, (settings: Partial<AppSettings>) =>
     appController.updateSettings(settings),
   );
+  handle(IPC.checkForUpdates, () => appController.checkForUpdates());
   handle(IPC.setFullscreen, (fullscreen: boolean) =>
     mainWindow?.setFullScreen(Boolean(fullscreen)),
   );
@@ -186,13 +219,13 @@ function registerIpc(appController: AppController): void {
   );
   handle(IPC.openExternal, async (url: string) => {
     const parsed = new URL(url);
-    const allowed =
+    const microsoft =
       parsed.protocol === "https:" &&
       ["microsoft.com", "www.microsoft.com", "login.live.com"].includes(
         parsed.hostname,
       );
-    if (!allowed)
-      throw new Error("Only Microsoft sign-in links can be opened.");
+    if (!microsoft && !isAfterglideReleaseUrl(parsed.toString()))
+      throw new Error("This external link is not allowed.");
     await shell.openExternal(parsed.toString());
   });
   handle(IPC.testNetworkDrop, () => appController.simulateNetworkDrop());
@@ -239,10 +272,12 @@ async function readHardwareInfo(): Promise<HardwareInfo> {
   } catch {
     // The feature status still provides useful evidence on unsupported drivers.
   }
+  const credentialStorage = getCredentialStorageInfo();
   return {
     acceleration,
     videoDecode: decode,
     gpu,
-    secureStorage: canPersistSecurely(),
+    secureStorage: credentialStorage.secure,
+    credentialStorage: credentialStorage.storage,
   };
 }

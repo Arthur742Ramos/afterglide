@@ -119,7 +119,13 @@ export function App() {
         ? `${page}:${snapshot?.cloud.status}`
         : page;
   useControllerNavigation(
-    Boolean(snapshot && signedIn && !inStream && !isConnecting(snapshot)),
+    Boolean(
+      snapshot &&
+      signedIn &&
+      snapshot.settings.onboardingComplete &&
+      !inStream &&
+      !isConnecting(snapshot),
+    ),
     focusScope,
     snapshot?.settings.preferredControllerId,
   );
@@ -189,6 +195,16 @@ export function App() {
   }
   if (snapshot.auth.status === "waiting") {
     return <DeviceCodeScreen snapshot={snapshot} />;
+  }
+  if (!snapshot.settings.onboardingComplete) {
+    return (
+      <ReadinessScreen
+        snapshot={snapshot}
+        onComplete={() =>
+          void window.afterglide.updateSettings({ onboardingComplete: true })
+        }
+      />
+    );
   }
   if (snapshot.session.phase === "error") {
     return (
@@ -408,6 +424,158 @@ function DeviceCodeScreen({ snapshot }: { snapshot: AppSnapshot }) {
   );
 }
 
+function ReadinessScreen({
+  snapshot,
+  onComplete,
+}: {
+  snapshot: AppSnapshot;
+  onComplete: () => void;
+}) {
+  const controllers = useControllerDiagnostics();
+  const selectedConsole = snapshot.consoles.find(
+    (console) => console.id === snapshot.selectedConsoleId,
+  );
+  const readyConsole = [selectedConsole, ...snapshot.consoles].find(
+    (console) => console?.remotePlayEnabled && console.remoteManagementEnabled,
+  );
+  const cloudReady =
+    snapshot.cloud.status === "ready" && snapshot.cloud.available;
+  const consoleCheck =
+    snapshot.consolesStatus === "loading" || snapshot.cloud.status === "loading"
+      ? {
+          state: "checking" as const,
+          title: "Checking where you can play",
+          detail: "Console and cloud discovery are still running.",
+        }
+      : readyConsole && cloudReady
+        ? {
+            state: "ready" as const,
+            title: readyConsole.name,
+            detail: "Your console and cloud library are ready.",
+          }
+        : readyConsole
+          ? {
+              state: "ready" as const,
+              title: readyConsole.name,
+              detail:
+                snapshot.cloud.status === "unavailable"
+                  ? "Console play is ready. Cloud play is unavailable for this account or region."
+                  : "Console play is ready. Cloud availability could not be confirmed.",
+            }
+          : cloudReady
+            ? {
+                state: "ready" as const,
+                title: "Cloud library ready",
+                detail:
+                  "Cloud play is available. No remote-play-ready console was found yet.",
+              }
+            : snapshot.consoles.length > 0
+              ? {
+                  state: "attention" as const,
+                  title: "Remote features need attention",
+                  detail:
+                    "Enable Xbox remote features, or continue if you only want cloud play later.",
+                }
+              : {
+                  state: "attention" as const,
+                  title: "No console found yet",
+                  detail:
+                    "You can continue now and refresh from Home after your Xbox is ready.",
+                };
+  useControllerNavigation(true, `${consoleCheck.state}:${controllers.length}`);
+
+  return (
+    <main className="readiness-screen">
+      <header className="readiness-header">
+        <BrandLockup />
+        <button className="text-action" data-focusable onClick={onComplete}>
+          Skip for now
+        </button>
+      </header>
+      <section className="readiness-panel">
+        <div className="readiness-copy">
+          <p className="eyebrow">ONE QUICK CHECK</p>
+          <h1>Ready for your first stream.</h1>
+          <p>
+            These are the three things worth checking. You can change or recheck
+            them later in Settings and Health.
+          </p>
+        </div>
+        <div className="readiness-checks" aria-live="polite">
+          <ReadinessCheck
+            icon="console"
+            label="Play destinations"
+            {...consoleCheck}
+          />
+          <ReadinessCheck
+            icon="shield"
+            label="Sign-in storage"
+            state={snapshot.hardware.secureStorage ? "ready" : "attention"}
+            title={snapshot.hardware.credentialStorage.backend}
+            detail={snapshot.hardware.credentialStorage.detail}
+          />
+          <ReadinessCheck
+            icon="controller"
+            label="Controller"
+            state={controllers.length > 0 ? "ready" : "attention"}
+            title={
+              controllers.length > 0
+                ? controllers[0].name
+                : "No controller detected"
+            }
+            detail={
+              controllers.length > 0
+                ? "Controller input is available."
+                : "Wake a controller now, or connect one when you’re ready to play."
+            }
+          />
+        </div>
+        <div className="readiness-actions">
+          <button
+            className="primary-action"
+            data-focusable
+            data-autofocus
+            onClick={onComplete}
+          >
+            Continue to Afterglide <ControllerHint label="A" />
+          </button>
+          <span>Nothing here blocks setup.</span>
+        </div>
+      </section>
+      <p className="legal-line">
+        Afterglide is not affiliated with Microsoft, Xbox, Valve, or Steam.
+      </p>
+    </main>
+  );
+}
+
+function ReadinessCheck({
+  icon,
+  label,
+  state,
+  title,
+  detail,
+}: {
+  icon: IconName;
+  label: string;
+  state: "checking" | "ready" | "attention";
+  title: string;
+  detail: string;
+}) {
+  return (
+    <article className={`readiness-check ${state}`}>
+      <div className="readiness-check-icon">
+        <Icon name={state === "ready" ? "check" : icon} />
+      </div>
+      <div>
+        <span>{label}</span>
+        <strong>{title}</strong>
+        <p>{detail}</p>
+      </div>
+    </article>
+  );
+}
+
 function Shell({
   snapshot,
   page,
@@ -455,9 +623,25 @@ function Shell({
       <div className="shell-main">
         <header className="shell-header">
           <BrandWord />
-          <div className="account-ready">
-            <Icon name="shield" />
-            <span>Account connected</span>
+          <div className="shell-status">
+            {snapshot.update.status === "available" &&
+              snapshot.update.releaseUrl && (
+                <button
+                  className="update-pill"
+                  data-focusable
+                  onClick={() =>
+                    void window.afterglide.openExternal(
+                      snapshot.update.releaseUrl!,
+                    )
+                  }
+                >
+                  <Icon name="refresh" /> Update {snapshot.update.version}
+                </button>
+              )}
+            <div className="account-ready">
+              <Icon name="shield" />
+              <span>Account connected</span>
+            </div>
           </div>
         </header>
         {children}
@@ -1392,14 +1576,13 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
         <DiagnosticRow
           icon="shield"
           label="Credential storage"
-          value={
-            snapshot.hardware.secureStorage
-              ? "OS encryption active"
-              : "Session only"
-          }
+          value={snapshot.hardware.credentialStorage.backend}
           state={snapshot.hardware.secureStorage ? "good" : "attention"}
         />
       </div>
+      <p className="credential-note">
+        <Icon name="shield" /> {snapshot.hardware.credentialStorage.detail}
+      </p>
       <button
         className="secondary-action refresh-health"
         data-focusable
@@ -1434,6 +1617,16 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
       (profile) => profile.id === preferredId,
     ),
   );
+  const updateDetail =
+    snapshot.update.status === "available"
+      ? `Version ${snapshot.update.version} is ready on GitHub.`
+      : snapshot.update.status === "checking"
+        ? "Checking the official GitHub releases now."
+        : snapshot.update.status === "current"
+          ? `Version ${snapshot.version} is current.`
+          : snapshot.update.status === "error"
+            ? (snapshot.update.error ?? "The update check failed.")
+            : "Check the official GitHub releases for a newer build.";
   const updateControllerTuning = (change: Partial<ControllerTuning>) => {
     if (!preferredId) {
       update({
@@ -1724,6 +1917,58 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
             label="Launch fullscreen"
             onChange={(value) => update({ launchFullscreen: value })}
           />
+        </SettingRow>
+        <SettingRow
+          icon="shield"
+          title="Credential storage"
+          detail={snapshot.hardware.credentialStorage.detail}
+        >
+          <span
+            className={`setting-status ${
+              snapshot.hardware.secureStorage ? "good" : "attention"
+            }`}
+          >
+            {snapshot.hardware.credentialStorage.backend}
+          </span>
+        </SettingRow>
+        <SettingRow
+          icon="refresh"
+          title="Software updates"
+          detail={updateDetail}
+        >
+          <button
+            className="secondary-action compact-action"
+            data-focusable
+            disabled={snapshot.update.status === "checking"}
+            onClick={() =>
+              snapshot.update.status === "available" &&
+              snapshot.update.releaseUrl
+                ? void window.afterglide.openExternal(
+                    snapshot.update.releaseUrl,
+                  )
+                : void window.afterglide.checkForUpdates()
+            }
+          >
+            {snapshot.update.status === "available"
+              ? "Open release"
+              : snapshot.update.status === "checking"
+                ? "Checking…"
+                : "Check now"}
+            {snapshot.update.status === "available" && <Icon name="external" />}
+          </button>
+        </SettingRow>
+        <SettingRow
+          icon="check"
+          title="First-run check"
+          detail="Review Xbox, credential storage, and controller readiness again."
+        >
+          <button
+            className="secondary-action compact-action"
+            data-focusable
+            onClick={() => update({ onboardingComplete: false })}
+          >
+            Review setup
+          </button>
         </SettingRow>
       </div>
       <div className="account-row">

@@ -8,6 +8,7 @@ import {
 import { dirname } from "node:path";
 import { safeStorage } from "electron";
 import { TokenStore } from "xal-node";
+import type { HardwareInfo } from "../shared/contracts";
 
 /**
  * Keeps Microsoft refresh tokens outside the renderer and persists them only
@@ -52,12 +53,75 @@ export class SecureTokenStore extends TokenStore {
 }
 
 export function canPersistSecurely(): boolean {
-  if (!safeStorage.isEncryptionAvailable()) return false;
-  if (process.platform !== "linux") return true;
-  const backend = (
+  return getCredentialStorageInfo().secure;
+}
+
+export function getCredentialStorageInfo(): {
+  secure: boolean;
+  storage: HardwareInfo["credentialStorage"];
+} {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return {
+      secure: false,
+      storage: {
+        backend: "Unavailable",
+        detail:
+          process.platform === "linux"
+            ? "Unlock KDE Wallet or a Secret Service keyring, then restart Afterglide."
+            : "Unlock the operating system credential store, then restart Afterglide.",
+      },
+    };
+  }
+
+  if (process.platform === "darwin") {
+    return {
+      secure: true,
+      storage: {
+        backend: "macOS Keychain",
+        detail: "Your sign-in can be restored securely on this Mac.",
+      },
+    };
+  }
+  if (process.platform === "win32") {
+    return {
+      secure: true,
+      storage: {
+        backend: "Windows credential encryption",
+        detail: "Your sign-in can be restored securely on this PC.",
+      },
+    };
+  }
+
+  const selectedBackend = (
     safeStorage as typeof safeStorage & {
       getSelectedStorageBackend?: () => string;
     }
   ).getSelectedStorageBackend?.();
-  return backend !== "basic_text";
+  if (!selectedBackend || selectedBackend === "basic_text") {
+    return {
+      secure: false,
+      storage: {
+        backend:
+          selectedBackend === "basic_text"
+            ? "Session memory only"
+            : "Linux keyring unavailable",
+        detail:
+          "Enable and unlock KDE Wallet or a Secret Service keyring, then restart Afterglide.",
+      },
+    };
+  }
+
+  const names: Record<string, string> = {
+    gnome_libsecret: "Secret Service keyring",
+    kwallet: "KDE Wallet",
+    kwallet5: "KDE Wallet 5",
+    kwallet6: "KDE Wallet 6",
+  };
+  return {
+    secure: true,
+    storage: {
+      backend: names[selectedBackend] ?? selectedBackend,
+      detail: "Your sign-in can be restored securely on this device.",
+    },
+  };
 }

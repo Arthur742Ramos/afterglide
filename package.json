@@ -1,6 +1,6 @@
 {
   "name": "afterglide",
-  "version": "0.2.0",
+  "version": "0.3.0-alpha.1",
   "description": "A controller-first Xbox streaming client for Steam Deck and desktop",
   "desktopName": "afterglide",
   "license": "MIT",
@@ -18,14 +18,15 @@
     "clean": "rimraf dist test-results playwright-report",
     "start": "electron .",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"*.config.ts\" package.json tsconfig.json index.html README.md CONTRIBUTING.md docs/ARCHITECTURE.md docs/adr/0001-electron-webrtc-desktop.md packaging/flatpak/README.md THIRD_PARTY_NOTICES.md .github/workflows/ci.yml .github/dependabot.yml",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"*.config.ts\" package.json tsconfig.json index.html README.md CONTRIBUTING.md docs/ARCHITECTURE.md docs/adr/0001-electron-webrtc-desktop.md packaging/flatpak/README.md THIRD_PARTY_NOTICES.md .github/workflows/ci.yml .github/dependabot.yml",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"*.config.ts\" package.json tsconfig.json index.html README.md PRODUCT.md CHANGELOG.md CONTRIBUTING.md docs/ARCHITECTURE.md docs/INSTALL.md docs/adr/0001-electron-webrtc-desktop.md packaging/flatpak/README.md THIRD_PARTY_NOTICES.md .github/workflows/ci.yml .github/workflows/release.yml .github/dependabot.yml",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"*.config.ts\" package.json tsconfig.json index.html README.md PRODUCT.md CHANGELOG.md CONTRIBUTING.md docs/ARCHITECTURE.md docs/INSTALL.md docs/adr/0001-electron-webrtc-desktop.md packaging/flatpak/README.md THIRD_PARTY_NOTICES.md .github/workflows/ci.yml .github/workflows/release.yml .github/dependabot.yml",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "package": "npm run build && electron-builder --dir",
     "package:linux": "npm run build && electron-builder --linux AppImage tar.gz --x64",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run build"
+    "check:installer": "bash -n packaging/install-steam-deck.sh tests/installer.test.sh && bash tests/installer.test.sh",
+    "verify": "npm run format:check && npm run check:installer && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "react": "19.2.8",

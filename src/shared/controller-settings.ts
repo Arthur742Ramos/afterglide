@@ -96,6 +96,10 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       typeof candidate.launchFullscreen === "boolean"
         ? candidate.launchFullscreen
         : defaultSettings.launchFullscreen,
+    onboardingComplete:
+      typeof candidate.onboardingComplete === "boolean"
+        ? candidate.onboardingComplete
+        : defaultSettings.onboardingComplete,
   };
 }
 
@@ -116,6 +120,7 @@ export function sanitizeSettingsUpdate(
     "showPerformance",
     "keyboardControls",
     "launchFullscreen",
+    "onboardingComplete",
   ] as const) {
     if (typeof update[key] === "boolean") allowed[key] = update[key];
   }

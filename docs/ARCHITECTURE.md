@@ -30,6 +30,13 @@ local application, new windows are denied, permission prompts are denied, and a
 Content Security Policy limits code and network origins. Microsoft sign-in links
 open through a hostname allowlist in the system browser.
 
+Release checks run in the main process against the project's official GitHub
+releases endpoint with a bounded timeout and response size. Stable builds consider
+stable releases; prerelease builds also consider newer prereleases. The renderer
+receives only a version, status, publication time, and canonical release URL.
+External navigation accepts that repository's exact release paths in addition to
+Microsoft sign-in hosts.
+
 ## Authentication
 
 Microsoft device-code authentication occurs in the main process through
@@ -37,6 +44,9 @@ Microsoft device-code authentication occurs in the main process through
 the renderer. Refresh tokens are persisted with Electron `safeStorage`, which
 uses the operating system's encryption service. When encryption is unavailable,
 tokens remain usable for the current process but are not written to disk.
+The snapshot also reports the selected backend in plain language. Linux's
+`basic_text` fallback is treated as session-only storage; KDE Wallet or a Secret
+Service keyring is required for persistent sign-in.
 
 ## Streaming
 

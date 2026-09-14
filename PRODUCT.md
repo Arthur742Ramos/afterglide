@@ -44,6 +44,16 @@ thumb, and memorable without becoming theatrical.
 3. Make connection state understandable without making the user diagnose a network.
 4. Measure latency, frame health, power, and recovery on real Steam Deck hardware.
 5. Reveal technical controls progressively and preserve strong automatic defaults.
+6. Make installation a verified player flow that does not require a development
+   toolchain, administrator access, or package-manager knowledge.
+
+## First-run experience
+
+Sign-in remains the only required setup action. Once it succeeds, Afterglide
+shows one optional readiness screen covering console remote features, credential
+storage, and controller detection. Continue and Skip both enter the product;
+the check can be reopened later. The app must never hold a user inside a tutorial
+or require every readiness item to pass before the home screen is usable.
 
 ## Accessibility & Inclusion
 

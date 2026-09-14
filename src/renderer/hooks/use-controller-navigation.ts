@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { selectController } from "../stream/controller-input";
 
 const actionKeys: Record<string, string> = {
@@ -64,8 +64,13 @@ export function useControllerNavigation(
   focusScope?: string,
   preferredControllerId = "",
 ): void {
+  const previousScope = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!enabled) return;
+    const scopeChanged =
+      previousScope.current !== undefined &&
+      previousScope.current !== focusScope;
+    previousScope.current = focusScope;
     const focusables = (): HTMLElement[] =>
       Array.from(
         document.querySelectorAll<HTMLElement>(
@@ -171,6 +176,11 @@ export function useControllerNavigation(
 
     const initial = window.setTimeout(() => {
       const items = focusables();
+      if (
+        !scopeChanged &&
+        items.includes(document.activeElement as HTMLElement)
+      )
+        return;
       (
         items.find((item) => item.hasAttribute("data-autofocus")) ?? items[0]
       )?.focus();

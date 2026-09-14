@@ -48,6 +48,8 @@ const api: StreamApi = {
     ipcRenderer.invoke(IPC.updateTelemetry, telemetry) as Promise<void>,
   updateSettings: (settings: Partial<AppSettings>) =>
     ipcRenderer.invoke(IPC.updateSettings, settings) as Promise<void>,
+  checkForUpdates: () =>
+    ipcRenderer.invoke(IPC.checkForUpdates) as Promise<void>,
   setFullscreen: (fullscreen) =>
     ipcRenderer.invoke(IPC.setFullscreen, fullscreen) as Promise<void>,
   quit: () => ipcRenderer.invoke(IPC.quit) as Promise<void>,

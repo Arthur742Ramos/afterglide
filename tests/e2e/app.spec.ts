@@ -27,7 +27,12 @@ test.afterEach(() => {
 });
 
 async function launch(
-  options: { signedIn?: boolean; scenario?: string; userData?: string } = {},
+  options: {
+    signedIn?: boolean;
+    scenario?: string;
+    userData?: string;
+    onboarding?: boolean;
+  } = {},
 ): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
   mkdirSync(screenshots, { recursive: true });
   const userData =
@@ -42,6 +47,7 @@ async function launch(
       AFTERGLIDE_E2E_SIGNED_IN: options.signedIn ? "1" : "0",
       AFTERGLIDE_E2E_SCENARIO: options.scenario ?? "happy",
       AFTERGLIDE_E2E_USER_DATA: userData,
+      AFTERGLIDE_E2E_ONBOARDING: options.onboarding ? "show" : "skip",
     },
   });
   const page = await app.firstWindow();
@@ -94,8 +100,8 @@ async function expectNoAccessibilityViolations(
   ).toEqual([]);
 }
 
-test("first run uses device-code auth and lands on the console stage", async () => {
-  const { app, page } = await launch();
+test("first run signs in, checks readiness, and lands on the console stage", async () => {
+  const { app, page } = await launch({ onboarding: true });
   try {
     await expect(
       page.getByRole("heading", { name: "Your Xbox. Wherever you land." }),
@@ -112,6 +118,27 @@ test("first run uses device-code auth and lands on the console stage", async () 
     ).toBeFocused();
     await expect(page.getByText("Waiting for Microsoft")).toBeVisible();
     await page.screenshot({ path: join(screenshots, "auth-1280x800.png") });
+    await expect(
+      page.getByRole("heading", { name: "Ready for your first stream." }),
+    ).toBeVisible();
+    await expect(page.getByText("Studio Series S")).toBeVisible();
+    await expect(page.getByText("Sign-in storage")).toBeVisible();
+    await expect(page.getByText("No controller detected")).toBeVisible();
+    await expectNoAccessibilityViolations(page, "first-run readiness");
+    await page.screenshot({
+      path: join(screenshots, "readiness-1280x800.png"),
+    });
+    await page.setViewportSize({ width: 960, height: 600 });
+    await page.screenshot({
+      path: join(screenshots, "readiness-960x600.png"),
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.getByRole("button", { name: /Continue to Afterglide/ }).click();
     await expect(
       page.getByRole("heading", { name: "Pick up where you left off." }),
     ).toBeVisible();
@@ -705,6 +732,13 @@ test("controller semantics navigate to health and settings persist in the shell"
     await expect(page.getByRole("button", { name: "720p" })).toHaveClass(
       /active/,
     );
+    await expect(
+      page.getByText("Credential storage", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Check now" }).click();
+    await expect(
+      page.getByText("Version 0.3.0-alpha.1 is current."),
+    ).toBeVisible();
     await page.screenshot({ path: join(screenshots, "settings-1280x800.png") });
     await page.getByRole("button", { name: "Home" }).click();
     await page.getByRole("button", { name: /Play now/ }).click();
@@ -723,6 +757,14 @@ test("controller semantics navigate to health and settings persist in the shell"
     await expect(
       page.getByRole("switch", { name: "Performance overlay" }),
     ).toHaveAttribute("aria-checked", "false");
+    await page.getByRole("button", { name: "Review setup" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Ready for your first stream." }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Skip for now" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Tuned to how you play." }),
+    ).toBeVisible();
   } finally {
     await app.close();
   }
@@ -801,6 +843,36 @@ test("controller diagnostics and device profiles are usable", async () => {
     await expect(diagnostics.getByText("PROFILE", { exact: true })).toHaveCount(
       0,
     );
+  } finally {
+    await app.close();
+  }
+});
+
+test("a compatible GitHub release is visible from the shell and settings", async () => {
+  const { app, page } = await launch({
+    signedIn: true,
+    scenario: "update-available",
+  });
+  try {
+    await expect(
+      page.getByRole("button", { name: "Update 0.3.0-alpha.2" }),
+    ).toBeVisible();
+    const update = await page.evaluate(
+      async () => (await window.afterglide.getSnapshot()).update,
+    );
+    expect(update).toMatchObject({
+      status: "available",
+      version: "0.3.0-alpha.2",
+      releaseUrl:
+        "https://github.com/Arthur742Ramos/afterglide/releases/tag/v0.3.0-alpha.2",
+    });
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(
+      page.getByRole("button", { name: "Open release" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Version 0.3.0-alpha.2 is ready on GitHub."),
+    ).toBeVisible();
   } finally {
     await app.close();
   }
@@ -1082,6 +1154,7 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
       },
       controllerProfiles: [],
       launchFullscreen: false,
+      onboardingComplete: true,
     });
 
     const externalError = await page.evaluate(async () => {
@@ -1092,9 +1165,7 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
         return error instanceof Error ? error.message : String(error);
       }
     });
-    expect(externalError).toContain(
-      "Only Microsoft sign-in links can be opened.",
-    );
+    expect(externalError).toContain("This external link is not allowed.");
 
     const originalUrl = page.url();
     await page.evaluate(() => window.location.assign("https://example.com"));

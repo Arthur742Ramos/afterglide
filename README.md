@@ -13,6 +13,25 @@ share WebRTC video/audio, controller input, rumble, telemetry, and recovery UI.
 
 ![Afterglide home screen](docs/images/home.png)
 
+## Install
+
+Download the Linux x86_64 AppImage from the
+[0.3.0 alpha 1 prerelease](https://github.com/Arthur742Ramos/afterglide/releases/tag/v0.3.0-alpha.1),
+or install it for your current Steam Deck/Linux user from Desktop Mode:
+
+```bash
+curl -fsSL https://github.com/Arthur742Ramos/afterglide/releases/download/v0.3.0-alpha.1/install-steam-deck.sh | bash
+```
+
+The installer needs no root access, Node.js, or npm. It verifies the published
+AppImage checksum and adds an application entry; running it again replaces the
+installed build. See the complete [Steam Deck installation guide](docs/INSTALL.md)
+for the Dolphin route, Gaming Mode setup, updates, and uninstall steps.
+
+This is an early preview. Automated desktop tests pass, but a real Microsoft
+account, live Xbox services, and physical Steam Deck hardware are still required
+to validate end-to-end compatibility and performance.
+
 ## What works
 
 - Microsoft device-code authentication in the system browser
@@ -35,7 +54,7 @@ remote-play-enabled Xbox; cloud streaming needs an eligible account and region.
 Hardware decode and power targets must be measured on the packaged Steam Deck
 build before the first supported release.
 
-## Run it
+## Develop from source
 
 Use Node.js 24 or newer:
 
@@ -87,6 +106,10 @@ have an official Steam configuration.
 The renderer never receives Microsoft or Xbox tokens. Afterglide persists a
 refresh token only when Electron reports a real OS encryption backend; Linux's
 `basic_text` fallback is rejected and leaves the session in memory only.
+
+After the first successful sign-in, a short optional check shows console remote
+features, the detected credential backend, and controller readiness. The same
+information remains available under Health and Settings.
 
 ## Verify it
 

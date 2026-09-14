@@ -14,6 +14,7 @@ import { sanitizeSettingsUpdate } from "../shared/controller-settings";
 import { NETWORK_POLICY } from "../shared/network-policy";
 import { errorForLog, safeError } from "./errors";
 import type { PlatformService, StreamTarget } from "./platform-service";
+import type { ReleaseCheckPort } from "./release-checker";
 import { SettingsStore } from "./settings-store";
 
 interface ActiveSession {
@@ -34,13 +35,15 @@ export class AppController {
   private connectionGeneration = 0;
   private authGeneration = 0;
   private lastTarget?: StreamTarget;
+  private updateCheck?: Promise<void>;
   private snapshot: AppSnapshot;
 
   constructor(
     private readonly platform: PlatformService,
     private readonly preferences: SettingsStore,
     hardware: HardwareInfo,
-    version: string,
+    private readonly version: string,
+    private readonly releaseChecker?: ReleaseCheckPort,
   ) {
     this.snapshot = {
       auth: { status: "restoring" },
@@ -56,6 +59,7 @@ export class AppController {
       settings: preferences.settings,
       telemetry: { ...emptyTelemetry },
       hardware,
+      update: { status: "idle" },
       environment: platform.mock ? "test" : "live",
       version,
     };
@@ -524,6 +528,22 @@ export class AppController {
   updateSettings(update: Partial<AppSettings>): void {
     const allowed = sanitizeSettingsUpdate(update, this.snapshot.settings);
     this.patch({ settings: this.preferences.updateSettings(allowed) });
+  }
+
+  checkForUpdates(): Promise<void> {
+    if (this.updateCheck) return this.updateCheck;
+    if (!this.releaseChecker) {
+      this.patch({ update: { status: "current", checkedAt: Date.now() } });
+      return Promise.resolve();
+    }
+    this.patch({ update: { status: "checking" } });
+    this.updateCheck = this.releaseChecker
+      .check(this.version)
+      .then((update) => this.patch({ update }))
+      .finally(() => {
+        this.updateCheck = undefined;
+      });
+    return this.updateCheck;
   }
 
   simulateNetworkDrop(): void {

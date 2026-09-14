@@ -89,6 +89,26 @@ export interface HardwareInfo {
   videoDecode: string;
   gpu: string;
   secureStorage: boolean;
+  credentialStorage: {
+    backend: string;
+    detail: string;
+  };
+}
+
+export type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "current"
+  | "available"
+  | "error";
+
+export interface UpdateSnapshot {
+  status: UpdateStatus;
+  checkedAt?: number;
+  version?: string;
+  releaseUrl?: string;
+  publishedAt?: string;
+  error?: string;
 }
 
 export type ControllerRumble = "off" | "low" | "full";
@@ -121,6 +141,7 @@ export interface AppSettings {
   controllerDefaults: ControllerTuning;
   controllerProfiles: ControllerProfile[];
   launchFullscreen: boolean;
+  onboardingComplete: boolean;
 }
 
 export interface AppSnapshot {
@@ -144,6 +165,7 @@ export interface AppSnapshot {
   settings: AppSettings;
   telemetry: StreamTelemetry;
   hardware: HardwareInfo;
+  update: UpdateSnapshot;
   environment: "live" | "test";
   version: string;
 }
@@ -190,6 +212,7 @@ export interface StreamApi {
   stopStream(): Promise<void>;
   updateTelemetry(telemetry: StreamTelemetry): Promise<void>;
   updateSettings(settings: Partial<AppSettings>): Promise<void>;
+  checkForUpdates(): Promise<void>;
   setFullscreen(fullscreen: boolean): Promise<void>;
   quit(): Promise<void>;
   onSnapshot(listener: (snapshot: AppSnapshot) => void): () => void;
@@ -219,6 +242,7 @@ export const defaultSettings: AppSettings = {
   controllerDefaults: { ...defaultControllerTuning },
   controllerProfiles: [],
   launchFullscreen: false,
+  onboardingComplete: false,
 };
 
 export const emptyTelemetry: StreamTelemetry = {
@@ -263,6 +287,7 @@ export const IPC = {
   stopStream: "afterglide:stop-stream",
   updateTelemetry: "afterglide:update-telemetry",
   updateSettings: "afterglide:update-settings",
+  checkForUpdates: "afterglide:check-for-updates",
   setFullscreen: "afterglide:set-fullscreen",
   quit: "afterglide:quit",
   testNetworkDrop: "afterglide:test-network-drop",

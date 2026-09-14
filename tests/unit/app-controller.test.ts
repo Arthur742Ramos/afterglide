@@ -114,6 +114,10 @@ function makeController(platform: FakePlatform) {
       videoDecode: "enabled",
       gpu: "test",
       secureStorage: true,
+      credentialStorage: {
+        backend: "Test keyring",
+        detail: "Test credentials persist securely.",
+      },
     },
     "test",
   );
