@@ -80,6 +80,9 @@ export interface StreamTelemetry {
   codec: string;
   connection: "local" | "remote" | "unknown";
   videoDecoder: string;
+  decodeMs?: number;
+  jitterBufferMs?: number;
+  inputQueueBytes?: number;
   networkQuality: "measuring" | "excellent" | "good" | "unstable";
   updatedAt: number;
 }

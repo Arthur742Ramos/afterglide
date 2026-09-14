@@ -1401,7 +1401,7 @@ function StreamView({
             value={`${Math.round(telemetry.framesPerSecond)} FPS`}
           />
           <Metric
-            label="LATENCY"
+            label="PING"
             value={`${Math.round(telemetry.roundTripMs)} MS`}
           />
           <Metric
@@ -1562,6 +1562,42 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
             snapshot.telemetry.updatedAt
               ? `${Math.round(snapshot.telemetry.roundTripMs)} ms`
               : "Measured during play"
+          }
+        />
+        <DiagnosticRow
+          icon="display"
+          label="Stream decoder"
+          value={
+            snapshot.telemetry.updatedAt
+              ? snapshot.telemetry.videoDecoder
+              : "Measured during play"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Decode time per frame"
+          value={
+            snapshot.telemetry.decodeMs === undefined
+              ? "Not reported"
+              : `${snapshot.telemetry.decodeMs.toFixed(1)} ms`
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Video buffer delay"
+          value={
+            snapshot.telemetry.jitterBufferMs === undefined
+              ? "Not reported"
+              : `${snapshot.telemetry.jitterBufferMs.toFixed(1)} ms`
+          }
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Input send queue"
+          value={
+            snapshot.telemetry.inputQueueBytes === undefined
+              ? "Measured during play"
+              : `${snapshot.telemetry.inputQueueBytes} bytes`
           }
         />
         <DiagnosticRow

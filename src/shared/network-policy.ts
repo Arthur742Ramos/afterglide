@@ -14,6 +14,7 @@ export const NETWORK_POLICY = {
   keepaliveFailureThreshold: 3,
   telemetryIntervalMs: 1_000,
   inputHeartbeatMs: 33,
+  inputPollMs: 4,
   cloudCatalogCacheMs: 5 * 60_000,
 } as const;
 

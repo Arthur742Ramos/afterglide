@@ -100,7 +100,7 @@ provisioning allows longer queues than home provisioning.
 
 ICE gathering is bounded at four seconds, duplicate candidates are removed, and
 SDP and candidate payloads are size-limited on both sides of the preload bridge.
-Media must connect within 20 seconds. An established WebRTC connection gets a
+Media must connect within 60 seconds. An established WebRTC connection gets a
 three-second grace period in `disconnected`; `failed` recovers immediately.
 Keepalive recovery starts after three consecutive failures, while any success
 resets the count. Telemetry samples once per second and classifies network quality
@@ -121,3 +121,15 @@ compatibility. Steam Deck hardware checks additionally record Chromium video
 decode status, resolution, frame rate, packet loss, round trip time, and power.
 
 See [ADR 0001](adr/0001-electron-webrtc-desktop.md) for the stack decision.
+
+## Latency and input scheduling
+
+Controller sampling targets a 4 ms interval independently of rendering. Input
+frames are only queued when the SCTP send queue is empty; neutral releases are
+retried while focus or overlay capture suspends gameplay. Input activation waits
+for both channels and the message handshake. Receiver buffering uses the standard
+interactive playout hint where supported. Health exposes interval decode and
+buffer measurements, while Ping explicitly means network round trip.
+
+See [streaming performance](STREAMING-PERFORMANCE.md) for limitations and the
+repeatable comparison protocol required before a market-leading claim.
