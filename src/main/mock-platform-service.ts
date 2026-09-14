@@ -63,6 +63,7 @@ export class MockPlatformService implements PlatformService {
   private cancelled = false;
   private statusChecks = 0;
   private firstConnection = true;
+  private sessionSequence = 0;
   private firstConsoleDiscovery = true;
   private firstCloudDiscovery = true;
   private readonly scenario = process.env.AFTERGLIDE_E2E_SCENARIO ?? "happy";
@@ -198,9 +199,10 @@ export class MockPlatformService implements PlatformService {
       );
     }
     this.statusChecks = 0;
+    const sessionId = `e2e-session-${String(++this.sessionSequence).padStart(2, "0")}`;
     return {
-      sessionId: "e2e-session-01",
-      sessionPath: `v5/sessions/${target.source}/e2e-session-01`,
+      sessionId,
+      sessionPath: `v5/sessions/${target.source}/${sessionId}`,
     };
   }
 

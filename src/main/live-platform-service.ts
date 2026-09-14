@@ -11,7 +11,7 @@ import {
   NETWORK_POLICY,
   retryDelayMs,
 } from "../shared/network-policy";
-import { AfterglideError } from "./errors";
+import { AfterglideError, errorForLog } from "./errors";
 import type {
   PlatformService,
   SessionStart,
@@ -400,11 +400,16 @@ export class LivePlatformService implements PlatformService {
 
   async stopSession(sessionPath: string): Promise<void> {
     const session = this.currentSession;
-    this.currentSession = undefined;
     if (!session || session.sessionPath !== sessionPath) return;
+    this.currentSession = undefined;
     await this.requestJson(session.host, session.token, `/${sessionPath}`, {
       method: "DELETE",
-    }).catch(() => undefined);
+    }).catch((error: unknown) => {
+      console.warn(
+        "Could not stop the remote Xbox session",
+        errorForLog(error),
+      );
+    });
   }
 
   private async refreshServiceTokens(): Promise<void> {

@@ -85,4 +85,44 @@ describe("SettingsStore", () => {
       },
     ]);
   });
+
+  it("persists playback settings, bounds volume, and rejects invalid updates", () => {
+    directory = mkdtempSync(join(tmpdir(), "afterglide-settings-"));
+    const path = join(directory, "preferences.json");
+    const store = new SettingsStore(path);
+    expect(store.settings).toMatchObject({
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+    });
+    store.updateSettings({
+      volume: 0.4,
+      muted: true,
+      videoFit: "fill",
+      inputPolling: "efficient",
+    });
+    expect(new SettingsStore(path).settings).toMatchObject({
+      volume: 0.4,
+      muted: true,
+      videoFit: "fill",
+      inputPolling: "efficient",
+    });
+    store.updateSettings({ volume: 2 });
+    expect(store.settings.volume).toBe(1);
+    store.updateSettings({ volume: -1 });
+    expect(store.settings.volume).toBe(0);
+    store.updateSettings({
+      volume: Number.NaN,
+      videoFit: "stretch",
+      inputPolling: 0,
+      muted: "yes",
+    } as never);
+    expect(store.settings).toMatchObject({
+      volume: 0,
+      muted: true,
+      videoFit: "fill",
+      inputPolling: "efficient",
+    });
+  });
 });

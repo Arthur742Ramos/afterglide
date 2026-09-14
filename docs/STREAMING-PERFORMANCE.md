@@ -9,11 +9,19 @@ network, receiver buffer, decoder, compositor, display and controller all contri
 - Controller sampling uses a 4 ms timer (250 Hz target), independent of animation
   frames. A 60 Hz animation loop has a 16.7 ms interval. Browser scheduling and
   Gamepad API updates can limit the effective rate; this is not a measured 12.7 ms
-  end-to-end improvement. Keyboard transitions are sent directly from events.
+  end-to-end improvement. An optional 8 ms mode allows power/latency comparison.
+  With no controller, polling slows to 50 ms; hidden, unfocused, or captured input
+  stops polling except for a 50 ms pending-neutral retry. Keyboard transitions
+  are sampled directly from events.
 - Input uses the established Xbox ordered/reliable channel contract. While the
-  channel has queued bytes, fresh samples replace historical movement rather than
-  adding an application backlog. This cannot remove packets already inside SCTP
-  or the network. Very short taps during congestion may be coalesced.
+  channel has queued bytes, fresh stick samples replace historical movement.
+  Button and trigger rest/press edges share an ordered buffer of 32 transitions;
+  intermediate trigger travel and stick motion coalesce. The buffer has
+  an oldest age of 250 ms. Exceeding either limit fails closed with a visible
+  stream error rather than silently losing actions or replaying arbitrarily old
+  input. This is bounded short-congestion tolerance, not a promise to preserve
+  input through prolonged outages. Packets already inside SCTP or the network
+  cannot be recalled.
 - Focus loss and overlay entry send neutral input. If congested, the release is
   retried on queue drain and timer ticks, including while input is suspended.
 - The input handshake waits for both channels, avoiding a startup ordering race.
@@ -24,6 +32,14 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   bytes. Missing measurements remain unavailable, never fabricated zeroes.
 - Ping comes from the selected transport candidate pair. Unrelated succeeded ICE
   probes no longer overwrite the live route's measurement.
+- Frame cadence uses nearest-rank p95/p99 over the last 600 visible presentation
+  intervals from `requestVideoFrameCallback`. It measures browser presentation,
+  not display photons. A long presentation gap affects cadence, but does not
+  invent a freeze count. Drop/freeze counts use real browser counters and remain
+  unavailable when unsupported; hidden/spanning freeze intervals are excluded.
+- Runtime playback and controller settings compare values, not snapshot object
+  identity. A new telemetry snapshot does not release held buttons, restart
+  polling, or renegotiate the stream.
 
 ## Comparison protocol
 
@@ -49,6 +65,78 @@ Acceptance: no stuck inputs in the disruption suite, no missed taps on a healthy
 route, no regression in p95 frame delivery or power, and a repeatable latency
 improvement across runs before claiming superiority. A 4 ms timer alone is not
 proof of a 250 Hz hardware sampling rate or superior streaming.
+
+## Collecting evidence in the app
+
+After a run, leave the stream and use Health's performance export action. The
+native save dialog writes a JSON file only to the location you select. Canceling
+does not save anything. The report remains available after leaving a stream;
+starting a fresh, non-recovery session resets it. Automatic reconnections retain
+the same report and increment its local connection number.
+
+The report retains the latest 3,600 telemetry samples (normally about one hour),
+plus the latest 100 successful recovery durations. `totalSamples`,
+`retainedSamples`, and `droppedSamples` disclose eviction. Samples include the
+requested resolution, polling mode, and fit/fill setting so configuration changes
+are visible. Summaries separate resolution/polling configurations and report
+median, p95, and p99 of the retained readings. A percentile of rolling frame
+percentiles is explicitly named as such; it is not a global frame percentile.
+Missing optional readings are omitted, never replaced with a measured zero.
+Built-in summaries include warm-up and configuration-transition samples. For a
+controlled comparison, filter raw samples by `telemetry.updatedAt` to the agreed
+post-warm-up interval before calculating results; do not treat an unfiltered
+export summary as a completed benchmark.
+
+Each sample has a local `connectionNumber` identifying resets of cumulative
+freeze/drop counters. Do not subtract counters across connection numbers.
+Recovery durations measure interruption detection through new playable video,
+including waiting and provisioning; they do not measure how long a cloud game
+was paused or prove its progress survived. RTT and decode/buffer measurements
+must not be added together and labeled button-to-photon latency.
+
+Electron process CPU usage is sampled every five seconds. Linux battery readings
+use `power_now`, or `current_now * voltage_now` if the power sensor is absent.
+Only a discharging battery produces a consumption reading; charging power is not
+treated as battery drain. Temperature is the maximum exposed CPU/GPU sensor value
+from supported `amdgpu`, `k10temp`, `coretemp`, or `zenpower` devices. Unsupported
+platforms, sensors, and read failures are explicit in `device.unavailable`.
+Repeated device readings carry the same `observedAt`; summaries deduplicate them.
+Whole-device watts include the display, radios, OS, and background processes.
+The report does not claim those watts were used exclusively by Afterglide.
+
+Reports exclude authentication data, account names, console names/IDs, server
+session identifiers, network addresses, and controller IDs. They include hardware
+model strings and timing information; review before sharing. Test mode is marked
+`application.environment: "test"` and its media readings are simulated.
+
+## Battery and decode A/B procedure
+
+Use the shipped Linux AppImage, not a development browser. Record Deck model,
+SteamOS/kernel version, display refresh rate and brightness, power limit,
+network, game/scene, and installed client versions alongside each report.
+Disconnect external power and hold those conditions constant. Let temperature
+settle before each run. Compare separate Responsive (4 ms) and Efficient (8 ms)
+runs in alternating order, at least three times per mode.
+
+Efficient halves the requested active polling frequency; it does not guarantee
+half the CPU cost or a battery gain. The Gamepad API, browser scheduler, game,
+and power management determine the actual result. Prefer the setting with no
+unacceptable p95/p99 frame-delivery or missed-input regression, then compare
+whole-device discharge power and sustained thermal behavior. Use a 60-minute
+battery run before making a battery-life claim.
+
+Check both Health's GPU feature status and the stream's decoder identity. An
+enabled Chromium feature flag alone does not prove this stream used hardware
+decode. Corroborate with platform GPU/video-engine tools on the packaged build;
+decoder names vary by driver. Do not force unverified VA-API flags or codecs.
+Record absent evidence as unverified.
+
+Also exercise physical sleep/wake, an offline interval, Wi-Fi reconnection,
+controller removal/replacement, and End session during a pending recovery.
+Verify bounded retries and no restart after leaving. Recovery starts a new
+streaming session: cloud capacity, queues, and game-progress preservation remain
+controlled by Xbox services. Complete the same live-network disruption tests for
+both home and cloud play before advertising seamless recovery.
 
 ## Sources
 

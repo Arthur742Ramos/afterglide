@@ -5,7 +5,10 @@ import {
   ipcMain,
   shell,
   session,
+  dialog,
+  powerMonitor,
 } from "electron";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
@@ -29,6 +32,7 @@ import {
   SecureTokenStore,
 } from "./secure-token-store";
 import { SettingsStore } from "./settings-store";
+import { readDeviceMetrics } from "./device-metrics";
 
 app.commandLine.appendSwitch("enable-accelerated-video-decode");
 app.commandLine.appendSwitch("enable-zero-copy");
@@ -92,6 +96,37 @@ app.whenReady().then(async () => {
   mainWindow = createWindow(preferences.settings.launchFullscreen);
   controller.attachWindow(mainWindow);
   await controller.initialize();
+  powerMonitor.on("resume", () => controller?.handleSystemResume());
+  let sampling = false;
+  const deviceTimer = setInterval(async () => {
+    if (sampling) return;
+    const sampleContext = controller?.getDeviceSampleContext();
+    if (!sampleContext?.streaming) return;
+    sampling = true;
+    try {
+      const processes = app.getAppMetrics();
+      const cpu = processes.length
+        ? processes.reduce(
+            (total, process) => total + process.cpu.percentCPUUsage,
+            0,
+          )
+        : undefined;
+      const metrics = await readDeviceMetrics(cpu);
+      const current = controller?.getDeviceSampleContext();
+      if (
+        sampleContext.sessionId === current?.sessionId &&
+        sampleContext.inputPolling === current?.inputPolling &&
+        sampleContext.resolution === current?.resolution
+      )
+        controller?.updateDeviceMetrics(metrics);
+    } catch (error) {
+      console.error("Device performance sampling failed", error);
+    } finally {
+      sampling = false;
+    }
+  }, 5_000);
+  deviceTimer.unref();
+  app.once("before-quit", () => clearInterval(deviceTimer));
   if (releaseChecker) {
     const updateTimer = setTimeout(
       () => void controller?.checkForUpdates(),
@@ -210,6 +245,28 @@ function registerIpc(appController: AppController): void {
     appController.updateSettings(settings),
   );
   handle(IPC.checkForUpdates, () => appController.checkForUpdates());
+  let exporting = false;
+  handle(IPC.exportPerformanceReport, async () => {
+    if (exporting) throw new Error("A performance export is already open.");
+    if (!mainWindow || mainWindow.isDestroyed())
+      throw new Error("The application window is unavailable.");
+    exporting = true;
+    try {
+      const report = appController.exportPerformanceReport();
+      const selected = await dialog.showSaveDialog(mainWindow, {
+        title: "Export stream performance",
+        defaultPath: "afterglide-performance.json",
+        filters: [{ name: "Performance report", extensions: ["json"] }],
+      });
+      if (selected.canceled || !selected.filePath) return false;
+      await writeFile(selected.filePath, JSON.stringify(report, null, 2), {
+        mode: 0o600,
+      });
+      return true;
+    } finally {
+      exporting = false;
+    }
+  });
   handle(IPC.setFullscreen, (fullscreen: boolean) =>
     mainWindow?.setFullScreen(Boolean(fullscreen)),
   );

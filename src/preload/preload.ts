@@ -50,6 +50,8 @@ const api: StreamApi = {
     ipcRenderer.invoke(IPC.updateSettings, settings) as Promise<void>,
   checkForUpdates: () =>
     ipcRenderer.invoke(IPC.checkForUpdates) as Promise<void>,
+  exportPerformanceReport: () =>
+    ipcRenderer.invoke(IPC.exportPerformanceReport) as Promise<boolean>,
   setFullscreen: (fullscreen) =>
     ipcRenderer.invoke(IPC.setFullscreen, fullscreen) as Promise<void>,
   quit: () => ipcRenderer.invoke(IPC.quit) as Promise<void>,
