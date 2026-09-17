@@ -1180,12 +1180,14 @@ function StreamView({
   const [performanceVisible, setPerformanceVisible] = useState(
     snapshot.settings.showPerformance,
   );
+  const [telemetry, setTelemetry] = useState(snapshot.telemetry);
   const [performanceAnnouncement, setPerformanceAnnouncement] = useState("");
   const [settingsError, setSettingsError] = useState("");
   const [controlsCaptured, setControlsCaptured] = useState(false);
   const [controllerNotice, setControllerNotice] = useState("");
   const overlayRef = useRef(true);
   const performanceVisibleRef = useRef(snapshot.settings.showPerformance);
+  const latestTelemetry = useRef(snapshot.telemetry);
   const controlsCapturedRef = useRef(false);
   const streamEventsEnabled = useRef(true);
   const interruptionReported = useRef<string | undefined>(undefined);
@@ -1257,6 +1259,7 @@ function StreamView({
     const visible = !performanceVisibleRef.current;
     performanceVisibleRef.current = visible;
     setPerformanceVisible(visible);
+    if (visible) setTelemetry(latestTelemetry.current);
     setPerformanceAnnouncement(
       `Performance stats ${visible ? "shown" : "hidden"}.`,
     );
@@ -1331,7 +1334,7 @@ function StreamView({
       if ((event as CustomEvent<string>).detail === "controls")
         toggleControls();
     };
-    let chordPressed = false;
+    let chordReleased = false;
     let activeGamepadIndex: number | undefined;
     let frame = 0;
     const poll = () => {
@@ -1341,15 +1344,22 @@ function StreamView({
         activeGamepadIndex,
       );
       activeGamepadIndex = gamepad?.index;
-      const pressed =
-        snapshot.settings.controllerMenuShortcut === "stick-chord" &&
-        Boolean(gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed);
-      if (pressed && !chordPressed) toggleControls();
-      chordPressed = pressed;
+      const pressed = Boolean(
+        gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed,
+      );
+      if (!pressed) chordReleased = true;
+      else if (chordReleased) {
+        toggleControls();
+        return;
+      }
       frame = requestAnimationFrame(poll);
     };
     window.addEventListener("afterglide-gamepad", onGamepadAction);
-    frame = requestAnimationFrame(poll);
+    if (
+      controlsCaptured &&
+      snapshot.settings.controllerMenuShortcut === "stick-chord"
+    )
+      frame = requestAnimationFrame(poll);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("afterglide-gamepad", onGamepadAction);
@@ -1357,6 +1367,7 @@ function StreamView({
   }, [
     snapshot.settings.controllerMenuShortcut,
     snapshot.settings.preferredControllerId,
+    controlsCaptured,
     toggleControls,
   ]);
 
@@ -1401,7 +1412,9 @@ function StreamView({
   );
   const onTelemetry = useCallback((value: AppSnapshot["telemetry"]) => {
     if (!streamEventsEnabled.current) return;
-    void window.afterglide.updateTelemetry(value);
+    latestTelemetry.current = value;
+    if (performanceVisibleRef.current) setTelemetry(value);
+    window.afterglide.updateTelemetry(value);
   }, []);
   const onControllerStatus = useCallback((status: ControllerStatus) => {
     clearTimeout(controllerNoticeTimer.current);
@@ -1417,10 +1430,18 @@ function StreamView({
       status.state === "disconnected" ? 5_000 : 3_000,
     );
   }, []);
+  const onControlsShortcut = useCallback(
+    () => toggleControls(),
+    [toggleControls],
+  );
 
   useEffect(() => () => clearTimeout(controllerNoticeTimer.current), []);
 
-  const telemetry = snapshot.telemetry;
+  useEffect(() => {
+    latestTelemetry.current = snapshot.telemetry;
+    setTelemetry(snapshot.telemetry);
+  }, [descriptor.sessionId]);
+
   return (
     <main
       ref={root}
@@ -1447,6 +1468,7 @@ function StreamView({
         onError={onError}
         onTelemetry={onTelemetry}
         onControllerStatus={onControllerStatus}
+        onControlsShortcut={onControlsShortcut}
       />
       <div className="stream-vignette" />
       {controllerNotice && (

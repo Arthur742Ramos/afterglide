@@ -12,7 +12,9 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   end-to-end improvement. An optional 8 ms mode allows power/latency comparison.
   With no controller, polling slows to 50 ms; hidden, unfocused, or captured input
   stops polling except for a 50 ms pending-neutral retry. Keyboard transitions
-  are sampled directly from events.
+  are sampled directly from events. The active stream engine also owns the local
+  L3 + R3 edge, so the UI only polls separately while captured controls need a
+  release-and-repress close gesture.
 - Input uses the established Xbox ordered/reliable channel contract. While the
   channel has queued bytes, fresh stick samples replace historical movement.
   Button and trigger rest/press edges share an ordered buffer of 32 transitions;
@@ -22,6 +24,9 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   input. This is bounded short-congestion tolerance, not a promise to preserve
   input through prolonged outages. Packets already inside SCTP or the network
   cannot be recalled.
+- The hot input path reuses its sampled frame and compares a compact digital
+  transition mask plus numeric frame fields. It does not allocate transition
+  arrays or serialize the full controller frame on every 4 ms sample.
 - Focus loss and overlay entry send neutral input. If congested, the release is
   retried on queue drain and timer ticks, including while input is suspended.
 - The input handshake waits for both channels, avoiding a startup ordering race.
@@ -40,6 +45,10 @@ network, receiver buffer, decoder, compositor, display and controller all contri
 - Runtime playback and controller settings compare values, not snapshot object
   identity. A new telemetry snapshot does not release held buttons, restart
   polling, or renegotiate the stream.
+- One-second telemetry uses one-way IPC for report retention. The renderer keeps
+  the latest sample locally and only rerenders it while the performance overlay
+  is visible; the main process does not clone and rebroadcast the full app
+  snapshot for every sample.
 
 ## Comparison protocol
 

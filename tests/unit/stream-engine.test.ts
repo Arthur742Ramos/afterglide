@@ -73,7 +73,9 @@ let button: number;
 let padIndex: number;
 let axis: number;
 let trigger: number;
+let controlsShortcut: boolean;
 let onTelemetry = vi.fn<(telemetry: StreamTelemetry) => void>();
+let onControlsShortcut = vi.fn<() => void>();
 let win: EventTarget;
 let doc: EventTarget & { visibilityState: string };
 
@@ -84,12 +86,14 @@ beforeEach(async () => {
   padIndex = 0;
   axis = 0;
   trigger = 0;
+  controlsShortcut = false;
   peer = new Peer();
   media = [];
   onConnected = vi.fn();
   onInterrupted = vi.fn();
   onError = vi.fn();
   onTelemetry = vi.fn();
+  onControlsShortcut = vi.fn();
   win = Object.assign(new EventTarget(), {
     setInterval,
     setTimeout,
@@ -120,8 +124,18 @@ beforeEach(async () => {
         mapping: "standard",
         axes: [axis, 0, 0, 0],
         buttons: Array.from({ length: 17 }, (_, i) => ({
-          value: i === 0 ? button : i === 7 ? trigger : 0,
-          pressed: (i === 0 && button > 0) || (i === 7 && trigger > 0),
+          value:
+            i === 0
+              ? button
+              : i === 7
+                ? trigger
+                : controlsShortcut && (i === 10 || i === 11)
+                  ? 1
+                  : 0,
+          pressed:
+            (i === 0 && button > 0) ||
+            (i === 7 && trigger > 0) ||
+            (controlsShortcut && (i === 10 || i === 11)),
         })),
       },
     ],
@@ -150,6 +164,7 @@ beforeEach(async () => {
     onError,
     onTelemetry,
     onControllerStatus() {},
+    onControlsShortcut,
   });
   await engine.connect();
 });
@@ -238,6 +253,21 @@ describe("real stream engine input lifecycle", () => {
     button = 0;
     vi.advanceTimersByTime(4);
     expect(frames().map(a)).toEqual([true, false]);
+  });
+  it("owns the controls chord edge without forwarding stick clicks", () => {
+    ready();
+    controlsShortcut = true;
+    vi.advanceTimersByTime(4);
+    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
+    expect(frames()).toHaveLength(1);
+    expect(frames()[0].getUint16(16, true) & (16_384 | 32_768)).toBe(0);
+    vi.advanceTimersByTime(8);
+    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
+    controlsShortcut = false;
+    vi.advanceTimersByTime(4);
+    controlsShortcut = true;
+    vi.advanceTimersByTime(4);
+    expect(onControlsShortcut).toHaveBeenCalledTimes(2);
   });
   it("does not queue stale state, and retries a focus-loss release while unfocused", () => {
     ready();

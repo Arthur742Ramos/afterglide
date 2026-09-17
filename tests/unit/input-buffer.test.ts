@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { InputTransitionBuffer } from "../../src/renderer/stream/input-buffer";
 import {
   emptyXboxInputFrame,
@@ -120,6 +120,23 @@ describe("bounded input transition buffer", () => {
     expect(sent.map((value) => value.LeftThumbXAxis)).toEqual([0.99]);
     buffer.flush(103, send, true);
     expect(sent).toHaveLength(2);
+  });
+  it("compares compact frame state without JSON serialization", () => {
+    const stringify = vi.spyOn(JSON, "stringify");
+    const buffer = new InputTransitionBuffer();
+    buffer.observe(frame({ A: 1, LeftThumbXAxis: 0.5 }), 0);
+    buffer.observe(frame({ A: 0, LeftThumbXAxis: 0.75 }), 4);
+    const sent: XboxInputFrame[] = [];
+    buffer.flush(8, (value) => {
+      sent.push({ ...value });
+      return true;
+    });
+    buffer.flush(12, () => true);
+    expect(sent.map(({ A, LeftThumbXAxis }) => [A, LeftThumbXAxis])).toEqual([
+      [1, 0.75],
+      [0, 0.75],
+    ]);
+    expect(stringify).not.toHaveBeenCalled();
   });
   it("clearing discards queued transitions and analog history", () => {
     const buffer = new InputTransitionBuffer();

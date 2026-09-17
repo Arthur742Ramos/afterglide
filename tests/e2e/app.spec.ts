@@ -1131,6 +1131,79 @@ test("quick settings support controller focus, compact windows, and persisted li
   }
 });
 
+test("captured stream controls close on a released and re-pressed stick chord", async () => {
+  const { app, page } = await launch({ signedIn: true });
+  try {
+    await page.evaluate(() => {
+      const buttons = Array.from({ length: 17 }, () => ({
+        pressed: false,
+        touched: false,
+        value: 0,
+      }));
+      Object.defineProperty(navigator, "getGamepads", {
+        configurable: true,
+        value: () => [
+          {
+            id: "Steam Virtual Gamepad",
+            index: 0,
+            connected: true,
+            mapping: "standard",
+            axes: [0, 0, 0, 0],
+            buttons,
+            timestamp: 1,
+          },
+        ],
+      });
+    });
+    await page.getByRole("button", { name: /Play now/ }).click();
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+    await page.evaluate(() => {
+      const gamepad = navigator.getGamepads()[0]!;
+      for (const index of [10, 11])
+        Object.assign(gamepad.buttons[index], {
+          pressed: true,
+          touched: true,
+          value: 1,
+        });
+    });
+    await page.keyboard.press("F10");
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "true",
+    );
+    await page.waitForTimeout(50);
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "true",
+    );
+    await page.evaluate(() => {
+      const gamepad = navigator.getGamepads()[0]!;
+      for (const index of [10, 11])
+        Object.assign(gamepad.buttons[index], {
+          pressed: false,
+          touched: false,
+          value: 0,
+        });
+    });
+    await page.waitForTimeout(50);
+    await page.evaluate(() => {
+      const gamepad = navigator.getGamepads()[0]!;
+      for (const index of [10, 11])
+        Object.assign(gamepad.buttons[index], {
+          pressed: true,
+          touched: true,
+          value: 1,
+        });
+    });
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "false",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 test("quick settings show save failures without dropping controller focus or reconnecting", async () => {
   const { app, page } = await launch({ signedIn: true });
   try {

@@ -27,6 +27,7 @@ interface Props {
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
   onControllerStatus: (status: ControllerStatus) => void;
+  onControlsShortcut: () => void;
 }
 
 export function StreamSurface(props: Props) {
@@ -38,6 +39,9 @@ export function StreamSurface(props: Props) {
   const onTelemetry = useCallback(props.onTelemetry, [props.onTelemetry]);
   const onControllerStatus = useCallback(props.onControllerStatus, [
     props.onControllerStatus,
+  ]);
+  const onControlsShortcut = useCallback(props.onControlsShortcut, [
+    props.onControlsShortcut,
   ]);
 
   useEffect(() => {
@@ -54,6 +58,7 @@ export function StreamSurface(props: Props) {
       onError,
       onTelemetry,
       onControllerStatus,
+      onControlsShortcut,
     });
     engine.current = streamEngine;
     streamEngine.setInputSuspended(props.inputSuspended);
@@ -71,6 +76,7 @@ export function StreamSurface(props: Props) {
     onError,
     onTelemetry,
     onControllerStatus,
+    onControlsShortcut,
   ]);
 
   useEffect(() => {

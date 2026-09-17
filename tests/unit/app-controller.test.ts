@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BrowserWindow } from "electron";
 import type {
   CloudTitle,
   DeviceCode,
@@ -227,6 +228,26 @@ describe("AppController", () => {
       freezeDurationMs: 1200,
       recoveryMs: undefined,
     });
+  });
+
+  it("retains telemetry without rebroadcasting the full snapshot", () => {
+    const controller = makeController(new FakePlatform());
+    const send = vi.fn();
+    controller.attachWindow({
+      isDestroyed: () => false,
+      webContents: { send },
+    } as unknown as BrowserWindow);
+
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      framesPerSecond: 60,
+      updatedAt: 1,
+    });
+
+    expect(controller.getSnapshot().telemetry.framesPerSecond).toBe(60);
+    expect(send).not.toHaveBeenCalled();
+    controller.updateSettings({ muted: true });
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it("deduplicates wake interruptions and rejects a late connected event", async () => {

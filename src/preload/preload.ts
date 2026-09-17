@@ -45,7 +45,7 @@ const api: StreamApi = {
     ) as Promise<void>,
   stopStream: () => ipcRenderer.invoke(IPC.stopStream) as Promise<void>,
   updateTelemetry: (telemetry: StreamTelemetry) =>
-    ipcRenderer.invoke(IPC.updateTelemetry, telemetry) as Promise<void>,
+    ipcRenderer.send(IPC.updateTelemetry, telemetry),
   updateSettings: (settings: Partial<AppSettings>) =>
     ipcRenderer.invoke(IPC.updateSettings, settings) as Promise<void>,
   checkForUpdates: () =>

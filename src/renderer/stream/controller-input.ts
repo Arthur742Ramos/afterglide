@@ -33,6 +33,9 @@ const buttonMap: Record<XboxButtonName, number> = {
   View: 8,
   Nexus: 16,
 };
+const buttonEntries = Object.entries(buttonMap) as Array<
+  [XboxButtonName, number]
+>;
 
 export function connectedGamepads(
   gamepads: readonly (GamepadLike | null)[],
@@ -68,14 +71,13 @@ export function selectController(
 export function controllerInputFrame(
   gamepad: GamepadLike,
   tuning: ControllerTuning,
+  frame = emptyXboxInputFrame(),
 ): XboxInputFrame {
-  const frame = emptyXboxInputFrame();
-  (Object.entries(buttonMap) as Array<[XboxButtonName, number]>).forEach(
-    ([name, index]) => {
-      frame[name] =
-        gamepad.buttons[mappedButtonIndex(name, index, tuning)]?.value ?? 0;
-    },
-  );
+  frame.GamepadIndex = 0;
+  buttonEntries.forEach(([name, index]) => {
+    frame[name] =
+      gamepad.buttons[mappedButtonIndex(name, index, tuning)]?.value ?? 0;
+  });
   frame.LeftTrigger = trigger(
     gamepad.buttons[6]?.value ?? 0,
     tuning.triggerRange,

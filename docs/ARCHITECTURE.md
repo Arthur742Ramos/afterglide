@@ -130,7 +130,10 @@ sent when the SCTP send queue is empty. A bounded transition buffer preserves
 short button and trigger presses across temporary congestion without queuing historical
 analog positions; neutral releases take priority and remain retryable while
 focus or overlay capture suspends gameplay. Input activation waits for both
-channels and the message handshake. Receiver buffering uses the standard
+channels and the message handshake. The hot path reuses sampled frame storage,
+compares compact transition state without JSON serialization, and owns the local
+controls chord so active gameplay does not need a second Gamepad API loop.
+Receiver buffering uses the standard
 interactive playout hint where supported. Health exposes interval decode and
 buffer measurements, while Ping explicitly means network round trip.
 
@@ -143,8 +146,11 @@ stale constructor settings behind.
 ## Performance evidence and recovery
 
 The main process sanitizes renderer telemetry and retains a bounded performance
-history separate from the visible snapshot. Reports survive End session but are
-reset by a fresh launch; automatic reconnections retain the history. The export
+history separate from the visible snapshot. Samples arrive over one-way IPC and
+do not clone or rebroadcast the full application snapshot each second. The
+renderer only rerenders live values while its performance overlay is visible.
+Reports survive End session but are reset by a fresh launch; automatic
+reconnections retain the history. The export
 IPC accepts no path from the renderer: Electron's native save dialog selects the
 destination, and the main process writes only the curated report. Authentication
 data, Xbox session identifiers, console names, and controller profiles are never

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultControllerTuning } from "../../src/shared/contracts";
+import { emptyXboxInputFrame } from "../../src/renderer/stream/input-schema";
 import {
   controllerInputFrame,
   friendlyControllerName,
@@ -67,6 +68,31 @@ describe("controller input", () => {
     expect(frame.LeftTrigger).toBe(1);
     expect(frame.LeftThumbXAxis).toBeCloseTo((0.06 - 0.04) / 0.96);
     expect(frame.LeftThumbYAxis).toBeCloseTo((-0.5 + 0.04) / 0.96);
+  });
+
+  it("reuses and fully overwrites provided frame storage", () => {
+    const reused = {
+      ...emptyXboxInputFrame(),
+      A: 1,
+      LeftThumbXAxis: 1,
+      RightTrigger: 1,
+    };
+    const result = controllerInputFrame(
+      gamepad("Reusable Controller", 0, {
+        buttons: { 1: 1 },
+        axes: [-0.5, 0.5, 0.25, -0.25],
+      }),
+      defaultControllerTuning,
+      reused,
+    );
+
+    expect(result).toBe(reused);
+    expect(result).toMatchObject({
+      A: 0,
+      B: 1,
+      RightTrigger: 0,
+    });
+    expect(result.LeftThumbXAxis).toBeLessThan(0);
   });
 
   it("uses controller profiles over defaults", () => {
