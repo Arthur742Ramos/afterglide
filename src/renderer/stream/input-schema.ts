@@ -52,6 +52,32 @@ export function emptyXboxInputFrame(): XboxInputFrame {
   };
 }
 
+export function resetXboxInputFrame(frame: XboxInputFrame): XboxInputFrame {
+  frame.GamepadIndex = 0;
+  frame.Nexus = 0;
+  frame.Menu = 0;
+  frame.View = 0;
+  frame.A = 0;
+  frame.B = 0;
+  frame.X = 0;
+  frame.Y = 0;
+  frame.DPadUp = 0;
+  frame.DPadDown = 0;
+  frame.DPadLeft = 0;
+  frame.DPadRight = 0;
+  frame.LeftShoulder = 0;
+  frame.RightShoulder = 0;
+  frame.LeftThumb = 0;
+  frame.RightThumb = 0;
+  frame.LeftThumbXAxis = 0;
+  frame.LeftThumbYAxis = 0;
+  frame.RightThumbXAxis = 0;
+  frame.RightThumbYAxis = 0;
+  frame.LeftTrigger = 0;
+  frame.RightTrigger = 0;
+  return frame;
+}
+
 export interface ControlGuideItem {
   keys: string;
   action: string;

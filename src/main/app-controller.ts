@@ -580,54 +580,55 @@ export class AppController {
   }
 
   updateTelemetry(telemetry: StreamTelemetry): void {
-    this.patch({
-      telemetry: {
-        resolution: String(telemetry.resolution).slice(0, 32),
-        framesPerSecond: clamp(telemetry.framesPerSecond, 0, 240),
-        roundTripMs: clamp(telemetry.roundTripMs, 0, 10_000),
-        packetLossPercent: clamp(telemetry.packetLossPercent, 0, 100),
-        bitrateMbps: clamp(telemetry.bitrateMbps, 0, 500),
-        codec: String(telemetry.codec).slice(0, 48),
-        connection: isConnectionType(telemetry.connection)
-          ? telemetry.connection
-          : "unknown",
-        videoDecoder: String(telemetry.videoDecoder).slice(0, 80),
-        decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
-        jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
-        inputQueueBytes: optionalMeasurement(
-          telemetry.inputQueueBytes,
-          16_777_216,
-        ),
-        frameIntervalP95Ms: optionalMeasurement(
-          telemetry.frameIntervalP95Ms,
-          60_000,
-        ),
-        frameIntervalP99Ms: optionalMeasurement(
-          telemetry.frameIntervalP99Ms,
-          60_000,
-        ),
-        framesDropped: optionalMeasurement(
-          telemetry.framesDropped,
-          Number.MAX_SAFE_INTEGER,
-        ),
-        freezeCount: optionalMeasurement(
-          telemetry.freezeCount,
-          Number.MAX_SAFE_INTEGER,
-        ),
-        freezeDurationMs: optionalMeasurement(
-          telemetry.freezeDurationMs,
-          Number.MAX_SAFE_INTEGER,
-        ),
-        recoveryMs: this.recoveryMs,
-        networkQuality: isNetworkQuality(telemetry.networkQuality)
-          ? telemetry.networkQuality
-          : "measuring",
-        updatedAt: Date.now(),
-      },
-    });
+    const sanitized: StreamTelemetry = {
+      resolution: String(telemetry.resolution).slice(0, 32),
+      framesPerSecond: clamp(telemetry.framesPerSecond, 0, 240),
+      roundTripMs: clamp(telemetry.roundTripMs, 0, 10_000),
+      packetLossPercent: clamp(telemetry.packetLossPercent, 0, 100),
+      bitrateMbps: clamp(telemetry.bitrateMbps, 0, 500),
+      codec: String(telemetry.codec).slice(0, 48),
+      connection: isConnectionType(telemetry.connection)
+        ? telemetry.connection
+        : "unknown",
+      videoDecoder: String(telemetry.videoDecoder).slice(0, 80),
+      decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
+      jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
+      inputQueueBytes: optionalMeasurement(
+        telemetry.inputQueueBytes,
+        16_777_216,
+      ),
+      frameIntervalP95Ms: optionalMeasurement(
+        telemetry.frameIntervalP95Ms,
+        60_000,
+      ),
+      frameIntervalP99Ms: optionalMeasurement(
+        telemetry.frameIntervalP99Ms,
+        60_000,
+      ),
+      framesDropped: optionalMeasurement(
+        telemetry.framesDropped,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      freezeCount: optionalMeasurement(
+        telemetry.freezeCount,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      freezeDurationMs: optionalMeasurement(
+        telemetry.freezeDurationMs,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      recoveryMs: this.recoveryMs,
+      networkQuality: isNetworkQuality(telemetry.networkQuality)
+        ? telemetry.networkQuality
+        : "measuring",
+      updatedAt: Date.now(),
+    };
+    // Telemetry is a one-way high-frequency path. Keep it for reports and later
+    // snapshots without cloning and rebroadcasting the full application state.
+    this.snapshot = { ...this.snapshot, telemetry: sanitized };
     if (this.activeSession && this.snapshot.session.phase === "streaming")
       this.performanceReport.add(
-        this.snapshot.telemetry,
+        sanitized,
         this.snapshot.settings,
         this.deviceMetrics,
       );

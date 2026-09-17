@@ -17,6 +17,7 @@ import {
   applyKeyboardInput,
   emptyXboxInputFrame,
   isKeyboardControlCode,
+  resetXboxInputFrame,
   type XboxButtonName as ButtonName,
   type XboxInputFrame as InputFrame,
 } from "./input-schema";
@@ -62,6 +63,7 @@ interface StreamEngineOptions {
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
   onControllerStatus: (status: ControllerStatus) => void;
+  onControlsShortcut: () => void;
 }
 
 /**
@@ -79,6 +81,7 @@ export class XboxStreamEngine {
   private readonly audio: HTMLAudioElement;
   private readonly frameMetrics: FrameMetricsTracker;
   private readonly inputBuffer = new InputTransitionBuffer();
+  private readonly sampledFrame = emptyXboxInputFrame();
   private playbackSettings?: PlaybackSettings;
   private readonly localCandidates: IceCandidatePayload[] = [];
   private readonly localCandidateKeys = new Set<string>();
@@ -108,6 +111,7 @@ export class XboxStreamEngine {
   private activeGamepadId = "";
   private activeGamepadLabel = "";
   private sampledInput = false;
+  private controlsShortcutPressed = false;
 
   constructor(private readonly options: StreamEngineOptions) {
     this.channels = {
@@ -579,6 +583,7 @@ export class XboxStreamEngine {
     )
       return;
     const gamepad = this.resolveGamepad();
+    this.updateControlsShortcut(gamepad);
     if (!this.sampledInput) {
       this.sampledInput = true;
       this.updateInputPolling();
@@ -592,7 +597,8 @@ export class XboxStreamEngine {
           ? tuningForGamepad(this.options.controllerSettings, gamepad)
           : undefined,
         this.options.reserveControlChord,
-      ) ?? emptyXboxInputFrame();
+        this.sampledFrame,
+      ) ?? resetXboxInputFrame(this.sampledFrame);
     const now = performance.now();
     const failure =
       this.inputBuffer.observe(frame, now) ??
@@ -744,6 +750,15 @@ export class XboxStreamEngine {
       });
     }
     return gamepad;
+  }
+
+  private updateControlsShortcut(gamepad: GamepadLike | undefined): void {
+    const pressed =
+      this.options.reserveControlChord &&
+      Boolean(gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed);
+    if (pressed && !this.controlsShortcutPressed)
+      this.options.onControlsShortcut();
+    this.controlsShortcutPressed = pressed;
   }
 
   private async collectTelemetry(): Promise<void> {
@@ -967,12 +982,13 @@ function readInputFrame(
   keys: ReadonlySet<string>,
   tuning: ReturnType<typeof tuningForGamepad> | undefined,
   reserveControlChord = true,
+  target = emptyXboxInputFrame(),
 ): InputFrame | undefined {
+  if (!gamepad && keys.size === 0) return undefined;
   const frame =
     gamepad && tuning
-      ? controllerInputFrame(gamepad, tuning)
-      : emptyXboxInputFrame();
-  if (!gamepad && keys.size === 0) return undefined;
+      ? controllerInputFrame(gamepad, tuning, target)
+      : resetXboxInputFrame(target);
   applyKeyboardInput(frame, keys);
   normalizeInputChords(frame, reserveControlChord);
   return frame;

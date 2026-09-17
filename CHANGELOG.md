@@ -8,6 +8,8 @@
   with unavailable measurements kept distinct from zero.
 - Add controller-accessible in-stream audio, fit/fill, and 4 ms / 8 ms input
   polling preferences that apply without restarting the stream.
+- Keep one-second telemetry off the full snapshot/render path, reuse sampled
+  controller frames, and avoid duplicate active-stream gamepad polling.
 - Bound automatic recovery, cancel stale retries when leaving, and detect
   operating-system resume without promising cloud-game preservation.
 - Export local, identifier-free performance histories and configuration-grouped

@@ -246,9 +246,14 @@ function registerIpc(appController: AppController): void {
     ) => appController.reportStreamEvent(sessionId, event, detail),
   );
   handle(IPC.stopStream, () => appController.stopStream());
-  handle(IPC.updateTelemetry, (telemetry: StreamTelemetry) =>
-    appController.updateTelemetry(telemetry),
-  );
+  ipcMain.on(IPC.updateTelemetry, (event, telemetry: StreamTelemetry) => {
+    const url = event.senderFrame?.url ?? event.sender.getURL();
+    if (!isTrustedRendererUrl(url)) {
+      console.warn("Ignored telemetry from an untrusted IPC sender.");
+      return;
+    }
+    appController.updateTelemetry(telemetry);
+  });
   handle(IPC.updateSettings, (settings: Partial<AppSettings>) =>
     appController.updateSettings(settings),
   );

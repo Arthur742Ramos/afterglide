@@ -223,7 +223,7 @@ export interface StreamApi {
     detail?: string,
   ): Promise<void>;
   stopStream(): Promise<void>;
-  updateTelemetry(telemetry: StreamTelemetry): Promise<void>;
+  updateTelemetry(telemetry: StreamTelemetry): void;
   updateSettings(settings: Partial<AppSettings>): Promise<void>;
   checkForUpdates(): Promise<void>;
   exportPerformanceReport(): Promise<boolean>;

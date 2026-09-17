@@ -23,9 +23,36 @@ const buttons: XboxButtonName[] = [
 ];
 const triggers = ["LeftTrigger", "RightTrigger"] as const;
 const controls = [...buttons, ...triggers];
+const frameFields: Array<keyof XboxInputFrame> = [
+  "GamepadIndex",
+  ...buttons,
+  "LeftThumbXAxis",
+  "LeftThumbYAxis",
+  "RightThumbXAxis",
+  "RightThumbYAxis",
+  ...triggers,
+];
 
 export const INPUT_TRANSITION_POLICY = { capacity: 32, maxAgeMs: 250 } as const;
 export type InputBufferFailure = "overflow" | "expired";
+
+function copyFrame(target: XboxInputFrame, source: XboxInputFrame): void {
+  frameFields.forEach((field) => {
+    target[field] = source[field];
+  });
+}
+
+function framesEqual(left: XboxInputFrame, right: XboxInputFrame): boolean {
+  return frameFields.every((field) => left[field] === right[field]);
+}
+
+function pressedControls(frame: XboxInputFrame): number {
+  let mask = 0;
+  controls.forEach((control, index) => {
+    if (frame[control] > 0) mask |= 1 << index;
+  });
+  return mask;
+}
 
 /**
  * Preserve button and tuned trigger rest/pressed (>0) edges, not historical
@@ -34,11 +61,12 @@ export type InputBufferFailure = "overflow" | "expired";
  * on drain. Exceeding either fails visibly and prioritizes neutral.
  */
 export class InputTransitionBuffer {
-  private transitions: { buttons: number[]; at: number }[] = [];
+  private transitions: { controls: number; at: number }[] = [];
   private latest = emptyXboxInputFrame();
-  private observed = controls.map(() => 0);
+  private observed = 0;
   private triggerMagnitudes = [0, 0];
-  private sentSignature = "";
+  private sent = emptyXboxInputFrame();
+  private hasSent = false;
 
   constructor(
     private readonly capacity: number = INPUT_TRANSITION_POLICY.capacity,
@@ -48,21 +76,22 @@ export class InputTransitionBuffer {
   clear(): void {
     this.transitions = [];
     this.latest = emptyXboxInputFrame();
-    this.observed = controls.map(() => 0);
+    this.observed = 0;
     this.triggerMagnitudes = [0, 0];
-    this.sentSignature = "";
+    this.sent = emptyXboxInputFrame();
+    this.hasSent = false;
   }
 
   observe(frame: XboxInputFrame, now: number): InputBufferFailure | undefined {
     if (this.expired(now)) return "expired";
-    this.latest = { ...frame };
+    copyFrame(this.latest, frame);
     triggers.forEach((trigger, index) => {
       if (frame[trigger] > 0) this.triggerMagnitudes[index] = frame[trigger];
     });
-    const next = controls.map((control) => Number(frame[control] > 0));
-    if (next.some((value, index) => value !== this.observed[index])) {
+    const next = pressedControls(frame);
+    if (next !== this.observed) {
       if (this.transitions.length >= this.capacity) return "overflow";
-      this.transitions.push({ buttons: next, at: now });
+      this.transitions.push({ controls: next, at: now });
       this.observed = next;
     }
     return undefined;
@@ -78,21 +107,31 @@ export class InputTransitionBuffer {
     while (this.transitions.length) {
       const frame = { ...this.latest };
       buttons.forEach((button, index) => {
-        frame[button] = this.transitions[0].buttons[index];
+        frame[button] = Number(
+          Boolean(this.transitions[0].controls & (1 << index)),
+        );
       });
       triggers.forEach((trigger, index) => {
-        frame[trigger] = this.transitions[0].buttons[buttons.length + index]
-          ? this.triggerMagnitudes[index]
-          : 0;
+        frame[trigger] =
+          this.transitions[0].controls & (1 << (buttons.length + index))
+            ? this.triggerMagnitudes[index]
+            : 0;
       });
       if (!send(frame)) return undefined;
-      this.sentSignature = JSON.stringify(frame);
+      copyFrame(this.sent, frame);
+      this.hasSent = true;
       this.transitions.shift();
       sent = true;
     }
-    const signature = JSON.stringify(this.latest);
-    if (signature !== this.sentSignature || (heartbeat && !sent)) {
-      if (send(this.latest)) this.sentSignature = signature;
+    if (
+      !this.hasSent ||
+      !framesEqual(this.latest, this.sent) ||
+      (heartbeat && !sent)
+    ) {
+      if (send(this.latest)) {
+        copyFrame(this.sent, this.latest);
+        this.hasSent = true;
+      }
     }
     return undefined;
   }
