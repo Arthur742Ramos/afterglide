@@ -14,6 +14,7 @@ import {
   type Page,
 } from "@playwright/test";
 import axeCore from "axe-core";
+import { waitForFiniteAnimationsToSettle } from "./animation-settling";
 
 const axeSource = axeCore.source;
 
@@ -102,18 +103,8 @@ async function expectNoAccessibilityViolations(
   surface: string,
 ): Promise<void> {
   await page.evaluate(axeSource);
+  await page.evaluate(waitForFiniteAnimationsToSettle);
   const violations = await page.evaluate(async () => {
-    // Audit settled colors without disabling transitions or looping animations.
-    await Promise.all(
-      document
-        .getAnimations()
-        .filter(
-          (animation) =>
-            animation.playState === "running" &&
-            Number.isFinite(animation.effect?.getComputedTiming().endTime),
-        )
-        .map((animation) => animation.finished),
-    );
     const axe = (
       window as unknown as {
         axe: {
