@@ -190,6 +190,26 @@ describe("AppController", () => {
     });
   });
 
+  it("keeps a late device-code failure from replacing a cancelled sign-in", async () => {
+    const platform = new FakePlatform();
+    let rejectStart!: (error: Error) => void;
+    vi.spyOn(platform, "beginDeviceCode").mockImplementation(
+      () =>
+        new Promise<DeviceCode>((_resolve, reject) => {
+          rejectStart = reject;
+        }),
+    );
+    const controller = makeController(platform);
+    const starting = controller.beginSignIn();
+
+    expect(controller.getSnapshot().auth.status).toBe("waiting");
+    await controller.cancelSignIn();
+    rejectStart(new Error("The device-code service failed late."));
+    await starting;
+
+    expect(controller.getSnapshot().auth).toEqual({ status: "signed-out" });
+  });
+
   it("bounds numeric telemetry and rejects unknown status values", () => {
     const controller = makeController(new FakePlatform());
     controller.updateTelemetry({
@@ -342,6 +362,31 @@ describe("AppController", () => {
     expect(report.samples[0].telemetry.framesDropped).toBe(2);
     expect(JSON.stringify(report)).not.toContain("Den Xbox");
     expect(JSON.stringify(report)).not.toContain("sessionPath");
+  });
+
+  it("retains the latest stream measurements for Health after stopping", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    await controller.startStream("den");
+    await controller.reportStreamEvent("session", "connected");
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      roundTripMs: 23,
+      jitterBufferMs: 8.4,
+      inputQueueBytes: 0,
+    });
+
+    await controller.stopStream();
+
+    expect(controller.getSnapshot().session.phase).toBe("idle");
+    expect(controller.getSnapshot().telemetry).toMatchObject({
+      roundTripMs: 23,
+      jitterBufferMs: 8.4,
+      inputQueueBytes: 0,
+    });
+
+    await controller.startStream("den");
+    expect(controller.getSnapshot().telemetry).toMatchObject(emptyTelemetry);
   });
 
   it("does not attribute a cached device reading to a new polling configuration", async () => {

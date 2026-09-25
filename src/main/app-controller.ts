@@ -128,6 +128,7 @@ export class AppController {
           this.patch({ auth: { status: "error", error: safe.message } });
         });
     } catch (error) {
+      if (generation !== this.authGeneration) return;
       const safe = safeError(error);
       console.error("Could not start authentication", errorForLog(error));
       this.patch({ auth: { status: "error", error: safe.message } });
@@ -548,7 +549,7 @@ export class AppController {
     this.recoveryStartedAt = undefined;
     this.recoveryMs = undefined;
     this.deviceMetrics = undefined;
-    this.patch({ session: idleSession(), telemetry: { ...emptyTelemetry } });
+    this.patch({ session: idleSession() });
     await this.stopActiveSession();
   }
 
