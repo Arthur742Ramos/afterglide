@@ -111,7 +111,9 @@ test("keyboard navigation reaches every signed-in shell screen", async () => {
 
     await page.getByRole("button", { name: "Home" }).focus();
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("button", { name: "Cloud", exact: true })).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: "Cloud", exact: true }),
+    ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(
       page.getByRole("heading", { name: "Your library. Ready anywhere." }),
