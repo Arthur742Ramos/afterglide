@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppSettings,
+  CloudTitle,
   AppSnapshot,
   DesktopCommand,
   IceCandidatePayload,
@@ -29,6 +30,8 @@ const api: StreamApi = {
   signOut: () => ipcRenderer.invoke(IPC.signOut) as Promise<void>,
   refreshCloudTitles: () =>
     ipcRenderer.invoke(IPC.refreshCloudTitles) as Promise<void>,
+  searchCloudTitles: (query) =>
+    ipcRenderer.invoke(IPC.searchCloudTitles, query) as Promise<CloudTitle[]>,
   selectCloudTitle: (titleId) =>
     ipcRenderer.invoke(IPC.selectCloudTitle, titleId) as Promise<void>,
   startCloudStream: (titleId) =>
