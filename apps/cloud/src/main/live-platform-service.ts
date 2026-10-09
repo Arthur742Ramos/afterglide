@@ -1,10 +1,8 @@
 import { Msal } from "xal-node";
-import XboxWebApi from "xbox-webapi";
 import type {
   CloudTitle,
   DeviceCode,
   IceCandidatePayload,
-  XboxConsole,
 } from "../shared/contracts";
 import {
   isTransientHttpStatus,
@@ -19,15 +17,10 @@ import type {
   StreamTarget,
 } from "./platform-service";
 import { SecureTokenStore } from "./secure-token-store";
-import { getStreamingTokens } from "./streaming-tokens";
-
-const XboxWebApiConstructor =
-  typeof XboxWebApi === "function"
-    ? XboxWebApi
-    : (XboxWebApi as unknown as { default: typeof XboxWebApi }).default;
 
 interface StreamTokenData {
   gsToken: string;
+  durationInSeconds?: number;
   market: string;
   offeringSettings: {
     regions: Array<{
@@ -60,11 +53,6 @@ interface CatalogProduct {
   Image_Poster?: { URL?: string };
 }
 
-interface XstsTokenData {
-  Token: string;
-  DisplayClaims: { xui: Array<{ uhs: string }> };
-}
-
 interface SessionContext {
   host: string;
   token: string;
@@ -74,10 +62,9 @@ interface SessionContext {
 
 export class LivePlatformService implements PlatformService {
   readonly mock = false;
-  private readonly msal: Msal;
-  private homeToken?: StreamTokenData;
+  private msal: Msal;
   private cloudToken?: StreamTokenData;
-  private webToken?: XstsTokenData;
+  private cloudTokenExpiresAt = 0;
   private currentSession?: SessionContext;
   private cloudCatalog?: { expiresAt: number; titles: CloudTitle[] };
   private authGeneration = 0;
@@ -138,43 +125,15 @@ export class LivePlatformService implements PlatformService {
 
   async signOut(): Promise<void> {
     this.cancelAuthentication();
-    this.homeToken = undefined;
     this.cloudToken = undefined;
-    this.webToken = undefined;
     this.currentSession = undefined;
     this.cloudCatalog = undefined;
     this.tokenStore.removeAll();
-  }
-
-  async listConsoles(): Promise<XboxConsole[]> {
-    await this.ensureTokens();
-    const web = this.webToken;
-    if (!web)
-      throw new AfterglideError(
-        "AUTH_EXPIRED",
-        "Sign in again to find your Xbox.",
-      );
-
-    const client = new XboxWebApiConstructor({
-      uhs: web.DisplayClaims.xui[0]?.uhs ?? "",
-      token: web.Token,
-    });
-    const response = await client.providers.smartglass.getConsolesList();
-    return response.data.result.map((console) => ({
-      id: console.id,
-      name: console.name || "Xbox console",
-      model: friendlyConsoleType(console.consoleType),
-      power: normalizePower(console.powerState),
-      remotePlayEnabled: console.consoleStreamingEnabled,
-      remoteManagementEnabled: console.remoteManagementEnabled,
-      wirelessWarning: console.wirelessWarning,
-      outOfHomeWarning: console.outOfHomeWarning,
-    }));
+    this.msal = new Msal(this.tokenStore);
   }
 
   async listCloudTitles(): Promise<CloudTitle[]> {
     await this.ensureTokens();
-    if (!this.cloudToken) await this.refreshServiceTokens();
     const cloud = this.cloudToken;
     if (!cloud)
       throw new AfterglideError(
@@ -186,6 +145,12 @@ export class LivePlatformService implements PlatformService {
       return structuredClone(this.cloudCatalog.titles);
 
     const region = chooseRegion(cloud);
+    if (!region)
+      throw new AfterglideError(
+        "NO_REGION",
+        "Xbox Cloud Gaming has no available region for this account.",
+        false,
+      );
     const host = normalizeHost(region.baseUri);
     const [all, recent] = await Promise.all([
       this.requestJson<CloudTitlesResponse>(host, cloud.gsToken, "/v2/titles"),
@@ -222,7 +187,7 @@ export class LivePlatformService implements PlatformService {
             method: "POST",
             headers: {
               "ms-cv": "0.0",
-              "calling-app-name": "Afterglide",
+              "calling-app-name": "Afterglide Cloud",
               "calling-app-version": "0.2.0",
             },
             body: JSON.stringify({ Products: batch }),
@@ -251,39 +216,22 @@ export class LivePlatformService implements PlatformService {
     return structuredClone(titles);
   }
 
-  async wakeConsole(consoleId: string): Promise<void> {
-    await this.ensureTokens();
-    const web = this.webToken;
-    if (!web)
-      throw new AfterglideError(
-        "AUTH_EXPIRED",
-        "Sign in again to wake your Xbox.",
-      );
-    const client = new XboxWebApiConstructor({
-      uhs: web.DisplayClaims.xui[0]?.uhs ?? "",
-      token: web.Token,
-    });
-    await client.providers.smartglass.powerOn(consoleId);
-  }
-
   async startSession(
     target: StreamTarget,
     resolution: 720 | 1080,
   ): Promise<SessionStart> {
     await this.ensureTokens();
-    const token = target.source === "cloud" ? this.cloudToken : this.homeToken;
+    const token = this.cloudToken;
     if (!token)
       throw new AfterglideError(
-        target.source === "cloud" ? "XCLOUD_UNAVAILABLE" : "AUTH_EXPIRED",
-        target.source === "cloud"
-          ? "Cloud gaming is not available for this account or region."
-          : "Sign in again to start remote play.",
+        "XCLOUD_UNAVAILABLE",
+        "Cloud gaming is not available for this account or region.",
       );
     const region = chooseRegion(token);
     if (!region)
       throw new AfterglideError(
         "NO_REGION",
-        "Xbox remote play is not available in this region.",
+        "Xbox Cloud Gaming is not available in this region.",
         false,
       );
 
@@ -414,19 +362,34 @@ export class LivePlatformService implements PlatformService {
   }
 
   private async refreshServiceTokens(): Promise<void> {
-    const [streaming, web] = await Promise.all([
-      getStreamingTokens(this.msal),
-      this.msal.getWebToken(),
-    ]);
-    this.homeToken = streaming.xHomeToken.data as StreamTokenData;
-    this.cloudToken = streaming.xCloudToken?.data as
-      | StreamTokenData
-      | undefined;
-    this.webToken = web.data as XstsTokenData;
+    // Use the library's supported cloud offering flow directly. Its combined
+    // getStreamingTokens() requires xHome to succeed before requesting cloud.
+    const generation = this.authGeneration;
+    const msal = this.msal;
+    const gssv = await msal.getGssvToken();
+    let cloud: StreamTokenData | undefined;
+    try {
+      cloud = (await msal.getStreamToken(gssv.data.Token, "xgpuweb"))
+        .data as StreamTokenData;
+    } catch {
+      try {
+        cloud = (await msal.getStreamToken(gssv.data.Token, "xgpuwebf2p"))
+          .data as StreamTokenData;
+      } catch {
+        // Account, subscription and region eligibility remain Xbox decisions.
+      }
+    }
+    if (generation !== this.authGeneration) return;
+    this.cloudToken = cloud;
+    this.cloudTokenExpiresAt = cloud
+      ? Date.now() + Math.max(0, (cloud.durationInSeconds ?? 300) - 60) * 1_000
+      : 0;
+    this.cloudCatalog = undefined;
   }
 
   private async ensureTokens(): Promise<void> {
-    if (!this.homeToken || !this.webToken) await this.refreshServiceTokens();
+    if (!this.cloudToken || Date.now() >= this.cloudTokenExpiresAt)
+      await this.refreshServiceTokens();
   }
 
   private requireSession(sessionPath: string): SessionContext {
@@ -436,7 +399,7 @@ export class LivePlatformService implements PlatformService {
     ) {
       throw new AfterglideError(
         "SESSION_MISSING",
-        "The remote-play session is no longer active.",
+        "The cloud session is no longer active.",
       );
     }
     return this.currentSession;
@@ -559,7 +522,7 @@ export function buildSessionPayload(
 ) {
   return {
     clientSessionId: "",
-    titleId: target.source === "cloud" ? target.id : "",
+    titleId: target.id,
     systemUpdateGroup: "",
     settings: {
       nanoVersion: "V3;WebrtcTransport.dll",
@@ -570,9 +533,9 @@ export function buildSessionPayload(
       useIceConnection: false,
       timezoneOffsetMinutes: new Date().getTimezoneOffset(),
       sdkType: "web",
-      osName: resolution === 1080 ? "windows" : "android",
+      osName: process.platform === "darwin" ? "macos" : "windows",
     },
-    serverId: target.source === "home" ? target.id : "",
+    serverId: "",
     fallbackRegionNames: [],
   };
 }
@@ -644,25 +607,6 @@ function normalizeHost(baseUri: string): string {
   return baseUri.replace(/\/$/, "");
 }
 
-function normalizePower(power: string): XboxConsole["power"] {
-  if (power === "On") return "on";
-  if (power === "ConnectedStandby") return "standby";
-  if (power === "Off") return "offline";
-  return "unknown";
-}
-
-function friendlyConsoleType(type: string): string {
-  const names: Record<string, string> = {
-    XboxOne: "Xbox One",
-    XboxOneS: "Xbox One S",
-    XboxOneX: "Xbox One X",
-    XboxSeriesS: "Xbox Series S",
-    XboxSeriesX: "Xbox Series X",
-    XboxScarlett: "Xbox Series X|S",
-  };
-  return names[type] ?? type.replace(/([a-z])([A-Z])/g, "$1 $2") ?? "Xbox";
-}
-
 function deviceInfo(resolution: 720 | 1080): string {
   return JSON.stringify({
     appInfo: {
@@ -678,7 +622,7 @@ function deviceInfo(resolution: 720 | 1080): string {
     dev: {
       hw: { make: "Microsoft", model: "unknown", sdktype: "web" },
       os: {
-        name: resolution === 1080 ? "windows" : "android",
+        name: process.platform === "darwin" ? "macos" : "windows",
         ver: "22631.2715",
         platform: "desktop",
       },

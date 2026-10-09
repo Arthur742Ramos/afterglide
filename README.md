@@ -13,6 +13,15 @@ share WebRTC video/audio, controller input, rumble, telemetry, and recovery UI.
 
 ![Afterglide home screen](docs/images/home.png)
 
+## Optional Cloud app
+
+[Afterglide Cloud](apps/cloud/README.md) is a separate xCloud-only alpha for
+Windows and macOS, with controller-first library/search and its own installer,
+settings and encrypted sign-in storage. Run its commands from `apps/cloud`.
+The existing Afterglide app, console remote play, installer and updater remain
+available through the commands below. Mac execution, signing/notarization,
+physical controllers and live Xbox gameplay remain Cloud validation gates.
+
 ## Install
 
 Download the Linux x86_64 AppImage from the
