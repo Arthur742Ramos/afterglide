@@ -1,0 +1,146 @@
+{
+  "name": "afterglide-cloud",
+  "version": "0.1.0-alpha.1",
+  "description": "A controller-first Xbox Cloud Gaming client for Windows and macOS",
+  "desktopName": "afterglide-cloud",
+  "license": "MIT",
+  "author": "Arthur Ramos",
+  "type": "module",
+  "main": "dist/main/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"tsup --watch\" \"wait-on tcp:5174 dist/main/main.cjs dist/main/preload.cjs && cross-env AFTERGLIDE_CLOUD_DEV_URL=http://127.0.0.1:5174 electron .\"",
+    "build": "npm run clean && vite build && tsup",
+    "clean": "rimraf dist test-results playwright-report",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"*.config.ts\" package.json tsconfig.json index.html \"*.md\" \"docs/**/*.md\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"*.config.ts\" package.json tsconfig.json index.html \"*.md\" \"docs/**/*.md\"",
+    "test": "vitest run --maxWorkers=1",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:headed": "cross-env AFTERGLIDE_CLOUD_E2E_HEADED=1 npm run test:e2e",
+    "package": "npm run build && electron-builder --dir --publish never",
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run build",
+    "dev:demo": "cross-env AFTERGLIDE_CLOUD_E2E=1 AFTERGLIDE_CLOUD_E2E_SIGNED_IN=1 AFTERGLIDE_CLOUD_E2E_HEADED=1 npm run dev",
+    "start:demo": "cross-env AFTERGLIDE_CLOUD_E2E=1 AFTERGLIDE_CLOUD_E2E_SIGNED_IN=1 AFTERGLIDE_CLOUD_E2E_HEADED=1 electron .",
+    "test:unit": "vitest run --maxWorkers=1",
+    "package:win": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "package:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64 --publish never"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "xal-node": "1.1.4"
+  },
+  "devDependencies": {
+    "@electron/get": "5.1.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "25.0.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.1.1",
+    "axe-core": "4.13.0",
+    "concurrently": "9.2.4",
+    "cross-env": "10.1.0",
+    "electron": "43.7.7",
+    "electron-builder": "26.15.3",
+    "prettier": "3.8.2",
+    "rimraf": "6.1.3",
+    "tsup": "8.5.0",
+    "typescript": "7.0.2",
+    "vite": "8.1.0",
+    "vitest": "4.1.11",
+    "wait-on": "9.0.3"
+  },
+  "build": {
+    "appId": "io.github.Arthur742Ramos.AfterglideCloud",
+    "productName": "Afterglide Cloud",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "!node_modules/!(react|react-dom|scheduler|xal-node|commander|jose|uuid-1345)/**",
+      "!**/node_modules/npm/**"
+    ],
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.games",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true
+    },
+    "artifactName": "Afterglide-Cloud-${version}-${os}-${arch}.${ext}",
+    "publish": null,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Afterglide Cloud",
+      "allowElevation": false,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "include": "build/installer.nsh"
+    },
+    "dmg": {
+      "title": "Afterglide Cloud",
+      "iconSize": 96,
+      "window": {
+        "width": 560,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 140,
+          "y": 180,
+          "type": "file"
+        },
+        {
+          "x": 420,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "overrides": {
+    "@electron/get": "5.1.0",
+    "concurrently": {
+      "shell-quote": "1.12.0"
+    }
+  }
+}
