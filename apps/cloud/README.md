@@ -29,7 +29,7 @@ On Windows, after building, `./Start-Demo.ps1` starts the demo using installed N
 
 ### Test from source on a Mac
 
-The Mac path is configured but has not been executed on a Mac. Use a clean source copy and native Mac Node 24.14.0/npm. That Node release requires macOS 13.5 or newer on both Intel and Apple Silicon ([Node platform requirements](https://github.com/nodejs/node/blob/v24.14.0/BUILDING.md#platform-list)). In Terminal:
+These commands need validation on your Mac; automated macOS source/mock CI is separate from signed distribution. Use a clean source copy and native Mac Node 24.14.0/npm. That Node release requires macOS 13.5 or newer on both Intel and Apple Silicon ([Node platform requirements](https://github.com/nodejs/node/blob/v24.14.0/BUILDING.md#platform-list)). In Terminal:
 
 ```sh
 cd afterglide/apps/cloud
@@ -73,8 +73,8 @@ npm run package:win
 npm run package:mac
 ```
 
-Windows uses a per-user NSIS installer with a Start menu shortcut and no elevation request or automatic desktop shortcut. macOS uses DMG/ZIP for Intel and Apple Silicon, with a configured drag-to-Applications layout. Package commands never publish. Signing, notarization, clean-machine install and macOS execution remain release gates. See [implementation boundaries](docs/CLOUD-FIRST.md), [desktop polish and platform gates](docs/DESKTOP-POLISH.md) and [local validation](VALIDATION.md).
+Windows uses a per-user NSIS installer with a Start menu shortcut and no elevation request or automatic desktop shortcut. macOS uses DMG/ZIP for Intel and Apple Silicon, with a configured drag-to-Applications layout. Package commands never publish. Signing, notarization, clean-machine install and native macOS behavior remain release gates. See [implementation boundaries](docs/CLOUD-FIRST.md), [desktop polish and platform gates](docs/DESKTOP-POLISH.md) and [local validation](VALIDATION.md).
 
-This is a local alpha preview. The reviewed dependency changes produce zero npm audit findings; exact advisory paths, exposure and compatibility review are recorded in [dependency triage](docs/DEPENDENCY-TRIAGE.md). Live authentication, hardware and platform distribution gates still require validation.
+This is an alpha source preview. The reviewed dependency changes produce zero npm audit findings; exact advisory paths, exposure and compatibility review are recorded in [dependency triage](docs/DEPENDENCY-TRIAGE.md). Live authentication, hardware and platform distribution gates still require validation.
 
 This independent client is not affiliated with Microsoft or Xbox. Upstream MIT copyright and permission text remain in [LICENSE](LICENSE); attribution remains in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

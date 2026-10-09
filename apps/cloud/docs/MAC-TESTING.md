@@ -1,6 +1,6 @@
 # Mac test path - inspected 2026-10-09
 
-The source demo is the shortest current route. No Mac build, runtime test, DMG installation, Keychain sign-in or Xbox gameplay has been performed. The delivered Windows `.exe` cannot be installed on macOS.
+The source demo is the shortest current route. Local Windows validation did not perform a Mac build, runtime test, DMG installation, Keychain sign-in or Xbox gameplay. The Cloud CI workflow separately checks macOS source/mock execution and unpacked packaging. Its results do not establish a signed/notarized DMG, hardware behavior or live Xbox compatibility. The Windows `.exe` cannot be installed on macOS.
 
 ## Source demo
 
@@ -43,9 +43,9 @@ DMG creation uses bundled architecture-specific dmgbuild tooling plus macOS util
 
 - `Start-Demo.ps1` and the workspace's bundled Node runtime are Windows-only conveniences. Windows NSIS/elevation/shortcut configuration is scoped to Windows targets. npm scripts use cross-env and support Mac Terminal.
 - Current builder 26.15.3 skips signing when it cannot find a certificate; it does not automatically select an ad-hoc identity. The project retains `hardenedRuntime: true`. An unsigned build may be blocked or fail to launch. Signing/notarization is required for an ordinary distributed Mac install; this guide provides no Gatekeeper or hardened-runtime bypass.
-- The package CI workflow explicitly disables signing identity discovery and has not run. Its presence is not evidence of a launchable or notarized Mac artifact. No workflow was dispatched or repository published.
+- The Cloud source CI workflow explicitly disables signing identity discovery during unpacked packaging and never publishes a release. Passing source/mock tests and unpacked packaging does not establish a normally installed, signed/notarized Mac artifact. See the exact commit checks on the Cloud pull request.
 - Live signaling selects `macos` on Darwin, but `deviceInfo()` in `src/main/live-platform-service.ts` still contains the inherited static Windows version `22631.2715` and Chrome `119.0` metadata. This needs review in the real Mac signaling pass; no compatibility success or restriction workaround is inferred from it.
 - Mac battery/thermal capture is unavailable in the current sensor adapter; it reports that Linux sysfs is required. Electron process CPU and stream/network measurements are separate. This does not require installing a privileged sensor helper.
 - Intel/Apple Silicon execution, actual DMG installation, Dock close/reopen, Keychain prompts/restoration, native fullscreen, USB/Bluetooth/rumble, signing/notarization and real Xbox gameplay are still gates.
 
-The local correction was documentation-only. No Mac build or install, paid runner, account change, security-setting change or publication was performed.
+The original Mac source guide was prepared on Windows. Public alpha source integration does not include a Cloud binary release, paid services, account changes or security-setting changes.
