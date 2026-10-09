@@ -1,0 +1,3 @@
+# Keep Cloud formatting reproducible across Windows and macOS checkouts.
+apps/cloud/** text=auto eol=lf
+.github/workflows/cloud-ci.yml text eol=lf
