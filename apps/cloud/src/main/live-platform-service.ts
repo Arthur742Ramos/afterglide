@@ -1,4 +1,6 @@
 import { Msal } from "xal-node";
+import { release } from "node:os";
+import { randomBytes } from "node:crypto";
 import type {
   CloudTitle,
   DeviceCode,
@@ -46,11 +48,15 @@ interface CloudTitlesResponse {
 
 interface CatalogProduct {
   StoreId?: string;
-  XCloudTitleId?: string;
+  XCloudTitleId?: string | null;
   ProductTitle?: string;
   PublisherName?: string;
   Image_Tile?: { URL?: string };
   Image_Poster?: { URL?: string };
+}
+
+interface CatalogResponse {
+  Products?: CatalogProduct[] | Record<string, CatalogProduct>;
 }
 
 interface SessionContext {
@@ -68,6 +74,9 @@ export class LivePlatformService implements PlatformService {
   private currentSession?: SessionContext;
   private cloudCatalog?: { expiresAt: number; titles: CloudTitle[] };
   private authGeneration = 0;
+  private cloudRows: CloudTitleResult[] = [];
+  private recentIds = new Set<string>();
+  private searchedProducts = new Map<string, CatalogProduct>();
 
   constructor(private readonly tokenStore: SecureTokenStore) {
     tokenStore.load();
@@ -128,11 +137,17 @@ export class LivePlatformService implements PlatformService {
     this.cloudToken = undefined;
     this.currentSession = undefined;
     this.cloudCatalog = undefined;
+    this.cloudRows = [];
+    this.recentIds.clear();
+    this.searchedProducts.clear();
     this.tokenStore.removeAll();
     this.msal = new Msal(this.tokenStore);
   }
 
-  async listCloudTitles(): Promise<CloudTitle[]> {
+  async listCloudTitles(
+    onProgress?: (titles: CloudTitle[]) => void,
+  ): Promise<CloudTitle[]> {
+    const generation = this.authGeneration;
     await this.ensureTokens();
     const cloud = this.cloudToken;
     if (!cloud)
@@ -164,56 +179,168 @@ export class LivePlatformService implements PlatformService {
       (row): row is CloudTitleResult & { titleId: string } =>
         typeof row.titleId === "string" && row.titleId.length > 0,
     );
-    const productIds = [
-      ...new Set(
-        rows
-          .map((row) => row.details?.productId)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ];
-    const batches = Array.from(
-      { length: Math.ceil(productIds.length / 100) },
-      (_, index) => productIds.slice(index * 100, index * 100 + 100),
-    );
-    const catalogResults = await Promise.all(
-      batches.map((batch) =>
-        this.requestJson<{
-          Products?: CatalogProduct[] | Record<string, CatalogProduct>;
-        }>(
-          "https://catalog.gamepass.com",
-          "",
-          `/v3/products?hydration=RemoteHighSapphire0&market=${encodeURIComponent(cloud.market || "US")}&language=en-US`,
-          {
-            method: "POST",
-            headers: {
-              "ms-cv": "0.0",
-              "calling-app-name": "Afterglide Cloud",
-              "calling-app-version": "0.2.0",
-            },
-            body: JSON.stringify({ Products: batch }),
-          },
-        )
-          .then((catalog) => ({ catalog, complete: true }))
-          .catch(() => ({ catalog: { Products: [] }, complete: false })),
-      ),
-    );
-    const products = catalogResults.flatMap(({ catalog }) =>
-      Array.isArray(catalog.Products)
-        ? catalog.Products
-        : Object.values(catalog.Products ?? {}),
-    );
     const recentIds = new Set(
       (recent.results ?? [])
         .map((row) => row.titleId)
         .filter((id): id is string => Boolean(id)),
     );
+    // Get recently played games into the first batch so they can launch early.
+    this.cloudRows = rows;
+    this.recentIds = recentIds;
+    const prioritizedRows = [
+      ...rows.filter((row) => recentIds.has(row.titleId)),
+      ...rows,
+    ];
+    const productIds = [
+      ...new Set(
+        prioritizedRows
+          .map((row) => row.details?.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    // A small first batch gives the initial page a fast path; later batches
+    // keep the total request count low for libraries containing thousands.
+    const batches = productIds.length ? [productIds.slice(0, 25)] : [];
+    for (let offset = 25; offset < productIds.length; offset += 100)
+      batches.push(productIds.slice(offset, offset + 100));
+    const catalogResults: Array<{
+      catalog: CatalogResponse;
+      complete: boolean;
+    }> = [];
+    const hydrate = async (
+      batch: string[],
+    ): Promise<{ catalog: CatalogResponse; complete: boolean }> => {
+      try {
+        const catalog = await this.requestJson<CatalogResponse>(
+          "https://catalog.gamepass.com",
+          "",
+          `/v3/products?hydration=RemoteLowJade0&market=${encodeURIComponent(cloud.market || "US")}&language=en-US`,
+          {
+            method: "POST",
+            headers: {
+              "ms-cv": correlationVector(),
+              "calling-app-name": "Afterglide Cloud",
+              "calling-app-version": "0.2.0",
+            },
+            body: JSON.stringify({ Products: batch }),
+          },
+        );
+        return { catalog, complete: true };
+      } catch {
+        if (batch.length > 25) {
+          // A slow or rejected bulk response should not erase a hundred covers.
+          // Recover smaller pieces sequentially within this worker's slot.
+          const recovered = [];
+          for (let offset = 0; offset < batch.length; offset += 25)
+            recovered.push(await hydrate(batch.slice(offset, offset + 25)));
+          return {
+            catalog: {
+              Products: recovered.flatMap(({ catalog }) =>
+                catalogProducts(catalog),
+              ),
+            },
+            complete: recovered.every((result) => result.complete),
+          };
+        }
+        return { catalog: { Products: [] }, complete: false };
+      }
+    };
+    // Publish completed batches immediately; the first page must not wait for
+    // every slow request in a large library. Keep four concurrent slots.
+    for (let offset = 0; offset < batches.length; offset += 4) {
+      await Promise.all(
+        batches.slice(offset, offset + 4).map(async (batch) => {
+          const result = await hydrate(batch);
+          catalogResults.push(result);
+          if (!onProgress || generation !== this.authGeneration) return;
+          const available = [
+            ...catalogResults.flatMap(({ catalog }) =>
+              catalogProducts(catalog),
+            ),
+            ...this.searchedProducts.values(),
+          ];
+          const knownProducts = new Set(
+            available.map((product) => product.StoreId),
+          );
+          const knownTitles = new Set(
+            available.map((product) => product.XCloudTitleId),
+          );
+          const readyRows = rows.filter(
+            (row) =>
+              knownProducts.has(row.details?.productId) ||
+              knownTitles.has(row.titleId),
+          );
+          if (readyRows.length)
+            onProgress(mapCloudTitles(readyRows, available, recentIds));
+        }),
+      );
+    }
+    const products = [
+      ...catalogResults.flatMap(({ catalog }) => catalogProducts(catalog)),
+      ...this.searchedProducts.values(),
+    ];
     const titles = mapCloudTitles(rows, products, recentIds);
-    if (catalogResults.every((result) => result.complete))
+    if (
+      generation === this.authGeneration &&
+      catalogResults.every((result) => result.complete)
+    )
       this.cloudCatalog = {
         expiresAt: Date.now() + NETWORK_POLICY.cloudCatalogCacheMs,
         titles,
       };
     return structuredClone(titles);
+  }
+
+  async searchCloudTitles(query: string): Promise<CloudTitle[]> {
+    await this.ensureTokens();
+    const generation = this.authGeneration;
+    const cloud = this.cloudToken;
+    if (!cloud || !query.trim()) return [];
+    const products: CatalogProduct[] = [];
+    let continuation: string | undefined;
+    const seen = new Set<string>();
+    do {
+      const response = await this.requestJson<
+        CatalogResponse & { ContinuationToken?: string }
+      >(
+        "https://catalog.gamepass.com",
+        "",
+        `/search/v2?market=${encodeURIComponent(cloud.market || "US")}&language=en-US&hydration=RemoteLowJade0`,
+        {
+          method: "POST",
+          headers: {
+            "ms-cv": correlationVector(),
+            "calling-app-name": "Afterglide Cloud",
+            "calling-app-version": "0.2.0",
+            ...(continuation ? { "X-MS-CT": continuation } : {}),
+          },
+          body: JSON.stringify({
+            Query: query.trim(),
+            Scope: "EDGEWATER",
+            DeviceFamilies: ["Windows.Xbox"],
+            ProductFamilies: ["games"],
+          }),
+        },
+      );
+      if (generation !== this.authGeneration) return [];
+      products.push(...catalogProducts(response));
+      continuation = response.ContinuationToken || undefined;
+      if (continuation && seen.has(continuation))
+        throw new AfterglideError(
+          "CATALOG_SEARCH",
+          "Cloud search could not finish. Try again.",
+        );
+      if (continuation) seen.add(continuation);
+    } while (continuation);
+    const available = new Set(products.map((product) => product.StoreId));
+    for (const product of products)
+      if (product.StoreId) this.searchedProducts.set(product.StoreId, product);
+    // Search is public; only return games present in the authenticated cloud list.
+    return mapCloudTitles(
+      this.cloudRows.filter((row) => available.has(row.details?.productId)),
+      products,
+      this.recentIds,
+    );
   }
 
   async startSession(
@@ -442,7 +569,14 @@ export class LivePlatformService implements PlatformService {
     allowEmpty = false,
   ): Promise<T> {
     const method = init.method?.toUpperCase() ?? "GET";
-    const attempts = method === "GET" ? NETWORK_POLICY.maxReadRetries + 1 : 1;
+    // Catalog hydration uses POST for an immutable lookup; session POSTs must
+    // remain single-attempt to avoid creating duplicate cloud sessions.
+    const readOnly =
+      method === "GET" ||
+      (method === "POST" &&
+        host === "https://catalog.gamepass.com" &&
+        (path.startsWith("/v3/products?") || path.startsWith("/search/v2?")));
+    const attempts = readOnly ? NETWORK_POLICY.maxReadRetries + 1 : 1;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const controller = new AbortController();
       const timeout = setTimeout(
@@ -588,6 +722,16 @@ export function mapCloudTitles(
     );
 }
 
+function catalogProducts(catalog: CatalogResponse): CatalogProduct[] {
+  return Array.isArray(catalog.Products)
+    ? catalog.Products
+    : Object.entries(catalog.Products ?? {}).map(([productId, product]) => ({
+        ...product,
+        // Most live records omit the Store ID retained in their object key.
+        StoreId: product.StoreId ?? productId,
+      }));
+}
+
 function safeCatalogImageUrl(value?: string): string | undefined {
   if (!value) return undefined;
   try {
@@ -622,8 +766,13 @@ function deviceInfo(resolution: 720 | 1080): string {
     dev: {
       hw: { make: "Microsoft", model: "unknown", sdktype: "web" },
       os: {
-        name: process.platform === "darwin" ? "macos" : "windows",
-        ver: "22631.2715",
+        name:
+          process.platform === "darwin"
+            ? "macos"
+            : process.platform === "win32"
+              ? "windows"
+              : "linux",
+        ver: process.getSystemVersion?.() ?? release(),
         platform: "desktop",
       },
       displayInfo: {
@@ -633,7 +782,10 @@ function deviceInfo(resolution: 720 | 1080): string {
         },
         pixelDensity: { dpiX: 2, dpiY: 2 },
       },
-      browser: { browserName: "chrome", browserVersion: "119.0" },
+      browser: {
+        browserName: "chrome",
+        browserVersion: process.versions.chrome ?? "unknown",
+      },
     },
   });
 }
@@ -645,4 +797,8 @@ function delay(ms: number): Promise<void> {
 export function parseIceExchange(exchange: string): IceCandidatePayload[] {
   const parsed = JSON.parse(exchange) as IceCandidatePayload[];
   return parsed;
+}
+
+function correlationVector(): string {
+  return `${randomBytes(16).toString("base64").replace(/=+$/, "")}.0`;
 }

@@ -45,11 +45,10 @@ Use `arm64` Node on Apple Silicon and `x64` Node on Intel. Install dependencies 
 The smallest configured drag-to-Applications build is one DMG, built on a Mac:
 
 ```sh
-npm run build
-npx electron-builder --mac dmg --arm64 --publish never
+npm run package:mac:local
 ```
 
-On Intel, use `--x64` instead. The existing `npm run package:mac` builds separate DMG and ZIP files for both architectures. A successful build does not establish that the app launches: the current configuration retains hardened runtime, and normal distribution needs Developer ID signing and notarization. No ready-to-download Mac build is available yet. See [Mac test details and remaining gates](docs/MAC-TESTING.md).
+This builds one development DMG for the native Node architecture and never notarizes or publishes. On macOS 27+ it uses the supported folder-to-image command after Electron Builder packaging/signing. The existing `npm run package:mac` builds separate DMG and ZIP files for both architectures. A successful build does not establish that the app launches: the current configuration retains hardened runtime, and normal distribution needs Developer ID signing and notarization. No public Mac binary release is available yet. See [Mac test details and remaining gates](docs/MAC-TESTING.md).
 
 ## Controls
 

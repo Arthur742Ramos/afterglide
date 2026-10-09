@@ -857,17 +857,65 @@ function CloudPage({
   const [query, setQuery] = useState("");
   const [recentOnly, setRecentOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(CLOUD_PAGE_SIZE);
+  const [search, setSearch] = useState<{
+    query: string;
+    status: "loading" | "ready" | "error";
+    titles: CloudTitle[];
+    error?: string;
+  }>();
+  useEffect(() => {
+    const text = query.trim();
+    if (!text) {
+      setSearch(undefined);
+      return;
+    }
+    let active = true;
+    setSearch({ query: text, status: "loading", titles: [] });
+    const timer = setTimeout(() => {
+      void window.afterglideCloud
+        .searchCloudTitles(text)
+        .then((titles) => {
+          if (active) setSearch({ query: text, status: "ready", titles });
+        })
+        .catch(() => {
+          if (active)
+            setSearch({
+              query: text,
+              status: "error",
+              titles: [],
+              error: "Cloud search didn’t finish. Try your search again.",
+            });
+        });
+    }, 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
   const searchInput = useRef<HTMLInputElement>(null);
   const selected = snapshot.cloud.titles.find(
     (title) => title.id === snapshot.cloud.selectedTitleId,
   );
-  const filtered = snapshot.cloud.titles.filter(
+  const localMatches = snapshot.cloud.titles.filter(
     (title) =>
       (!recentOnly || title.recentlyPlayed) &&
       `${title.name} ${title.publisher}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+  const filtered =
+    query.trim() && search?.query === query.trim()
+      ? [
+          ...new Map(
+            [
+              ...localMatches,
+              ...search.titles.filter(
+                (title) => !recentOnly || title.recentlyPlayed,
+              ),
+            ].map((title) => [title.id, title]),
+          ).values(),
+        ]
+      : localMatches;
   const visibleTitles = filtered.slice(0, visibleCount);
 
   useEffect(() => setVisibleCount(CLOUD_PAGE_SIZE), [query, recentOnly]);
@@ -891,6 +939,7 @@ function CloudPage({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search games"
+              maxLength={128}
               data-focusable
             />
             {query && (
@@ -932,7 +981,9 @@ function CloudPage({
         <button
           className="text-action"
           data-focusable
-          disabled={snapshot.cloud.status === "loading"}
+          disabled={
+            snapshot.cloud.status === "loading" || snapshot.cloud.hydrating
+          }
           onClick={() => void window.afterglideCloud.refreshCloudTitles()}
         >
           <Icon name="refresh" /> Refresh library
@@ -949,6 +1000,22 @@ function CloudPage({
         </p>
       )}
       {snapshot.cloud.status === "loading" && <CloudSkeleton />}
+      {snapshot.cloud.status === "ready" && snapshot.cloud.hydrating && (
+        <p className="demo-notice" role="status">
+          Loading more games… You can play or search the games already
+          available.
+        </p>
+      )}
+      {query.trim() && search?.status === "loading" && (
+        <p className="demo-notice" role="status">
+          Searching all cloud games…
+        </p>
+      )}
+      {query.trim() && search?.status === "error" && (
+        <p className="inline-error" role="status">
+          {search.error}
+        </p>
+      )}
       {(snapshot.cloud.status === "unavailable" ||
         snapshot.cloud.status === "error") && (
         <div className="cloud-unavailable" role="status">
@@ -1017,7 +1084,9 @@ function CloudPage({
           {filtered.length === 0 ? (
             <p className="cloud-empty">
               {query
-                ? `No games match “${query}”.`
+                ? search?.status !== "ready"
+                  ? `Checking all cloud games for “${query}”…`
+                  : `No games match “${query}”.`
                 : recentOnly
                   ? "No recently played games yet. Choose All games to explore."
                   : "No cloud games are currently available for this account."}

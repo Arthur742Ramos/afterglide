@@ -31,7 +31,10 @@ export interface PlatformService {
   pollDeviceCode(deviceCode: string, timeoutMs: number): Promise<void>;
   cancelAuthentication(): void;
   signOut(): Promise<void>;
-  listCloudTitles(): Promise<CloudTitle[]>;
+  listCloudTitles(
+    onProgress?: (titles: CloudTitle[]) => void,
+  ): Promise<CloudTitle[]>;
+  searchCloudTitles?(query: string): Promise<CloudTitle[]>;
   startSession(
     target: StreamTarget,
     resolution: 720 | 1080,

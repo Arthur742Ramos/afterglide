@@ -223,7 +223,9 @@ function createWindow(fullscreen: boolean): BrowserWindow {
     show: false,
     focusable: !isBackgroundTest,
     skipTaskbar: isBackgroundTest,
-    fullscreen: fullscreen && !isBackgroundTest,
+    // Explicit fullscreen:false disables native fullscreen on macOS.
+    ...(fullscreen && !isBackgroundTest ? { fullscreen: true } : {}),
+    fullscreenable: !isBackgroundTest,
     autoHideMenuBar: true,
     backgroundColor: "#090a0f",
     title: "Afterglide Cloud",
@@ -303,6 +305,9 @@ function registerIpc(appController: AppController): void {
   handle(IPC.cancelSignIn, () => appController.cancelSignIn());
   handle(IPC.signOut, () => appController.signOut());
   handle(IPC.refreshCloudTitles, () => appController.refreshCloudTitles());
+  handle(IPC.searchCloudTitles, (query: string) =>
+    appController.searchCloudTitles(query),
+  );
   handle(IPC.selectCloudTitle, (titleId: string) =>
     appController.selectCloudTitle(titleId),
   );

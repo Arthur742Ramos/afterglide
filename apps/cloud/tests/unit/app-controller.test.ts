@@ -56,7 +56,9 @@ class FakePlatform implements PlatformService {
       "Console discovery must never be used by cloud-only client",
     );
   }
-  async listCloudTitles(): Promise<CloudTitle[]> {
+  async listCloudTitles(
+    _onProgress?: (titles: CloudTitle[]) => void,
+  ): Promise<CloudTitle[]> {
     return [
       {
         id: "cloud-game",
@@ -67,6 +69,9 @@ class FakePlatform implements PlatformService {
         recentlyPlayed: true,
       },
     ];
+  }
+  async searchCloudTitles(_query: string): Promise<CloudTitle[]> {
+    return this.listCloudTitles();
   }
   async wakeConsole() {
     this.wakeCount += 1;
@@ -116,6 +121,66 @@ function makeController(platform: FakePlatform) {
 }
 
 describe("AppController", () => {
+  it("adds an unloaded search match for launch and discards results after sign-out", async () => {
+    const platform = new FakePlatform();
+    const controller = makeController(platform);
+    await controller.initialize();
+    const late = {
+      ...controller.getSnapshot().cloud.titles[0],
+      id: "late",
+      name: "Late game",
+    };
+    vi.spyOn(platform, "searchCloudTitles").mockResolvedValue([late]);
+    expect(await controller.searchCloudTitles("late")).toEqual([late]);
+    await controller.startCloudStream(late.id);
+    expect(platform.startedTarget?.id).toBe("late");
+    let finish!: (titles: CloudTitle[]) => void;
+    vi.spyOn(platform, "searchCloudTitles").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const searching = controller.searchCloudTitles("late");
+    await controller.signOut();
+    finish([late]);
+    expect(await searching).toEqual([]);
+    expect(controller.getSnapshot().cloud.titles).toEqual([]);
+    await expect(controller.searchCloudTitles("x".repeat(129))).rejects.toThrow(
+      "128",
+    );
+  });
+
+  it("makes partial catalog games playable and ignores late progress after sign-out", async () => {
+    const platform = new FakePlatform();
+    const controller = makeController(platform);
+    await controller.initialize();
+    const titles = controller.getSnapshot().cloud.titles;
+    let publish!: (titles: CloudTitle[]) => void;
+    let finish!: (titles: CloudTitle[]) => void;
+    vi.spyOn(platform, "listCloudTitles").mockImplementation((onProgress) => {
+      publish = onProgress!;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const refreshing = controller.refreshCloudTitles();
+    publish(titles);
+    expect(controller.getSnapshot().cloud).toMatchObject({
+      status: "ready",
+      hydrating: true,
+      titles,
+    });
+    await controller.startCloudStream(titles[0].id);
+    expect(platform.startedTarget?.id).toBe(titles[0].id);
+    await controller.signOut();
+    publish(titles);
+    finish(titles);
+    await refreshing;
+    expect(controller.getSnapshot().cloud.titles).toEqual([]);
+    expect(controller.getSnapshot().cloud.hydrating).toBeUndefined();
+  });
+
   it("cleans up a provisioned session if Xbox reports failure", async () => {
     const platform = new FakePlatform();
     platform.states = [

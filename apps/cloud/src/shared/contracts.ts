@@ -151,6 +151,7 @@ export interface AppSnapshot {
     available: boolean;
     titles: CloudTitle[];
     status: "idle" | "loading" | "ready" | "unavailable" | "error";
+    hydrating?: boolean;
     error?: string;
     selectedTitleId?: string;
   };
@@ -185,6 +186,7 @@ export interface StreamApi {
   copyText(text: string): Promise<void>;
   signOut(): Promise<void>;
   refreshCloudTitles(): Promise<void>;
+  searchCloudTitles(query: string): Promise<CloudTitle[]>;
   selectCloudTitle(titleId: string): Promise<void>;
   startCloudStream(titleId: string): Promise<StreamDescriptor>;
   retryStream(): Promise<StreamDescriptor>;
@@ -274,6 +276,7 @@ export const IPC = {
   copyText: "afterglide-cloud:copy-text",
   signOut: "afterglide-cloud:sign-out",
   refreshCloudTitles: "afterglide-cloud:refresh-cloud-titles",
+  searchCloudTitles: "afterglide-cloud:search-cloud-titles",
   selectCloudTitle: "afterglide-cloud:select-cloud-title",
   startCloudStream: "afterglide-cloud:start-cloud-stream",
   retryStream: "afterglide-cloud:retry-stream",

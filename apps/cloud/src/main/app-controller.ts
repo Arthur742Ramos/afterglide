@@ -158,7 +158,11 @@ export class AppController {
 
   async refreshCloudTitles(): Promise<void> {
     const generation = this.authGeneration;
-    if (this.snapshot.auth.status !== "signed-in") return;
+    if (
+      this.snapshot.auth.status !== "signed-in" ||
+      this.snapshot.cloud.hydrating
+    )
+      return;
     if (
       !this.platform.cloudAvailable &&
       this.snapshot.cloud.status === "idle"
@@ -177,12 +181,28 @@ export class AppController {
       cloud: {
         ...this.snapshot.cloud,
         available: this.platform.cloudAvailable,
-        status: "loading",
+        status: this.snapshot.cloud.titles.length ? "ready" : "loading",
+        hydrating: true,
         error: undefined,
       },
     });
     try {
-      const titles = await this.platform.listCloudTitles();
+      const titles = await this.platform.listCloudTitles((titles) => {
+        if (generation !== this.authGeneration) return;
+        this.patch({
+          cloud: {
+            available: true,
+            titles: mergeCloudTitles(this.snapshot.cloud.titles, titles),
+            status: "ready",
+            hydrating: true,
+            selectedTitleId: chooseCloudTitle(
+              titles,
+              this.snapshot.cloud.selectedTitleId ??
+                this.preferences.selectedTitleId,
+            )?.id,
+          },
+        });
+      });
       if (generation !== this.authGeneration) return;
       const selectedTitleId = chooseCloudTitle(
         titles,
@@ -205,10 +225,33 @@ export class AppController {
           ...this.snapshot.cloud,
           available: this.platform.cloudAvailable,
           status: safe.code === "XCLOUD_UNAVAILABLE" ? "unavailable" : "error",
+          hydrating: false,
           error: safe.message,
         },
       });
     }
+  }
+
+  async searchCloudTitles(query: string): Promise<CloudTitle[]> {
+    if (typeof query !== "string" || query.length > 128)
+      throw new Error("Enter a search of up to 128 characters.");
+    const generation = this.authGeneration;
+    if (this.snapshot.auth.status !== "signed-in") return [];
+    const titles = this.platform.searchCloudTitles
+      ? await this.platform.searchCloudTitles(query)
+      : this.snapshot.cloud.titles.filter((title) =>
+          `${title.name} ${title.publisher}`
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+        );
+    if (generation !== this.authGeneration) return [];
+    this.patch({
+      cloud: {
+        ...this.snapshot.cloud,
+        titles: mergeCloudTitles(this.snapshot.cloud.titles, titles),
+      },
+    });
+    return titles;
   }
 
   async selectCloudTitle(titleId: string): Promise<void> {
@@ -717,4 +760,21 @@ function optionalMeasurement(
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.min(value, maximum)
     : undefined;
+}
+
+function mergeCloudTitles(
+  previous: CloudTitle[],
+  incoming: CloudTitle[],
+): CloudTitle[] {
+  return [
+    ...new Map(
+      [...previous, ...incoming].map((title) => [title.id, title]),
+    ).values(),
+  ].sort((a, b) =>
+    a.recentlyPlayed === b.recentlyPlayed
+      ? a.name.localeCompare(b.name)
+      : a.recentlyPlayed
+        ? -1
+        : 1,
+  );
 }
