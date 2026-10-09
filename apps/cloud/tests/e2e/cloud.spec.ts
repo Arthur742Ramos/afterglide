@@ -701,9 +701,17 @@ test("fullscreen state stays synchronized and controller can exit outside a stre
 test("native window placement survives restart without changing credentials", async () => {
   const page = await launch();
   await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
-  const expected = await app.evaluate(({ BrowserWindow }) => {
+  const expected = await app.evaluate(({ BrowserWindow, screen }) => {
     const window = BrowserWindow.getAllWindows()[0];
-    window.setBounds({ x: 80, y: 70, width: 1100, height: 700 });
+    const area = screen.getPrimaryDisplay().workArea;
+    const width = Math.min(1100, area.width);
+    const height = Math.min(700, area.height);
+    window.setBounds({
+      x: area.x + Math.floor((area.width - width) / 2),
+      y: area.y + Math.floor((area.height - height) / 2),
+      width,
+      height,
+    });
     return window.getNormalBounds();
   });
   const stored = directory;
