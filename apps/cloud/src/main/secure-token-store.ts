@@ -44,6 +44,19 @@ export class SecureTokenStore extends TokenStore {
     renameSync(temporary, this.path);
   }
 
+  replaceFrom(store: TokenStore): void {
+    const previous = [this._userToken, this._sisuToken, this._jwtKeys] as const;
+    this._userToken = store._userToken;
+    this._sisuToken = store._sisuToken;
+    this._jwtKeys = store._jwtKeys;
+    try {
+      this.save();
+    } catch (error) {
+      [this._userToken, this._sisuToken, this._jwtKeys] = previous;
+      throw error;
+    }
+  }
+
   removeAll(): void {
     this._userToken = undefined;
     this._sisuToken = undefined;

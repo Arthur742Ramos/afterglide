@@ -1,4 +1,4 @@
-import { Msal } from "xal-node";
+import { Msal, type TokenStore } from "xal-node";
 import { release } from "node:os";
 import { randomBytes } from "node:crypto";
 import type {
@@ -19,6 +19,7 @@ import type {
   StreamTarget,
 } from "./platform-service";
 import { SecureTokenStore } from "./secure-token-store";
+import { authenticationTokenStore, ownedTokenStore } from "./auth-token-store";
 
 interface StreamTokenData {
   gsToken: string;
@@ -66,6 +67,14 @@ interface SessionContext {
   resolution: 720 | 1080;
 }
 
+interface AuthenticationAttempt {
+  generation: number;
+  msal: Msal;
+  store: TokenStore;
+  deviceCode?: string;
+  polling: boolean;
+}
+
 export class LivePlatformService implements PlatformService {
   readonly mock = false;
   private msal: Msal;
@@ -74,13 +83,14 @@ export class LivePlatformService implements PlatformService {
   private currentSession?: SessionContext;
   private cloudCatalog?: { expiresAt: number; titles: CloudTitle[] };
   private authGeneration = 0;
+  private authenticationAttempt?: AuthenticationAttempt;
   private cloudRows: CloudTitleResult[] = [];
   private recentIds = new Set<string>();
   private searchedProducts = new Map<string, CatalogProduct>();
 
   constructor(private readonly tokenStore: SecureTokenStore) {
     tokenStore.load();
-    this.msal = new Msal(tokenStore);
+    this.msal = this.sessionAuthentication();
   }
 
   get hasStoredAuthentication(): boolean {
@@ -93,17 +103,31 @@ export class LivePlatformService implements PlatformService {
 
   async restore(): Promise<boolean> {
     if (!this.hasStoredAuthentication) return false;
+    const generation = this.authGeneration;
     try {
       await this.refreshServiceTokens();
-      return true;
+      return generation === this.authGeneration && this.hasStoredAuthentication;
     } catch {
       return false;
     }
   }
 
   async beginDeviceCode(): Promise<DeviceCode> {
-    this.authGeneration += 1;
-    const code = await this.msal.doDeviceCodeAuth();
+    this.cancelAuthentication();
+    const generation = this.authGeneration;
+    const store = authenticationTokenStore();
+    const attempt: AuthenticationAttempt = {
+      generation,
+      store,
+      msal: new Msal(
+        ownedTokenStore(store, () => this.isCurrentAttempt(attempt)),
+      ),
+      polling: false,
+    };
+    this.authenticationAttempt = attempt;
+    const code = await attempt.msal.doDeviceCodeAuth();
+    this.requireCurrentAttempt(attempt);
+    attempt.deviceCode = code.device_code;
     return {
       code: code.user_code,
       verificationUrl: code.verification_uri,
@@ -115,21 +139,35 @@ export class LivePlatformService implements PlatformService {
   }
 
   async pollDeviceCode(deviceCode: string, timeoutMs: number): Promise<void> {
-    const generation = this.authGeneration;
-    await this.msal.doPollForDeviceCodeAuth(deviceCode, timeoutMs);
-    if (generation !== this.authGeneration) {
-      this.tokenStore.removeAll();
-      throw new AfterglideError(
-        "AUTH_CANCELLED",
-        "Sign-in was cancelled.",
-        false,
-      );
+    const attempt = this.authenticationAttempt;
+    this.requireCurrentAttempt(attempt);
+    if (attempt.deviceCode !== deviceCode || attempt.polling)
+      throw authenticationCancelled();
+    attempt.polling = true;
+    try {
+      await attempt.msal.doPollForDeviceCodeAuth(deviceCode, timeoutMs);
+      this.requireCurrentAttempt(attempt);
+      const cloud = await this.fetchServiceTokens(attempt.msal);
+      this.requireCurrentAttempt(attempt);
+      // No await between ownership validation and encrypted-store publication.
+      this.tokenStore.replaceFrom(attempt.store);
+      this.setCloudToken(cloud);
+      this.authenticationAttempt = undefined;
+      // A refresh of the previous account may have started while sign-in was
+      // pending. Revoke that SDK client when the new account takes ownership.
+      this.authGeneration += 1;
+      this.msal = this.sessionAuthentication();
+    } catch (error) {
+      this.requireCurrentAttempt(attempt);
+      this.authenticationAttempt = undefined;
+      throw error;
     }
-    await this.refreshServiceTokens();
   }
 
   cancelAuthentication(): void {
     this.authGeneration += 1;
+    this.authenticationAttempt = undefined;
+    this.msal = this.sessionAuthentication();
   }
 
   async signOut(): Promise<void> {
@@ -141,7 +179,30 @@ export class LivePlatformService implements PlatformService {
     this.recentIds.clear();
     this.searchedProducts.clear();
     this.tokenStore.removeAll();
-    this.msal = new Msal(this.tokenStore);
+  }
+
+  private sessionAuthentication(): Msal {
+    const generation = this.authGeneration;
+    return new Msal(
+      ownedTokenStore(
+        this.tokenStore,
+        () => generation === this.authGeneration,
+      ),
+    );
+  }
+
+  private isCurrentAttempt(attempt: AuthenticationAttempt): boolean {
+    return (
+      this.authenticationAttempt === attempt &&
+      attempt.generation === this.authGeneration
+    );
+  }
+
+  private requireCurrentAttempt(
+    attempt: AuthenticationAttempt | undefined,
+  ): asserts attempt is AuthenticationAttempt {
+    if (!attempt || !this.isCurrentAttempt(attempt))
+      throw authenticationCancelled();
   }
 
   async listCloudTitles(
@@ -493,6 +554,14 @@ export class LivePlatformService implements PlatformService {
     // getStreamingTokens() requires xHome to succeed before requesting cloud.
     const generation = this.authGeneration;
     const msal = this.msal;
+    const cloud = await this.fetchServiceTokens(msal);
+    if (generation !== this.authGeneration) return;
+    this.setCloudToken(cloud);
+  }
+
+  private async fetchServiceTokens(
+    msal: Msal,
+  ): Promise<StreamTokenData | undefined> {
     const gssv = await msal.getGssvToken();
     let cloud: StreamTokenData | undefined;
     try {
@@ -506,7 +575,10 @@ export class LivePlatformService implements PlatformService {
         // Account, subscription and region eligibility remain Xbox decisions.
       }
     }
-    if (generation !== this.authGeneration) return;
+    return cloud;
+  }
+
+  private setCloudToken(cloud: StreamTokenData | undefined): void {
     this.cloudToken = cloud;
     this.cloudTokenExpiresAt = cloud
       ? Date.now() + Math.max(0, (cloud.durationInSeconds ?? 300) - 60) * 1_000
@@ -641,6 +713,10 @@ export class LivePlatformService implements PlatformService {
     }
     throw new AfterglideError("XBOX_NETWORK", "Xbox services did not respond.");
   }
+}
+
+function authenticationCancelled(): AfterglideError {
+  return new AfterglideError("AUTH_CANCELLED", "Sign-in was cancelled.", false);
 }
 
 function chooseRegion(token: StreamTokenData) {
