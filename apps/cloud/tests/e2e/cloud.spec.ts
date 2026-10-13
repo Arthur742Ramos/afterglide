@@ -335,6 +335,7 @@ test("failed artwork keeps a usable fallback and retries a replacement URL", asy
   );
   snapshot.cloud.titles[0].imageUrl =
     "https://images.xboxlive.com/e2e-replacement.svg";
+  snapshot.revision++;
   await app.evaluate(
     ({ BrowserWindow }, value) => {
       BrowserWindow.getAllWindows()[0].webContents.send(
@@ -352,6 +353,7 @@ test("failed artwork keeps a usable fallback and retries a replacement URL", asy
   // Returning to a previously failed URL must try the image again.
   snapshot.cloud.titles[0].imageUrl =
     "https://images.xboxlive.com/e2e-cover.svg";
+  snapshot.revision++;
   await app.evaluate(
     ({ BrowserWindow }, value) => {
       BrowserWindow.getAllWindows()[0].webContents.send(
@@ -1743,3 +1745,123 @@ for (const device of [
     ).toBeVisible();
   });
 }
+
+test("native IPC sends no catalog entries for repeated settings updates", async () => {
+  const page = await launch("large-cloud-catalog");
+  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  const evidence = await page.evaluate(async () => {
+    const baseline = await window.afterglideCloud.getSnapshot();
+    let messages = 0,
+      entries = 0,
+      jsonBytes = 0;
+    let completed!: () => void;
+    const delivered = new Promise<void>((resolve) => {
+      completed = resolve;
+    });
+    const unsubscribe = window.afterglideCloud.onSnapshot((event) => {
+      messages++;
+      entries += event.cloud.titles?.length ?? 0;
+      jsonBytes += new TextEncoder().encode(JSON.stringify(event)).byteLength;
+      if (messages === 20) completed();
+    });
+    try {
+      for (let index = 0; index < 20; index++)
+        await window.afterglideCloud.updateSettings({
+          volume: index % 2 === 0 ? 0.5 : 1,
+        });
+      await delivered;
+      return {
+        messages,
+        entries,
+        jsonBytes,
+        baselineTitles: baseline.cloud.titles.length,
+      };
+    } finally {
+      unsubscribe();
+    }
+  });
+  expect(evidence.baselineTitles).toBe(80);
+  expect(evidence.messages).toBe(20);
+  expect(evidence.entries).toBe(0);
+  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await page.evaluate(() =>
+    window.afterglideCloud.updateSettings({ muted: true }),
+  );
+  const baseline = await page.evaluate(() =>
+    window.afterglideCloud.getSnapshot(),
+  );
+  expect(baseline.cloud.titles).toHaveLength(80);
+  await page.reload();
+  await expect(page.locator(".game-grid button")).toHaveCount(48);
+});
+
+test("late bootstrap reply and obsolete account events cannot replace a newer catalog", async () => {
+  const page = await launch();
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
+  const baseline = await page.evaluate(() =>
+    window.afterglideCloud.getSnapshot(),
+  );
+  await app.evaluate(({ ipcMain }, value) => {
+    ipcMain.removeHandler("afterglide-cloud:get-snapshot");
+    ipcMain.handle(
+      "afterglide-cloud:get-snapshot",
+      () =>
+        new Promise((resolve) => {
+          (
+            globalThis as unknown as { releaseCloudBaseline: () => void }
+          ).releaseCloudBaseline = () => resolve(value);
+        }),
+    );
+  }, baseline);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect
+    .poll(() =>
+      app.evaluate(
+        () =>
+          typeof (
+            globalThis as unknown as { releaseCloudBaseline?: () => void }
+          ).releaseCloudBaseline,
+      ),
+    )
+    .toBe("function");
+  const fresh = {
+    ...baseline,
+    revision: baseline.revision + 10,
+    cloud: {
+      ...baseline.cloud,
+      titles: [{ ...baseline.cloud.titles[0], name: "Newer catalog fixture" }],
+    },
+  };
+  await app.evaluate(({ BrowserWindow }, value) => {
+    const target = BrowserWindow.getAllWindows()[0].webContents;
+    target.send("afterglide-cloud:snapshot", value);
+    const { titles: _titles, ...cloud } = value.cloud;
+    target.send("afterglide-cloud:snapshot", {
+      ...value,
+      revision: value.revision + 1,
+      cloud,
+    });
+    (
+      globalThis as unknown as { releaseCloudBaseline: () => void }
+    ).releaseCloudBaseline();
+  }, fresh);
+  await expect(
+    page.getByRole("heading", { name: "Newer catalog fixture", exact: true }),
+  ).toBeVisible();
+  await app.evaluate(({ BrowserWindow }, value) => {
+    const target = BrowserWindow.getAllWindows()[0].webContents;
+    target.send("afterglide-cloud:snapshot", {
+      ...value,
+      revision: value.revision + 12,
+      auth: { status: "signed-out" },
+      cloud: { available: false, status: "idle", titles: [] },
+    });
+    target.send("afterglide-cloud:snapshot", value);
+  }, baseline);
+  await expect(
+    page.getByRole("button", { name: /Sign in with Microsoft/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Newer catalog fixture", exact: true }),
+  ).toHaveCount(0);
+});

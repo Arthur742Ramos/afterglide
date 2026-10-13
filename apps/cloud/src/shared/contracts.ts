@@ -142,6 +142,7 @@ export interface AppSettings {
 }
 
 export interface AppSnapshot {
+  revision: number;
   auth: {
     status: AuthStatus;
     deviceCode?: DeviceCode;
@@ -164,6 +165,12 @@ export interface AppSnapshot {
   fullscreen: boolean;
   version: string;
 }
+
+// Complete small state, with the catalog included only when its array changes.
+// getSnapshot always returns a full baseline, including after renderer reload.
+export type SnapshotUpdate = Omit<AppSnapshot, "cloud"> & {
+  cloud: Omit<AppSnapshot["cloud"], "titles"> & { titles?: CloudTitle[] };
+};
 
 export interface SdpAnswer {
   sdp: string;
@@ -212,7 +219,7 @@ export interface StreamApi {
   exportPerformanceReport(): Promise<boolean>;
   setFullscreen(fullscreen: boolean): Promise<void>;
   quit(): Promise<void>;
-  onSnapshot(listener: (snapshot: AppSnapshot) => void): () => void;
+  onSnapshot(listener: (snapshot: SnapshotUpdate) => void): () => void;
   onDesktopCommand(listener: (command: DesktopCommand) => void): () => void;
 }
 

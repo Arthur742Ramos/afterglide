@@ -73,3 +73,49 @@ performance, physical controller/rumble support or interruption recovery. Intel
 Mac runtime, Windows and Apple Silicon sustained sessions, signing/notarization
 and ordinary clean installation remain platform gates. This campaign does not
 publish a release or require a new login, subscription or security-setting change.
+
+## Catalog transfer measurement and change
+
+The main-process controller previously sent the complete catalog on every state
+update. A synthetic platform and window exercised the actual `AppController` with
+100, 1,000 and 5,000 titles, then alternated fullscreen state 20 times. Before
+commit `3537d3012fdcd872380535f7e58fe5bf49b2bb6f` and after commit
+`330b141385df785f90c007587ff6804d77e455a1` used the same fixture and Node 24 runtime.
+
+| Titles | Messages, before / after | Catalog entries, before / after | Serialized bytes, before / after |
+| ------ | ------------------------ | ------------------------------- | -------------------------------- |
+| 100    | 20 / 20                  | 2,000 / 0                       | 464,380 / 18,440                 |
+| 1,000  | 20 / 20                  | 20,000 / 0                      | 4,568,440 / 18,440               |
+| 5,000  | 20 / 20                  | 100,000 / 0                     | 23,128,440 / 18,440              |
+
+The byte counts come from `structuredClone` followed by Node `v8.serialize`.
+They are a payload-size proxy, not measured Chromium IPC bytes, CPU savings or
+launch/stream latency. Telemetry storage already avoided snapshot broadcasts and
+was not part of this measurement. The local fixture scripts and JSON reports are
+saved in ignored `artifacts/campaign/state-transfer-{baseline,after}.{ts,json}`.
+
+State events now include titles only when their array changes. `getSnapshot`
+continues to return a complete baseline. Monotonic revisions prevent an old
+bootstrap reply or queued account event from replacing newer state. The renderer
+retains catalog identity on metadata updates and memoizes library filtering.
+Unit tests cover catalog changes, account clearing, window attachment and ordering;
+Electron tests exercise real IPC omission, reload and deferred bootstrap replies
+with synthetic catalogs and accounts. These checks do not contact Xbox.
+
+## Startup measurement deferred
+
+A serial, instrumented Windows source/mock launch used a fresh isolated profile
+at `31b989875dfb785cfc3857e538550ed571faf706`. A fresh profile is not an OS-cold
+launch. The predeclared acceptance ceiling was 10% host CPU both before and after
+each sample. CPU rose from 6% to 16%, so the 3,567 ms sign-in observation was
+excluded. The repeat was deferred at 13% CPU. No accepted timing baseline or
+startup improvement follows from this attempt. The ignored
+`artifacts/campaign/startup-baseline.{mjs,json}` preserves the phases, source and
+compiled hash; the instrumented build was restored afterward.
+
+Continue this portion on a quiet dedicated host after other jobs have been stopped
+by their owners. Run five fresh-profile and five repeat launches serially with the
+same OS, runtime, source/hash, mock delay and launch mode, recording CPU before and
+after each run against the same ceiling. This requires no login or subscription.
+GPU flags and hardware initialization scheduling remain unchanged until accepted
+measurements identify a bottleneck.
