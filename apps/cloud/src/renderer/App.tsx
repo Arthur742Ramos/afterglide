@@ -1145,7 +1145,13 @@ function CloudPage({
             className="text-action"
             data-focusable
             data-library-focus="retry-search"
-            onClick={() => setSearchAttempt((attempt) => attempt + 1)}
+            onClick={(event) => {
+              // Retry disappears on loading. Keep its focus in the search task
+              // now, without scheduling a later focus override on completion.
+              if (document.activeElement === event.currentTarget)
+                searchInput.current?.focus();
+              setSearchAttempt((attempt) => attempt + 1);
+            }}
           >
             Retry search
           </button>
@@ -2414,6 +2420,7 @@ function SettingsPage({
           <Toggle
             checked={snapshot.settings.showPerformance}
             label="Performance overlay"
+            initialFocus
             onChange={(value) => update({ showPerformance: value })}
           />
         </SettingRow>
@@ -3081,10 +3088,12 @@ function Toggle({
   checked,
   label,
   onChange,
+  initialFocus,
 }: {
   checked: boolean;
   label: string;
   onChange: (checked: boolean) => void;
+  initialFocus?: boolean;
 }) {
   return (
     <button
@@ -3093,6 +3102,7 @@ function Toggle({
       aria-label={label}
       className={`toggle ${checked ? "on" : ""}`}
       data-focusable
+      data-autofocus={initialFocus || undefined}
       onClick={() => onChange(!checked)}
     >
       <span />
