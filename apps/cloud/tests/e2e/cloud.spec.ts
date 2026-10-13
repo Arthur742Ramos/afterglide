@@ -1272,3 +1272,221 @@ test("retina rendering and compact enlarged Settings preserve actions", async ()
     path: join(root, "artifacts/e2e/cloud-settings-zoom150.png"),
   });
 });
+
+test("DualSense physical prompts and capability diagnostics follow the selected standard controller", async () => {
+  const page = await launch();
+  await page.evaluate(() => {
+    const state = {
+      pad: {
+        id: "Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)",
+        index: 0,
+        connected: true,
+        mapping: "standard",
+        axes: [0, 0, 0, 0],
+        buttons: Array.from({ length: 17 }, () => ({
+          pressed: false,
+          value: 0,
+        })),
+        vibrationActuator: {
+          type: "dual-rumble",
+          effects: ["dual-rumble"],
+          playEffect: () => Promise.resolve("complete"),
+        },
+      },
+    };
+    Object.defineProperty(document, "hasFocus", {
+      configurable: true,
+      value: () => true,
+    });
+    Object.defineProperty(navigator, "getGamepads", {
+      configurable: true,
+      value: () => [state.pad],
+    });
+    (
+      window as unknown as { controllerFixture: typeof state }
+    ).controllerFixture = state;
+    window.dispatchEvent(new Event("gamepadconnected"));
+  });
+  await expect(page.locator(".controller-footer")).toContainText("Cross");
+  await expect(page.locator(".controller-footer")).toContainText("Circle");
+  await page.setViewportSize({ width: 960, height: 600 });
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: join(root, "artifacts/e2e/cloud-controller-dualsense.png"),
+  });
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const diagnostic = page.getByRole("complementary", {
+    name: "Connected controller diagnostics",
+  });
+  await expect(diagnostic).toContainText("Standard mapping");
+  await expect(diagnostic).toContainText("Rumble API available");
+  await expect(diagnostic).toContainText("unverified");
+  await page.evaluate(() => {
+    const state = (
+      window as unknown as {
+        controllerFixture: {
+          pad: { id: string; buttons: { pressed: boolean; value: number }[] };
+        };
+      }
+    ).controllerFixture;
+    state.pad.buttons[8] = { pressed: true, value: 1 };
+    state.pad.buttons[9] = { pressed: true, value: 1 };
+  });
+  await expect(diagnostic).toContainText("Create + Options");
+  await page.screenshot({
+    path: join(root, "artifacts/e2e/cloud-controller-dualsense-settings.png"),
+  });
+  await page.evaluate(() => {
+    const state = (
+      window as unknown as {
+        controllerFixture: {
+          pad: { id: string; buttons: { pressed: boolean; value: number }[] };
+        };
+      }
+    ).controllerFixture;
+    state.pad.id =
+      "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)";
+    state.pad.buttons = Array.from({ length: 17 }, () => ({
+      pressed: false,
+      value: 0,
+    }));
+    window.dispatchEvent(new Event("gamepaddisconnected"));
+    window.dispatchEvent(new Event("gamepadconnected"));
+  });
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await expect(page.locator(".controller-footer kbd").first()).toHaveText("A");
+  await expect(page.locator(".controller-footer")).not.toContainText("Cross");
+});
+
+test("unknown controller mapping stays visible but cannot navigate or claim rumble", async () => {
+  const page = await launch();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.evaluate(() => {
+    const pad = {
+      id: "DualSense raw fixture",
+      index: 0,
+      connected: true,
+      mapping: "",
+      axes: [1, 1, 1, 1],
+      buttons: Array.from({ length: 17 }, () => ({ pressed: true, value: 1 })),
+      vibrationActuator: {
+        type: "dual-rumble",
+        playEffect: () => Promise.resolve("complete"),
+      },
+    };
+    Object.defineProperty(document, "hasFocus", {
+      configurable: true,
+      value: () => true,
+    });
+    Object.defineProperty(navigator, "getGamepads", {
+      configurable: true,
+      value: () => [pad],
+    });
+    window.dispatchEvent(new Event("gamepadconnected"));
+  });
+  const diagnostic = page.getByRole("complementary", {
+    name: "Connected controller diagnostics",
+  });
+  await expect(diagnostic).toContainText("Unsupported mapping");
+  await expect(diagnostic).toContainText("game input disabled");
+  await expect(diagnostic).toContainText("No browser rumble");
+  await expect(diagnostic).toContainText("Button 1");
+  await expect(diagnostic).not.toContainText("Cross");
+  await expect(
+    page.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /DualSense raw fixture - slot 1/ }),
+  ).toBeDisabled();
+});
+
+for (const device of [
+  {
+    id: "DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)",
+    prompt: "Cross",
+  },
+  {
+    id: "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)",
+    prompt: "A",
+  },
+]) {
+  test(`${device.prompt} fixture drives local gamepad polling through launch and overlay handoff`, async () => {
+    const page = await launch();
+    await page.evaluate((id) => {
+      const pad = {
+        id,
+        index: 0,
+        connected: true,
+        mapping: "standard",
+        axes: [0, 0, 0, 0],
+        buttons: Array.from({ length: 17 }, () => ({
+          pressed: false,
+          value: 0,
+        })),
+      };
+      Object.defineProperty(document, "hasFocus", {
+        configurable: true,
+        value: () => true,
+      });
+      Object.defineProperty(navigator, "getGamepads", {
+        configurable: true,
+        value: () => [pad],
+      });
+      (window as unknown as { handoffPad: typeof pad }).handoffPad = pad;
+      window.dispatchEvent(new Event("gamepadconnected"));
+    }, device.id);
+    await expect(page.locator(".controller-footer kbd").first()).toHaveText(
+      device.prompt,
+    );
+    const button = async (index: number, pressed: boolean) =>
+      page.evaluate(
+        async ({ index, pressed }) => {
+          const pad = (
+            window as unknown as {
+              handoffPad: { buttons: { pressed: boolean; value: number }[] };
+            }
+          ).handoffPad;
+          pad.buttons[index] = { pressed, value: pressed ? 1 : 0 };
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          );
+        },
+        { index, pressed },
+      );
+    await expect(
+      page.getByRole("button", { name: /Play again/ }),
+    ).toBeFocused();
+    await button(0, false);
+    await button(0, true);
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+    await button(0, false);
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByRole("heading", { name: "Quick settings" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "true",
+    );
+    await button(1, false);
+    await button(1, true);
+    await expect(
+      page.getByRole("heading", { name: "Quick settings" }),
+    ).toHaveCount(0);
+    await button(1, false);
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByRole("heading", { name: "Quick settings" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Leave Xbox stream" }).focus();
+    await button(0, false);
+    await button(0, true);
+    await expect(
+      page.getByRole("heading", { name: "Your cloud library." }),
+    ).toBeVisible();
+  });
+}

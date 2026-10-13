@@ -148,10 +148,15 @@ export function useControllerNavigation(
       },
     );
     const refreshPolling = (): void => polling.refresh();
+    const disconnect = (): void => {
+      activeGamepadIndex = undefined;
+      input.reset();
+      polling.refresh();
+    };
     window.addEventListener("focus", refreshPolling);
     window.addEventListener("blur", refreshPolling);
     window.addEventListener("gamepadconnected", refreshPolling);
-    window.addEventListener("gamepaddisconnected", refreshPolling);
+    window.addEventListener("gamepaddisconnected", disconnect);
     document.addEventListener("visibilitychange", refreshPolling);
     polling.refresh();
     const initial = window.setTimeout(() => {
@@ -172,7 +177,7 @@ export function useControllerNavigation(
       window.removeEventListener("focus", refreshPolling);
       window.removeEventListener("blur", refreshPolling);
       window.removeEventListener("gamepadconnected", refreshPolling);
-      window.removeEventListener("gamepaddisconnected", refreshPolling);
+      window.removeEventListener("gamepaddisconnected", disconnect);
       document.removeEventListener("visibilitychange", refreshPolling);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("afterglide-gamepad", onGamepad);

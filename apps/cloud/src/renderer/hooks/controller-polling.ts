@@ -1,4 +1,7 @@
-import type { GamepadLike } from "../stream/controller-input";
+import {
+  controllerSupportsStandardMapping,
+  type GamepadLike,
+} from "../stream/controller-input";
 
 export const controllerDiscoveryIntervalMs = 250;
 
@@ -84,7 +87,7 @@ export class ControllerNavigationInput {
   }
 
   actions(gamepad: GamepadLike | undefined, now: number): string[] {
-    if (!gamepad) {
+    if (!controllerSupportsStandardMapping(gamepad)) {
       this.reset();
       return [];
     }

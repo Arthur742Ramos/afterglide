@@ -1,4 +1,6 @@
 import {
+  createContext,
+  useContext,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -27,12 +29,20 @@ import { StreamSurface } from "./stream/StreamSurface";
 import {
   friendlyControllerName,
   selectController,
+  controllerSupportsRumble,
 } from "./stream/controller-input";
+import {
+  controllerFamily,
+  controllerPrompt,
+  type ControllerFamily,
+} from "./controller-presentation";
+import { useControllerFamily } from "./hooks/use-controller-family";
 import type { ControllerStatus } from "./stream/stream-engine";
 import { QuickSettings } from "./components/QuickSettings";
 import { StreamRecovery, type RecoveryState } from "./recovery";
 
 type Page = "cloud" | "diagnostics" | "settings";
+const ControllerFamilyContext = createContext<ControllerFamily>("xbox");
 const CLOUD_PAGE_SIZE = 48;
 interface LibraryBrowseState {
   query: string;
@@ -82,15 +92,24 @@ function useControllerDiagnostics(): ControllerDiagnostic[] {
           index: gamepad.index,
           name: friendlyControllerName(gamepad.id),
           mapping:
-            gamepad.mapping === "standard" ? "Standard mapping" : "Raw mapping",
+            gamepad.mapping === "standard"
+              ? "Standard mapping"
+              : "Unsupported mapping — game input disabled",
           buttons: gamepad.buttons.length,
           axes: gamepad.axes.map((axis) => Math.round(axis * 100) / 100),
           pressed: gamepad.buttons.flatMap((button, index) =>
             button.pressed || button.value > 0.18
-              ? [GAMEPAD_BUTTON_LABELS[index] ?? `Button ${index + 1}`]
+              ? [
+                  gamepad.mapping === "standard"
+                    ? controllerPrompt(
+                        GAMEPAD_BUTTON_LABELS[index] ?? `Button ${index + 1}`,
+                        controllerFamily(gamepad.id),
+                      )
+                    : `Button ${index + 1}`,
+                ]
               : [],
           ),
-          rumble: Boolean(gamepad.vibrationActuator),
+          rumble: controllerSupportsRumble(gamepad),
         }));
       const signature = JSON.stringify(next);
       if (signature !== previous) {
@@ -157,6 +176,9 @@ function DemoNotice({
 
 export function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | undefined>(undefined);
+  const family = useControllerFamily(
+    snapshot?.settings.preferredControllerId ?? "",
+  );
   const [page, setPage] = useState<Page>("cloud");
   const [libraryBrowse, setLibraryBrowse] = useState<LibraryBrowseState>({
     query: "",
@@ -484,26 +506,28 @@ export function App() {
   };
   const showFullscreenExit = Boolean(snapshot?.fullscreen && !descriptor);
   return (
-    <div
-      className={`desktop-frame ${snapshot?.settings.reducedMotion ? "reduced-motion" : ""}`}
-    >
-      {showFullscreenExit && (
-        <header className="desktop-fullscreen-bar">
-          <span>Afterglide Cloud</span>
-          <button
-            data-focusable
-            onClick={() => void window.afterglideCloud.setFullscreen(false)}
-          >
-            Exit fullscreen
-          </button>
-        </header>
-      )}
+    <ControllerFamilyContext.Provider value={family}>
       <div
-        className={`desktop-content ${showFullscreenExit ? "with-fullscreen-bar" : ""}`}
+        className={`desktop-frame ${snapshot?.settings.reducedMotion ? "reduced-motion" : ""}`}
       >
-        {renderScreen()}
+        {showFullscreenExit && (
+          <header className="desktop-fullscreen-bar">
+            <span>Afterglide Cloud</span>
+            <button
+              data-focusable
+              onClick={() => void window.afterglideCloud.setFullscreen(false)}
+            >
+              Exit fullscreen
+            </button>
+          </header>
+        )}
+        <div
+          className={`desktop-content ${showFullscreenExit ? "with-fullscreen-bar" : ""}`}
+        >
+          {renderScreen()}
+        </div>
       </div>
-    </div>
+    </ControllerFamilyContext.Provider>
   );
 }
 
@@ -1575,10 +1599,15 @@ function StreamView({
       },
     );
     const refreshPolling = () => polling.refresh();
+    const disconnect = () => {
+      activeGamepadIndex = undefined;
+      chord.reset();
+      polling.refresh();
+    };
     window.addEventListener("focus", refreshPolling);
     window.addEventListener("blur", refreshPolling);
     window.addEventListener("gamepadconnected", refreshPolling);
-    window.addEventListener("gamepaddisconnected", refreshPolling);
+    window.addEventListener("gamepaddisconnected", disconnect);
     document.addEventListener("visibilitychange", refreshPolling);
     polling.refresh();
     return () => {
@@ -1586,7 +1615,7 @@ function StreamView({
       window.removeEventListener("focus", refreshPolling);
       window.removeEventListener("blur", refreshPolling);
       window.removeEventListener("gamepadconnected", refreshPolling);
-      window.removeEventListener("gamepaddisconnected", refreshPolling);
+      window.removeEventListener("gamepaddisconnected", disconnect);
       document.removeEventListener("visibilitychange", refreshPolling);
       window.removeEventListener("afterglide-gamepad", onGamepadAction);
     };
@@ -1648,16 +1677,19 @@ function StreamView({
   const onControllerStatus = useCallback((status: ControllerStatus) => {
     clearTimeout(controllerNoticeTimer.current);
     const message =
-      status.state === "disconnected"
-        ? `${status.label} disconnected · game input released`
-        : status.state === "switched"
-          ? `Now using ${status.label}`
-          : `${status.label} ready`;
+      status.state === "unsupported"
+        ? `${status.label}: unsupported browser mapping — controller input disabled`
+        : status.state === "disconnected"
+          ? `${status.label} disconnected · game input released`
+          : status.state === "switched"
+            ? `Now using ${status.label}`
+            : `${status.label} ready`;
     setControllerNotice(message);
-    controllerNoticeTimer.current = window.setTimeout(
-      () => setControllerNotice(""),
-      status.state === "disconnected" ? 5_000 : 3_000,
-    );
+    if (status.state !== "unsupported")
+      controllerNoticeTimer.current = window.setTimeout(
+        () => setControllerNotice(""),
+        status.state === "disconnected" ? 5_000 : 3_000,
+      );
   }, []);
   const onControlsShortcut = useCallback(
     () => toggleControls(),
@@ -2454,7 +2486,7 @@ function SettingsPage({
         <SettingRow
           icon="controller"
           title="Active controller"
-          detail="Automatic follows the last controller you use; choose one to lock input and tuning to it."
+          detail="Automatic follows the last controller you use; choose a device ID to lock input and tuning. Identical browser IDs share this preference."
         >
           <div
             className="segmented controller-device-options"
@@ -2481,11 +2513,16 @@ function SettingsPage({
               <button
                 key={controller.id}
                 data-focusable
+                disabled={controller.mapping !== "Standard mapping"}
                 aria-pressed={preferredId === controller.id}
                 className={preferredId === controller.id ? "active" : ""}
                 onClick={() => update({ preferredControllerId: controller.id })}
               >
-                {controller.name} — slot {controller.index + 1}
+                {controller.name}{" "}
+                {controllers.filter((pad) => pad.id === controller.id).length >
+                1
+                  ? "— shared device ID"
+                  : `- slot ${controller.index + 1}`}
               </button>
             ))}
           </div>
@@ -2774,7 +2811,9 @@ function ControllerDiagnostics({
                     <dt>Support</dt>
                     <dd>
                       {controller.mapping} · {controller.buttons} buttons ·{" "}
-                      {controller.rumble ? "Rumble ready" : "No browser rumble"}
+                      {controller.rumble
+                        ? "Rumble API available — unverified"
+                        : "No browser rumble"}
                     </dd>
                   </div>
                 </dl>
@@ -2789,7 +2828,9 @@ function ControllerDiagnostics({
       )}
       <small className="controller-diagnostics-note">
         Automatic mode locks to the last active controller. If it disconnects,
-        Afterglide Cloud releases every Xbox input before switching.
+        Afterglide Cloud releases every Xbox input before switching. Unsupported
+        mappings are not sent to Xbox. Identical browser device IDs share a
+        preference and tuning profile; slots identify this connection only.
       </small>
     </aside>
   );
@@ -2805,7 +2846,7 @@ function KeyboardGuide() {
       <div className="keyboard-guide-keys">
         {KEYBOARD_CONTROL_GUIDE.map(({ keys, action }) => (
           <span key={keys}>
-            <ControllerHint label={keys} wide /> {action}
+            <ControllerHint label={keys} wide physical={false} /> {action}
           </span>
         ))}
       </div>
@@ -2837,7 +2878,9 @@ function ControllerGuide({
       <div>
         <strong>Controller controls</strong>
         <span>
-          Afterglide Cloud pauses game input while its controls are open.
+          Afterglide Cloud pauses game input while its controls are open. Xbox
+          games keep their own A/B/X/Y prompts. With default mapping,
+          Cross/Circle/Square/Triangle send A/B/X/Y.
         </span>
       </div>
       <div className="keyboard-guide-keys">
@@ -2937,11 +2980,15 @@ function Step({
 function ControllerHint({
   label,
   wide = false,
+  physical = true,
 }: {
   label: string;
   wide?: boolean;
+  physical?: boolean;
 }) {
-  return <kbd className={wide ? "wide" : ""}>{label}</kbd>;
+  const family = useContext(ControllerFamilyContext);
+  const text = physical ? controllerPrompt(label, family) : label;
+  return <kbd className={wide || text.length > 1 ? "wide" : ""}>{text}</kbd>;
 }
 
 function RailButton({

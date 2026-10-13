@@ -52,6 +52,8 @@ This builds one development DMG for the native Node architecture and never notar
 
 ## Controls
 
+See the [DualSense/Xbox compatibility matrix and hands-on gates](docs/CONTROLLER-COMPATIBILITY.md). Local PlayStation prompts describe physical controls; Xbox games retain their own button prompts. Input requires Chromium's standard mapping, and rumble depends on the exposed browser capability. Physical USB/Bluetooth validation remains outstanding.
+
 - Browse with D-pad, left stick, arrows or Tab. A/Enter selects; activate the selected game again to launch it. The featured Play button launches immediately.
 - B/Escape returns from Settings or Health to Library, and exits fullscreen from Library or Welcome.
 - Ctrl/Cmd+F opens Library search; Ctrl/Cmd+, opens Settings, including before login. During play, the Settings menu opens local stream controls. Native Edit and zoom commands remain available.

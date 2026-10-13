@@ -2842,6 +2842,7 @@ button:active:not(:disabled) {
 }
 .cloud-play {
   min-width: 220px;
+  white-space: nowrap;
 }
 .cloud-library {
   margin-top: 24px;
@@ -2996,7 +2997,7 @@ button:active:not(:disabled) {
   .cloud-feature {
     min-height: 150px;
     padding: 18px;
-    grid-template-columns: 140px minmax(0, 1fr) 190px;
+    grid-template-columns: 140px minmax(0, 1fr) max-content;
     gap: 18px;
   }
   .featured-art {

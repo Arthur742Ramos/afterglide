@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { XboxStreamEngine } from "../../src/renderer/stream/stream-engine";
+import {
+  XboxStreamEngine,
+  type ControllerStatus,
+} from "../../src/renderer/stream/stream-engine";
 import {
   defaultControllerTuning,
   type StreamTelemetry,
@@ -80,11 +83,15 @@ let focused: boolean;
 let button: number;
 let padIndex: number;
 let padId: string;
+let padMapping: string;
+let padConnected: boolean;
+let vibrationActuator: GamepadHapticActuator | undefined;
 let axis: number;
 let trigger: number;
 let controlsShortcut: boolean;
 let onTelemetry = vi.fn<(telemetry: StreamTelemetry) => void>();
 let onControlsShortcut = vi.fn<() => void>();
+let onControllerStatus = vi.fn<(status: ControllerStatus) => void>();
 let win: EventTarget;
 let doc: EventTarget & { visibilityState: string };
 
@@ -94,6 +101,9 @@ beforeEach(async () => {
   button = 0;
   padIndex = 0;
   padId = "pad";
+  padMapping = "standard";
+  padConnected = true;
+  vibrationActuator = undefined;
   axis = 0;
   trigger = 0;
   controlsShortcut = false;
@@ -104,6 +114,7 @@ beforeEach(async () => {
   onError = vi.fn();
   onTelemetry = vi.fn();
   onControlsShortcut = vi.fn();
+  onControllerStatus = vi.fn();
   win = Object.assign(new EventTarget(), {
     setInterval,
     setTimeout,
@@ -126,29 +137,33 @@ beforeEach(async () => {
   vi.stubGlobal("document", doc);
   vi.stubGlobal("navigator", {
     maxTouchPoints: 0,
-    getGamepads: () => [
-      {
-        id: padId,
-        index: padIndex,
-        connected: true,
-        mapping: "standard",
-        axes: [axis, 0, 0, 0],
-        buttons: Array.from({ length: 17 }, (_, i) => ({
-          value:
-            i === 0
-              ? button
-              : i === 7
-                ? trigger
-                : controlsShortcut && (i === 10 || i === 11)
-                  ? 1
-                  : 0,
-          pressed:
-            (i === 0 && button > 0) ||
-            (i === 7 && trigger > 0) ||
-            (controlsShortcut && (i === 10 || i === 11)),
-        })),
-      },
-    ],
+    getGamepads: () =>
+      padConnected
+        ? [
+            {
+              id: padId,
+              index: padIndex,
+              connected: true,
+              mapping: padMapping,
+              vibrationActuator,
+              axes: [axis, 0, 0, 0],
+              buttons: Array.from({ length: 17 }, (_, i) => ({
+                value:
+                  i === 0
+                    ? button
+                    : i === 7
+                      ? trigger
+                      : controlsShortcut && (i === 10 || i === 11)
+                        ? 1
+                        : 0,
+                pressed:
+                  (i === 0 && button > 0) ||
+                  (i === 7 && trigger > 0) ||
+                  (controlsShortcut && (i === 10 || i === 11)),
+              })),
+            },
+          ]
+        : [],
   });
   vi.stubGlobal(
     "RTCPeerConnection",
@@ -173,7 +188,7 @@ beforeEach(async () => {
     onInterrupted,
     onError,
     onTelemetry,
-    onControllerStatus() {},
+    onControllerStatus,
     onControlsShortcut,
   });
   await engine.connect();
@@ -206,7 +221,359 @@ function a(frame: DataView) {
   return Boolean(frame.getUint16(16, true) & 16);
 }
 
+function rumble(strong = 50, weak = 25, duration = 100, delay = 0) {
+  const bytes = new Uint8Array(13);
+  const report = new DataView(bytes.buffer);
+  report.setUint8(0, 128);
+  report.setUint8(4, strong);
+  report.setUint8(5, weak);
+  report.setUint16(8, duration, true);
+  report.setUint16(10, delay, true);
+  peer.channels.input.dispatchEvent(
+    new MessageEvent("message", { data: bytes.buffer }),
+  );
+}
+
+function actuator() {
+  return {
+    type: "dual-rumble" as const,
+    effects: ["dual-rumble"],
+    playEffect: vi.fn(async () => "complete" as GamepadHapticsResult),
+    reset: vi.fn(async () => "complete" as GamepadHapticsResult),
+  };
+}
+
 describe("real stream engine input lifecycle", () => {
+  it.each([
+    "Xbox Wireless Controller",
+    "DualSense Wireless Controller (Vendor: 054c Product: 0ce6)",
+  ])(
+    "preserves Xbox wire buttons, axis signs, deadzones and trigger tuning for standard %s",
+    (id) => {
+      const pad = {
+        id,
+        index: 0,
+        connected: true,
+        mapping: "standard",
+        axes: [0, 0, 0, 0],
+        buttons: Array.from({ length: 17 }, () => ({
+          pressed: false,
+          value: 0,
+        })),
+      };
+      vi.spyOn(navigator, "getGamepads").mockReturnValue([
+        pad as unknown as Gamepad,
+      ]);
+      ready();
+      engine.setControllerSettings({
+        preferredControllerId: "",
+        controllerDefaults: {
+          ...defaultControllerTuning,
+          stickDeadzone: 0.12,
+          triggerRange: 0.5,
+        },
+        controllerProfiles: [],
+      });
+      pad.buttons[0] = { pressed: true, value: 1 }; // Xbox A / DualSense Cross
+      pad.buttons[1] = { pressed: true, value: 1 }; // Xbox B / DualSense Circle
+      pad.buttons[8] = pad.buttons[9] = { pressed: true, value: 1 };
+      pad.buttons[6] = { pressed: false, value: 0.25 };
+      pad.buttons[7] = { pressed: false, value: 0.5 };
+      pad.axes = [0.05, -1, 1, -0.56];
+      vi.advanceTimersByTime(4);
+      const frame = frames().at(-1)!;
+      expect(frame.getUint16(16, true)).toBe(2 | 16 | 32); // Nexus replaces View+Menu
+      expect(frame.getInt16(18, true)).toBe(0);
+      expect(frame.getInt16(20, true)).toBe(32767); // browser up is negative Y
+      expect(frame.getInt16(22, true)).toBe(32767);
+      expect(frame.getInt16(24, true)).toBe(16384);
+      expect(frame.getUint16(26, true)).toBe(32768);
+      expect(frame.getUint16(28, true)).toBe(65535);
+    },
+  );
+
+  it("keeps startup-held face buttons, triggers and sticks neutral until released", () => {
+    button = 1;
+    trigger = 0.8;
+    axis = 1;
+    ready();
+    vi.advanceTimersByTime(4);
+    expect(frames().length).toBeGreaterThan(0);
+    expect(
+      frames().every(
+        (frame) =>
+          !a(frame) &&
+          frame.getUint16(28, true) === 0 &&
+          frame.getInt16(18, true) === 0,
+      ),
+    ).toBe(true);
+    button = 0;
+    trigger = 0;
+    axis = 0;
+    vi.advanceTimersByTime(4);
+    button = 1;
+    trigger = 0.8;
+    axis = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+    expect(frames().at(-1)!.getUint16(28, true)).toBeGreaterThan(0);
+    expect(frames().at(-1)!.getInt16(18, true)).toBeGreaterThan(0);
+  });
+
+  it.each(["blur", "hidden", "capture"])(
+    "requires physical release after %s without affecting fresh controls",
+    (reason) => {
+      ready();
+      button = 1;
+      trigger = 0.5;
+      axis = 1;
+      vi.advanceTimersByTime(4);
+      if (reason === "blur") {
+        focused = false;
+        win.dispatchEvent(new Event("blur"));
+      } else if (reason === "hidden") {
+        doc.visibilityState = "hidden";
+        doc.dispatchEvent(new Event("visibilitychange"));
+      } else engine.setInputSuspended(true);
+      if (reason === "blur") {
+        focused = true;
+        win.dispatchEvent(new Event("focus"));
+      } else if (reason === "hidden") {
+        doc.visibilityState = "visible";
+        doc.dispatchEvent(new Event("visibilitychange"));
+      } else engine.setInputSuspended(false);
+      peer.channels.input.sent = [];
+      vi.advanceTimersByTime(8);
+      expect(frames().length).toBeGreaterThan(0);
+      expect(
+        frames().every(
+          (frame) =>
+            !a(frame) &&
+            frame.getUint16(28, true) === 0 &&
+            frame.getInt16(18, true) === 0,
+        ),
+      ).toBe(true);
+      button = 0;
+      trigger = 0;
+      axis = 0;
+      vi.advanceTimersByTime(4);
+      button = 1;
+      vi.advanceTimersByTime(4);
+      expect(a(frames().at(-1)!)).toBe(true);
+    },
+  );
+
+  it("handles same-ID same-index reconnect events with a release before new input", () => {
+    ready();
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+    peer.channels.input.sent = [];
+    // By the time the disconnect event runs, the snapshot may already expose
+    // a replacement of the same model at its reused index.
+    win.dispatchEvent(
+      Object.assign(new Event("gamepaddisconnected"), {
+        gamepad: { index: 0, id: padId },
+      }),
+    );
+    expect(frames().length).toBeGreaterThan(0);
+    expect(frames().every((frame) => !a(frame))).toBe(true);
+    peer.channels.input.sent = [];
+    vi.advanceTimersByTime(4);
+    expect(frames().every((frame) => !a(frame))).toBe(true);
+    button = 0;
+    vi.advanceTimersByTime(4);
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+  });
+
+  it("keeps unknown mappings neutral, reports unsupported once and allows keyboard input", () => {
+    padMapping = "";
+    button = 1;
+    axis = 1;
+    trigger = 1;
+    ready();
+    vi.advanceTimersByTime(100);
+    expect(frames().length).toBeGreaterThan(0);
+    expect(frames().every((frame) => !a(frame))).toBe(true);
+    expect(onControllerStatus).toHaveBeenCalledTimes(1);
+    expect(onControllerStatus).toHaveBeenCalledWith({
+      state: "unsupported",
+      label: "pad",
+    });
+    win.dispatchEvent(Object.assign(new Event("keydown"), { code: "Space" }));
+    expect(a(frames().at(-1)!)).toBe(true);
+    expect(onControlsShortcut).not.toHaveBeenCalled();
+    padConnected = false;
+    win.dispatchEvent(new Event("gamepaddisconnected"));
+    expect(onControllerStatus).toHaveBeenLastCalledWith({
+      state: "disconnected",
+      label: "pad",
+    });
+  });
+
+  it("uses only supported dual-rumble, clamps invalid magnitudes and bounds duration", () => {
+    const haptics = actuator();
+    vibrationActuator = haptics as unknown as GamepadHapticActuator;
+    ready();
+    rumble(255, 255, 60_000, 60_000);
+    expect(haptics.playEffect).toHaveBeenCalledWith("dual-rumble", {
+      startDelay: 0,
+      duration: 5000,
+      weakMagnitude: 1,
+      strongMagnitude: 1,
+    });
+    haptics.effects = ["trigger-rumble"];
+    rumble();
+    expect(haptics.playEffect).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not play rumble before handshake, while unfocused, hidden or captured", () => {
+    const haptics = actuator();
+    vibrationActuator = haptics as unknown as GamepadHapticActuator;
+    rumble();
+    expect(haptics.playEffect).not.toHaveBeenCalled();
+    ready();
+    focused = false;
+    win.dispatchEvent(new Event("blur"));
+    rumble();
+    focused = true;
+    win.dispatchEvent(new Event("focus"));
+    doc.visibilityState = "hidden";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    rumble();
+    doc.visibilityState = "visible";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    engine.setInputSuspended(true);
+    rumble();
+    expect(haptics.playEffect).not.toHaveBeenCalled();
+    engine.setInputSuspended(false);
+    rumble();
+    expect(haptics.playEffect).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses controller rumble tuning and resets the previous device before a switch", () => {
+    const first = actuator();
+    const second = actuator();
+    vibrationActuator = first as unknown as GamepadHapticActuator;
+    ready();
+    rumble();
+    engine.setControllerSettings({
+      preferredControllerId: "",
+      controllerDefaults: { ...defaultControllerTuning, rumble: "low" },
+      controllerProfiles: [],
+    });
+    expect(first.reset).toHaveBeenCalledTimes(1);
+    padId = "DualSense Wireless Controller";
+    padIndex = 1;
+    vibrationActuator = second as unknown as GamepadHapticActuator;
+    rumble(100, 100);
+    expect(second.playEffect).toHaveBeenLastCalledWith(
+      "dual-rumble",
+      expect.objectContaining({ strongMagnitude: 0.45, weakMagnitude: 0.45 }),
+    );
+    engine.setControllerSettings({
+      preferredControllerId: "",
+      controllerDefaults: { ...defaultControllerTuning, rumble: "off" },
+      controllerProfiles: [],
+    });
+    rumble();
+    expect(second.reset).toHaveBeenCalledTimes(1);
+    expect(second.playEffect).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops legacy dual-rumble with a zero effect when reset is unavailable", () => {
+    const legacy = {
+      type: "dual-rumble",
+      playEffect: vi.fn(async () => "complete"),
+    };
+    vibrationActuator = legacy as unknown as GamepadHapticActuator;
+    ready();
+    rumble();
+    engine.setInputSuspended(true);
+    expect(legacy.playEffect).toHaveBeenLastCalledWith("dual-rumble", {
+      duration: 0,
+      startDelay: 0,
+      weakMagnitude: 0,
+      strongMagnitude: 0,
+    });
+  });
+
+  it.each(["blur", "hidden", "capture", "disconnect", "profile", "end"])(
+    "resets an active rumble on %s",
+    async (reason) => {
+      const haptics = actuator();
+      vibrationActuator = haptics as unknown as GamepadHapticActuator;
+      ready();
+      rumble();
+      if (reason === "blur") {
+        focused = false;
+        win.dispatchEvent(new Event("blur"));
+      } else if (reason === "hidden") {
+        doc.visibilityState = "hidden";
+        doc.dispatchEvent(new Event("visibilitychange"));
+      } else if (reason === "capture") engine.setInputSuspended(true);
+      else if (reason === "disconnect") {
+        padConnected = false;
+        win.dispatchEvent(new Event("gamepaddisconnected"));
+      } else if (reason === "profile")
+        engine.setControllerSettings({
+          preferredControllerId: "",
+          controllerDefaults: { ...defaultControllerTuning, rumble: "off" },
+          controllerProfiles: [],
+        });
+      else engine.destroy();
+      await Promise.resolve();
+      expect(haptics.reset).toHaveBeenCalledTimes(1);
+      expect(onError).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preempts effects without replaying them after late completion", async () => {
+    const haptics = actuator();
+    let resolveOld!: (result: GamepadHapticsResult) => void;
+    haptics.playEffect.mockImplementationOnce(
+      () =>
+        new Promise<GamepadHapticsResult>((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
+    vibrationActuator = haptics as unknown as GamepadHapticActuator;
+    ready();
+    rumble();
+    rumble(80);
+    resolveOld("preempted");
+    await Promise.resolve();
+    expect(haptics.playEffect).toHaveBeenCalledTimes(2);
+    engine.setInputSuspended(true);
+    expect(haptics.reset).toHaveBeenCalledTimes(1);
+  });
+
+  it("absorbs synchronous and asynchronous haptics/reset failures", async () => {
+    const haptics = actuator();
+    vibrationActuator = haptics as unknown as GamepadHapticActuator;
+    ready();
+    haptics.playEffect.mockImplementationOnce(() => {
+      throw new Error("unsupported");
+    });
+    expect(() => rumble()).not.toThrow();
+    haptics.playEffect.mockRejectedValueOnce(new Error("disconnected"));
+    rumble();
+    haptics.reset.mockRejectedValueOnce(new Error("hidden"));
+    focused = false;
+    win.dispatchEvent(new Event("blur"));
+    await Promise.resolve();
+    expect(onError).not.toHaveBeenCalled();
+    focused = true;
+    win.dispatchEvent(new Event("focus"));
+    rumble();
+    haptics.reset.mockImplementationOnce(() => {
+      throw new Error("removed");
+    });
+    expect(() => engine.destroy()).not.toThrow();
+  });
+
   it("requires playing video before reporting a successful stream", () => {
     ready();
     peer.connectionState = "connected";
@@ -659,6 +1026,11 @@ describe("real stream engine input lifecycle", () => {
     expect(frames().map(a)).toEqual([true, false]);
     vi.advanceTimersByTime(4);
     expect(frames().map(a)).toEqual([true, false, false]);
+    expect(frames().at(-1)!.getUint16(16, true) & 32).toBe(0);
+    button = 0;
+    vi.advanceTimersByTime(4);
+    button = 1;
+    vi.advanceTimersByTime(4);
     expect(frames().at(-1)!.getUint16(16, true) & 32).toBe(32);
   });
   it("does not release held input for unrelated settings changes", () => {
@@ -848,7 +1220,7 @@ describe("real stream engine input lifecycle", () => {
     doc.visibilityState = "visible";
     doc.dispatchEvent(new Event("visibilitychange"));
     vi.advanceTimersByTime(4);
-    expect(poll).toHaveBeenCalledTimes(1);
+    expect(poll).toHaveBeenCalledTimes(2); // one neutral prime + first active tick
   });
   it("keeps overlays neutral and stops polling after destruction", () => {
     ready();
