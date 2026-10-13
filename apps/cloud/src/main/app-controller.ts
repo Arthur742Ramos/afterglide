@@ -155,21 +155,33 @@ export class AppController {
   }
 
   async signOut(): Promise<void> {
-    this.authGeneration += 1;
+    const generation = ++this.authGeneration;
     this.cancelCatalogOperations();
-    await this.stopStream();
-    this.lastTarget = undefined;
-    await this.platform.signOut();
-    this.patch({
-      auth: { status: "signed-out" },
-      cloud: {
-        available: false,
-        titles: [],
-        status: "idle",
-      },
-      session: idleSession(),
-      telemetry: { ...emptyTelemetry },
+    const cleanup = this.stopStream().catch((error: unknown) => {
+      console.warn(
+        "Could not stop the remote Xbox session",
+        errorForLog(error),
+      );
     });
+    this.lastTarget = undefined;
+    try {
+      // Revoke local credentials before waiting on captured remote cleanup.
+      // A newer sign-in owns the snapshot as soon as its generation changes.
+      await this.platform.signOut();
+      if (generation !== this.authGeneration) return;
+      this.patch({
+        auth: { status: "signed-out" },
+        cloud: {
+          available: false,
+          titles: [],
+          status: "idle",
+        },
+        session: idleSession(),
+        telemetry: { ...emptyTelemetry },
+      });
+    } finally {
+      await cleanup;
+    }
   }
 
   private cancelCatalogOperations(): void {

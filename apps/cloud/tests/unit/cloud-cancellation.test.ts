@@ -16,12 +16,38 @@ const auth = vi.hoisted(() => ({
   getGssvToken: vi.fn(),
   getStreamToken: vi.fn(),
 }));
-vi.mock("xal-node", () => ({
-  Msal: class {
-    getGssvToken = auth.getGssvToken;
-    getStreamToken = auth.getStreamToken;
-  },
-}));
+vi.mock("xal-node", async (importOriginal) => {
+  const original = await importOriginal<typeof import("xal-node")>();
+  return {
+    TokenStore: original.TokenStore,
+    Msal: class {
+      constructor(private readonly store: import("xal-node").TokenStore) {}
+      getGssvToken = auth.getGssvToken;
+      getStreamToken = auth.getStreamToken;
+      async doDeviceCodeAuth() {
+        return {
+          user_code: "SYNTHETIC",
+          device_code: "synthetic-B",
+          verification_uri: "https://microsoft.com/link",
+          expires_in: 900,
+          interval: 1,
+          message: "Synthetic",
+        };
+      }
+      async doPollForDeviceCodeAuth() {
+        this.store.removeAll();
+        this.store.setUserToken({
+          data: {
+            access_token: "synthetic-B",
+            refresh_token: "synthetic-refresh-B",
+            expires_in: 3600,
+          },
+        } as never);
+        this.store.save();
+      }
+    },
+  };
+});
 import { LivePlatformService } from "../../src/main/live-platform-service";
 
 function deferred<T>() {
@@ -48,6 +74,7 @@ function service() {
     load: vi.fn(),
     getUserToken: () => ({}),
     removeAll: vi.fn(),
+    replaceFrom: vi.fn(),
   } as unknown as SecureTokenStore);
 }
 async function flush() {
@@ -76,6 +103,92 @@ afterEach(() => {
 });
 
 describe("cloud operation cancellation and total budgets", () => {
+  it("clears A's eligibility metadata when B signs in before B discovery completes", async () => {
+    let account = "A";
+    const discovery = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, options: RequestInit) => {
+        if (url.includes("/search/v2?")) {
+          const query = JSON.parse(String(options.body)).Query as string;
+          return Response.json({
+            Products: { [query]: { ProductTitle: query } },
+          });
+        }
+        if (url.includes("/v3/products?"))
+          return Response.json({
+            Products: { [account]: { ProductTitle: account } },
+          });
+        if (url.includes("/mru?")) return Response.json({ results: [] });
+        return account === "B"
+          ? discovery.promise
+          : Response.json({
+              results: [{ titleId: "game-A", details: { productId: "A" } }],
+            });
+      }),
+    );
+    const platform = service();
+    await platform.restore();
+    await platform.listCloudTitles();
+    expect(await platform.searchCloudTitles("A")).toHaveLength(1);
+    await platform.beginDeviceCode();
+    await platform.pollDeviceCode("synthetic-B", 1000);
+    account = "B";
+    const listing = platform.listCloudTitles();
+    try {
+      expect(await platform.searchCloudTitles("A")).toEqual([]);
+    } finally {
+      discovery.resolve(
+        Response.json({
+          results: [{ titleId: "game-B", details: { productId: "B" } }],
+        }),
+      );
+      await listing;
+    }
+    expect(await platform.searchCloudTitles("B")).toEqual([
+      expect.objectContaining({ id: "game-B" }),
+    ]);
+  });
+
+  it("cleans a creation body that arrives after its deadline before the timer fires", async () => {
+    vi.useFakeTimers();
+    const body = deferred<string>();
+    const deletes: string[] = [];
+    let reading = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, options: RequestInit) => {
+        if (options.method === "DELETE") {
+          deletes.push(url);
+          return new Response(null, { status: 204 });
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: () => {
+            reading = true;
+            return body.promise;
+          },
+        } as Response;
+      }),
+    );
+    const platform = service();
+    await platform.restore();
+    const creating = platform
+      .startSession({ source: "cloud", id: "A" }, 1080)
+      .catch((error: unknown) => error);
+    await flush();
+    expect(reading).toBe(true);
+    // Jump the clock without dispatching timeout callbacks, as can happen
+    // when a suspended app receives a buffered response after waking.
+    vi.setSystemTime(Date.now() + NETWORK_POLICY.requestTimeoutMs + 1);
+    body.resolve(JSON.stringify(session("A")));
+    expect(await creating).toMatchObject({ code: "XBOX_TIMEOUT" });
+    await flush();
+    expect(deletes).toEqual(["https://test.xboxlive.com/v5/sessions/cloud/A"]);
+  });
+
   it("bounds retained search metadata to the authenticated cloud library across queries", async () => {
     let query = 0;
     vi.stubGlobal(
@@ -402,6 +515,7 @@ describe("cloud operation cancellation and total budgets", () => {
 function controller(
   startSession: PlatformService["startSession"],
   search?: PlatformService["searchCloudTitles"],
+  overrides?: Partial<PlatformService>,
 ) {
   directory = mkdtempSync(join(tmpdir(), "afterglide-cancellation-"));
   const platform: PlatformService = {
@@ -427,6 +541,7 @@ function controller(
     exchangeIce: async () => "[]",
     keepalive: async () => {},
     stopSession: vi.fn(async () => {}),
+    ...overrides,
   };
   return new AppController(
     platform,
@@ -443,6 +558,56 @@ function controller(
 }
 
 describe("launch ownership after cancellation", () => {
+  it("does not let A's pending logout revoke B's newer successful sign-in", async () => {
+    const deletion = deferred<void>();
+    let signedIn = true;
+    const revoke = vi.fn(async () => {
+      signedIn = false;
+    });
+    const app = controller(async () => session("A"), undefined, {
+      stopSession: async () => deletion.promise,
+      signOut: revoke,
+      beginDeviceCode: async () => ({
+        code: "synthetic",
+        verificationUrl: "https://microsoft.com/link",
+        expiresAt: Date.now() + 1000,
+        message: "Synthetic",
+        internalDeviceCode: "synthetic-B",
+      }),
+      pollDeviceCode: async () => {
+        signedIn = true;
+      },
+    });
+    await app.initialize();
+    await app.startCloudStream("A");
+    const logout = app.signOut();
+    await app.beginSignIn();
+    await vi.waitFor(() =>
+      expect(app.getSnapshot().auth.status).toBe("signed-in"),
+    );
+    deletion.resolve();
+    await logout;
+    expect(signedIn).toBe(true);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(app.getSnapshot().auth.status).toBe("signed-in");
+  });
+
+  it("revokes local authentication even if remote session cleanup fails", async () => {
+    const revoke = vi.fn(async () => {});
+    const app = controller(async () => session("A"), undefined, {
+      signOut: revoke,
+      stopSession: async () => {
+        throw new Error("Synthetic deletion failure");
+      },
+    });
+    await app.initialize();
+    await app.startCloudStream("A");
+    await app.signOut().catch(() => {});
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(app.getSnapshot().auth.status).toBe("signed-out");
+    expect(app.getSnapshot().session.phase).toBe("idle");
+  });
+
   it("cancels a cleared search even when the platform ignores its abort signal", async () => {
     const results = deferred<ReturnType<typeof title>[]>();
     let signal: AbortSignal | undefined;

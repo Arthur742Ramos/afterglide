@@ -163,6 +163,9 @@ export class LivePlatformService implements PlatformService {
       this.requireCurrentAttempt(attempt);
       // No await between ownership validation and encrypted-store publication.
       this.tokenStore.replaceFrom(attempt.store);
+      this.cloudRows = [];
+      this.recentIds.clear();
+      this.searchedProducts.clear();
       this.setCloudToken(cloud);
       this.authenticationAttempt = undefined;
       // A refresh of the previous account may have started while sign-in was
@@ -893,6 +896,19 @@ export class LivePlatformService implements PlatformService {
         operation.check();
         let retryAfter: string | null = null;
         let transientStatus = false;
+        let received = false;
+        let completedResult: T | undefined;
+        let lateHandled = false;
+        const handleLateResult = (value: T) => {
+          if (
+            !lateHandled &&
+            onLateResult &&
+            (operation.signal.aborted || Date.now() >= operation.deadline)
+          ) {
+            lateHandled = true;
+            onLateResult(value);
+          }
+        };
         try {
           const work = async (): Promise<T> => {
             const response = await fetch(`${host}${path}`, {
@@ -931,12 +947,15 @@ export class LivePlatformService implements PlatformService {
           if (onLateResult)
             void result.then(
               (value) => {
-                if (operation.signal.aborted) onLateResult(value);
+                received = true;
+                completedResult = value;
+                handleLateResult(value);
               },
               () => {},
             );
           return await operation.wait(() => result);
         } catch (error) {
+          if (received) handleLateResult(completedResult as T);
           operation.check();
           if (
             attempt + 1 < attempts &&
