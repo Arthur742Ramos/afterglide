@@ -305,6 +305,8 @@ test("held controller Accept must be released after a screen change", async () =
       value: () => [gamepad],
     });
     (window as unknown as { heldPad: typeof gamepad }).heldPad = gamepad;
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("gamepadconnected"));
   });
   const setHeld = async (pressed: boolean) => {
     await page.evaluate(async (value) => {
@@ -378,6 +380,10 @@ test("controller directional library traversal keeps offline launches blocked", 
 test("controller directions choose a preferred simulated device", async () => {
   const page = await launch();
   await page.evaluate(() => {
+    Object.defineProperty(document, "hasFocus", {
+      configurable: true,
+      value: () => true,
+    });
     Object.defineProperty(navigator, "getGamepads", {
       configurable: true,
       value: () => [
@@ -751,6 +757,8 @@ test("background physical navigation is inert and held Accept is released on ref
       value: () => [state.pad],
     });
     (window as unknown as { focusPad: typeof state }).focusPad = state;
+    window.dispatchEvent(new Event("blur"));
+    window.dispatchEvent(new Event("gamepadconnected"));
     state.pad.buttons[0] = { pressed: true, value: 1 };
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -760,6 +768,7 @@ test("background physical navigation is inert and held Accept is released on ref
   await page.evaluate(async () => {
     (window as unknown as { focusPad: { focused: boolean } }).focusPad.focused =
       true;
+    window.dispatchEvent(new Event("focus"));
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
@@ -780,6 +789,100 @@ test("background physical navigation is inert and held Accept is released on ref
   await expect(
     page.getByRole("button", { name: "Cancel", exact: true }),
   ).toBeVisible();
+});
+
+test("captured controller chord stops on blur and requires release after refocus and hotplug", async () => {
+  const page = await launch();
+  await play(page);
+  await page.evaluate(() =>
+    window.afterglideCloudTest!.injectGamepad("controls"),
+  );
+  const settings = page.getByText("Quick settings", { exact: true });
+  await expect(settings).toBeVisible();
+  await page.evaluate(async () => {
+    const state = {
+      focused: false,
+      reads: 0,
+      pad: {
+        id: "Simulated chord controller",
+        index: 0,
+        connected: true,
+        mapping: "standard",
+        axes: [0, 0],
+        buttons: Array.from({ length: 17 }, () => ({
+          pressed: false,
+          value: 0,
+        })),
+      },
+    };
+    Object.defineProperty(document, "hasFocus", {
+      configurable: true,
+      value: () => state.focused,
+    });
+    Object.defineProperty(navigator, "getGamepads", {
+      configurable: true,
+      value: () => {
+        state.reads += 1;
+        return [state.pad];
+      },
+    });
+    (window as unknown as { chordPad: typeof state }).chordPad = state;
+    window.dispatchEvent(new Event("blur"));
+    window.dispatchEvent(new Event("gamepadconnected"));
+    state.pad.buttons[10] = state.pad.buttons[11] = { pressed: true, value: 1 };
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    if (state.reads !== 0)
+      throw new Error("Controller was sampled in background");
+  });
+  await expect(settings).toBeVisible();
+  await page.evaluate(async () => {
+    const state = (window as unknown as { chordPad: { focused: boolean } })
+      .chordPad;
+    state.focused = true;
+    window.dispatchEvent(new Event("focus"));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  });
+  await expect(settings).toBeVisible();
+  const setChord = async (pressed: boolean) => {
+    await page.evaluate(async (pressed) => {
+      const state = (
+        window as unknown as {
+          chordPad: { pad: { buttons: { pressed: boolean; value: number }[] } };
+        }
+      ).chordPad;
+      state.pad.buttons[10] = state.pad.buttons[11] = {
+        pressed,
+        value: pressed ? 1 : 0,
+      };
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+    }, pressed);
+  };
+  await setChord(false);
+  await setChord(true);
+  await expect(settings).toHaveCount(0);
+  await page.evaluate(() =>
+    window.afterglideCloudTest!.injectGamepad("controls"),
+  );
+  await expect(settings).toBeVisible();
+  await page.evaluate(async () => {
+    const state = (window as unknown as { chordPad: { pad: { id: string } } })
+      .chordPad;
+    state.pad.id = "Replacement at the same index";
+    window.dispatchEvent(new Event("gamepadconnected"));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  });
+  await expect(settings).toBeVisible();
+  await setChord(false);
+  await setChord(true);
+  await expect(settings).toHaveCount(0);
 });
 
 test("welcome, sign-in and readiness remain reachable at 150 and 200 percent zoom", async () => {

@@ -23,6 +23,7 @@ import {
 } from "./controller-input";
 import { InputTransitionBuffer, type InputBufferFailure } from "./input-buffer";
 import { FrameMetricsTracker } from "./frame-metrics";
+import { ControllerChordInput } from "./controller-chord";
 
 export type PlaybackSettings = Pick<
   AppSettings,
@@ -101,7 +102,7 @@ export class XboxStreamEngine {
   private activeGamepadId = "";
   private activeGamepadLabel = "";
   private sampledInput = false;
-  private controlsShortcutPressed = false;
+  private readonly controlsShortcut = new ControllerChordInput();
 
   constructor(private readonly options: StreamEngineOptions) {
     this.channels = {
@@ -279,6 +280,7 @@ export class XboxStreamEngine {
   setInputSuspended(suspended: boolean): void {
     if (suspended === this.inputSuspended) return;
     this.inputSuspended = suspended;
+    this.controlsShortcut.reset();
     if (suspended) this.releaseInput();
     this.updateInputPolling();
   }
@@ -344,6 +346,7 @@ export class XboxStreamEngine {
   };
 
   private onBlur = (): void => {
+    this.controlsShortcut.reset();
     this.releaseInput();
     this.updateInputPolling();
   };
@@ -676,7 +679,10 @@ export class XboxStreamEngine {
   };
 
   private onVisibilityChange = (): void => {
-    if (document.visibilityState !== "visible") this.releaseInput();
+    if (document.visibilityState !== "visible") {
+      this.controlsShortcut.reset();
+      this.releaseInput();
+    }
     this.frameMetrics.setVisible(document.visibilityState === "visible");
     this.updateInputPolling();
   };
@@ -775,12 +781,19 @@ export class XboxStreamEngine {
   }
 
   private updateControlsShortcut(gamepad: GamepadLike | undefined): void {
-    const pressed =
-      this.options.reserveControlChord &&
-      Boolean(gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed);
-    if (pressed && !this.controlsShortcutPressed)
+    if (
+      this.destroyed ||
+      this.terminal ||
+      this.inputSuspended ||
+      !this.options.reserveControlChord ||
+      !document.hasFocus() ||
+      document.visibilityState !== "visible"
+    ) {
+      this.controlsShortcut.reset();
+      return;
+    }
+    if (this.controlsShortcut.consume(gamepad))
       this.options.onControlsShortcut();
-    this.controlsShortcutPressed = pressed;
   }
 
   private async collectTelemetry(): Promise<void> {

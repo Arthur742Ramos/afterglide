@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import { selectController } from "../stream/controller-input";
+import {
+  ControllerNavigationInput,
+  createControllerPolling,
+} from "./controller-polling";
 
 const actionKeys: Record<string, string> = {
   up: "ArrowUp",
@@ -9,9 +13,6 @@ const actionKeys: Record<string, string> = {
 };
 
 const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
-const repeatingActions = new Set(["up", "down", "left", "right"]);
-const repeatDelayMs = 360;
-const repeatIntervalMs = 95;
 
 function isTextEntry(target: EventTarget | null): boolean {
   return (
@@ -120,81 +121,39 @@ export function useControllerNavigation(
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("afterglide-gamepad", onGamepad);
 
-    let previous = new Set<string>();
-    const repeatAt = new Map<string, number>();
+    const input = new ControllerNavigationInput();
     let activeGamepadIndex: number | undefined;
-    let initialized = false;
-    let frame = 0;
-    const pollGamepad = (now: number): void => {
-      if (document.hidden || !document.hasFocus()) {
-        previous.clear();
-        initialized = false;
-        repeatAt.clear();
-        frame = requestAnimationFrame(pollGamepad);
-        return;
-      }
-      const gamepad = selectController(
-        navigator.getGamepads(),
-        preferredControllerId,
-        activeGamepadIndex,
-      );
-      const controllerChanged = activeGamepadIndex !== gamepad?.index;
-      activeGamepadIndex = gamepad?.index;
-      const active = new Set<string>();
-      if (gamepad) {
-        const dpad = [
-          gamepad.buttons[12]?.pressed ? "up" : "",
-          gamepad.buttons[13]?.pressed ? "down" : "",
-          gamepad.buttons[14]?.pressed ? "left" : "",
-          gamepad.buttons[15]?.pressed ? "right" : "",
-        ].filter(Boolean);
-        if (dpad.length > 0) dpad.forEach((action) => active.add(action));
-        else {
-          const x = gamepad.axes[0] ?? 0;
-          const y = gamepad.axes[1] ?? 0;
-          if (Math.max(Math.abs(x), Math.abs(y)) > 0.65)
-            active.add(
-              Math.abs(x) > Math.abs(y)
-                ? x < 0
-                  ? "left"
-                  : "right"
-                : y < 0
-                  ? "up"
-                  : "down",
-            );
-        }
-        if (gamepad.buttons[1]?.pressed) active.add("back");
-        else if (gamepad.buttons[0]?.pressed) active.add("accept");
-      }
-      // A held confirmation/back button must be released before it can act on
-      // a newly mounted screen or newly selected controller.
-      if (!initialized || controllerChanged) {
-        for (const action of ["accept", "back"]) {
-          if (active.has(action)) previous.add(action);
-        }
-        initialized = true;
-      }
-      active.forEach((action) => {
-        if (!previous.has(action)) {
-          perform(action);
-          if (repeatingActions.has(action))
-            repeatAt.set(action, now + repeatDelayMs);
-        } else if (
-          repeatingActions.has(action) &&
-          now >= (repeatAt.get(action) ?? Number.POSITIVE_INFINITY)
-        ) {
-          perform(action);
-          repeatAt.set(action, now + repeatIntervalMs);
-        }
-      });
-      repeatAt.forEach((_time, action) => {
-        if (!active.has(action)) repeatAt.delete(action);
-      });
-      previous = active;
-      frame = requestAnimationFrame(pollGamepad);
-    };
-    frame = requestAnimationFrame(pollGamepad);
-
+    const polling = createControllerPolling(
+      {
+        requestFrame: (callback) => window.requestAnimationFrame(callback),
+        cancelFrame: (handle) => window.cancelAnimationFrame(handle),
+        setTimer: (callback, delay) => window.setTimeout(callback, delay),
+        clearTimer: (handle) => window.clearTimeout(handle),
+        now: () => performance.now(),
+      },
+      () => !document.hidden && document.hasFocus(),
+      (now) => {
+        const gamepad = selectController(
+          navigator.getGamepads(),
+          preferredControllerId,
+          activeGamepadIndex,
+        );
+        activeGamepadIndex = gamepad?.index;
+        input.actions(gamepad, now).forEach(perform);
+        return Boolean(gamepad);
+      },
+      () => {
+        activeGamepadIndex = undefined;
+        input.reset();
+      },
+    );
+    const refreshPolling = (): void => polling.refresh();
+    window.addEventListener("focus", refreshPolling);
+    window.addEventListener("blur", refreshPolling);
+    window.addEventListener("gamepadconnected", refreshPolling);
+    window.addEventListener("gamepaddisconnected", refreshPolling);
+    document.addEventListener("visibilitychange", refreshPolling);
+    polling.refresh();
     const initial = window.setTimeout(() => {
       const items = focusables();
       if (
@@ -209,7 +168,12 @@ export function useControllerNavigation(
     }, 40);
     return () => {
       clearTimeout(initial);
-      cancelAnimationFrame(frame);
+      polling.dispose();
+      window.removeEventListener("focus", refreshPolling);
+      window.removeEventListener("blur", refreshPolling);
+      window.removeEventListener("gamepadconnected", refreshPolling);
+      window.removeEventListener("gamepaddisconnected", refreshPolling);
+      document.removeEventListener("visibilitychange", refreshPolling);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("afterglide-gamepad", onGamepad);
     };
