@@ -187,10 +187,12 @@ for (const input of ["keyboard", "controller"] as const) {
           window.afterglideCloudTest!.injectGamepad("accept"),
         );
       await expect(retry).toHaveCount(0);
-      await expect(page.getByText("Searching all cloud games.")).toHaveCount(0);
+      if (result === "empty")
+        await expect(page.getByText(/No games match/)).toBeVisible();
       await expect(page.locator(".game-grid button")).toHaveCount(
         result === "empty" ? 0 : 1,
       );
+      await expect(page.getByText(/Searching all cloud games/)).toHaveCount(0);
       await expect(search).toHaveValue("Focus retry");
       await expect(search).toBeFocused();
       if (input === "keyboard" && result === "empty")
