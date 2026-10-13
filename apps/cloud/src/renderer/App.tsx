@@ -1639,11 +1639,19 @@ function StreamView({
         <div className="performance-strip" aria-label="Stream performance">
           <Metric
             label="VIDEO"
-            value={`${Math.round(telemetry.framesPerSecond)} FPS`}
+            value={
+              telemetry.framesPerSecond === undefined
+                ? "NOT REPORTED"
+                : `${Math.round(telemetry.framesPerSecond)} FPS`
+            }
           />
           <Metric
             label="PING"
-            value={`${Math.round(telemetry.roundTripMs)} MS`}
+            value={
+              telemetry.roundTripMs === undefined
+                ? "NOT REPORTED"
+                : `${Math.round(telemetry.roundTripMs)} MS`
+            }
           />
           <Metric
             label="QUALITY"
@@ -1898,27 +1906,33 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
           icon="pulse"
           label="Received frame rate"
           value={
-            snapshot.telemetry.updatedAt
-              ? `${snapshot.telemetry.framesPerSecond.toFixed(1)} fps`
-              : "Measured during play"
+            snapshot.telemetry.framesPerSecond === undefined
+              ? snapshot.telemetry.updatedAt
+                ? "Not reported"
+                : "Measured during play"
+              : `${snapshot.telemetry.framesPerSecond.toFixed(1)} fps`
           }
         />
         <DiagnosticRow
           icon="wifi"
           label="Packet loss"
           value={
-            snapshot.telemetry.updatedAt
-              ? `${snapshot.telemetry.packetLossPercent.toFixed(2)}%`
-              : "Measured during play"
+            snapshot.telemetry.packetLossPercent === undefined
+              ? snapshot.telemetry.updatedAt
+                ? "Not reported"
+                : "Measured during play"
+              : `${snapshot.telemetry.packetLossPercent.toFixed(2)}%`
           }
         />
         <DiagnosticRow
           icon="wifi"
           label="Received bitrate"
           value={
-            snapshot.telemetry.updatedAt
-              ? `${snapshot.telemetry.bitrateMbps.toFixed(2)} Mbps`
-              : "Measured during play"
+            snapshot.telemetry.bitrateMbps === undefined
+              ? snapshot.telemetry.updatedAt
+                ? "Not reported"
+                : "Measured during play"
+              : `${snapshot.telemetry.bitrateMbps.toFixed(2)} Mbps`
           }
         />
         {(
@@ -1954,9 +1968,11 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
           icon="pulse"
           label="Last round trip"
           value={
-            snapshot.telemetry.updatedAt
-              ? `${Math.round(snapshot.telemetry.roundTripMs)} ms`
-              : "Measured during play"
+            snapshot.telemetry.roundTripMs === undefined
+              ? snapshot.telemetry.updatedAt
+                ? "Not reported"
+                : "Measured during play"
+              : `${Math.round(snapshot.telemetry.roundTripMs)} ms`
           }
         />
         <DiagnosticRow
@@ -1964,7 +1980,7 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
           label="Stream decoder"
           value={
             snapshot.telemetry.updatedAt
-              ? snapshot.telemetry.videoDecoder
+              ? (snapshot.telemetry.videoDecoder ?? "Not reported")
               : "Measured during play"
           }
         />
@@ -1975,6 +1991,16 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
             snapshot.telemetry.decodeMs === undefined
               ? "Not reported"
               : `${snapshot.telemetry.decodeMs.toFixed(1)} ms`
+          }
+        />
+        <DiagnosticRow
+          icon="display"
+          label="Negotiated video codec"
+          value={
+            snapshot.telemetry.codec ??
+            (snapshot.telemetry.updatedAt
+              ? "Not reported"
+              : "Measured during play")
           }
         />
         <DiagnosticRow

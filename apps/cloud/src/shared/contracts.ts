@@ -57,13 +57,13 @@ export interface StreamDescriptor {
 
 export interface StreamTelemetry {
   resolution: string;
-  framesPerSecond: number;
-  roundTripMs: number;
-  packetLossPercent: number;
-  bitrateMbps: number;
-  codec: string;
+  framesPerSecond?: number;
+  roundTripMs?: number;
+  packetLossPercent?: number;
+  bitrateMbps?: number;
+  codec?: string;
   connection: "local" | "remote" | "unknown";
-  videoDecoder: string;
+  videoDecoder?: string;
   decodeMs?: number;
   jitterBufferMs?: number;
   inputQueueBytes?: number;
@@ -248,13 +248,7 @@ export const defaultSettings: AppSettings = {
 
 export const emptyTelemetry: StreamTelemetry = {
   resolution: "Waiting for video",
-  framesPerSecond: 0,
-  roundTripMs: 0,
-  packetLossPercent: 0,
-  bitrateMbps: 0,
-  codec: "Waiting",
   connection: "unknown",
-  videoDecoder: "Chromium automatic",
   networkQuality: "measuring",
   updatedAt: 0,
 };

@@ -343,10 +343,10 @@ describe("AppController", () => {
 
     expect(controller.getSnapshot().telemetry).toMatchObject({
       resolution: "x".repeat(32),
-      framesPerSecond: 0,
-      roundTripMs: 0,
+      framesPerSecond: undefined,
+      roundTripMs: undefined,
       packetLossPercent: 100,
-      bitrateMbps: 0,
+      bitrateMbps: undefined,
       codec: "codec".repeat(9) + "cod",
       connection: "unknown",
       videoDecoder: "decoder".repeat(11) + "dec",
@@ -357,6 +357,50 @@ describe("AppController", () => {
       freezeCount: undefined,
       freezeDurationMs: 1200,
       recoveryMs: undefined,
+    });
+  });
+
+  it("keeps missing and invalid telemetry unknown through snapshots and exports", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    await controller.startCloudStream("cloud-game");
+    await controller.reportStreamEvent("session", "connected");
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      framesPerSecond: undefined,
+      roundTripMs: Number.NaN,
+      packetLossPercent: undefined,
+      bitrateMbps: undefined,
+      codec: undefined,
+      videoDecoder: undefined,
+      networkQuality: "excellent",
+    } as unknown as StreamTelemetry);
+    expect(controller.getSnapshot().telemetry).toMatchObject({
+      framesPerSecond: undefined,
+      roundTripMs: undefined,
+      packetLossPercent: undefined,
+      bitrateMbps: undefined,
+      codec: undefined,
+      videoDecoder: undefined,
+      networkQuality: "measuring",
+    });
+    const report = controller.exportPerformanceReport();
+    expect(report.samples[0].telemetry.roundTripMs).toBeUndefined();
+    expect(report.summaries[0].packetLossPercent).toBeUndefined();
+
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      framesPerSecond: 60,
+      roundTripMs: 0,
+      packetLossPercent: 0,
+      bitrateMbps: 0,
+      networkQuality: "excellent",
+    });
+    expect(controller.getSnapshot().telemetry).toMatchObject({
+      roundTripMs: 0,
+      packetLossPercent: 0,
+      bitrateMbps: 0,
+      networkQuality: "excellent",
     });
   });
 

@@ -677,6 +677,76 @@ describe("real stream engine input lifecycle", () => {
       }),
     );
   });
+  it("keeps unavailable WebRTC measurements unknown in the actual telemetry callback", async () => {
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        framesPerSecond: undefined,
+        roundTripMs: undefined,
+        packetLossPercent: undefined,
+        bitrateMbps: undefined,
+        codec: undefined,
+        videoDecoder: undefined,
+        networkQuality: "measuring",
+        inputQueueBytes: 0,
+      }),
+    );
+  });
+
+  it("establishes a baseline and rejects counter resets without inventing healthy zero loss", async () => {
+    const video = {
+      id: "v",
+      type: "inbound-rtp",
+      kind: "video",
+      framesPerSecond: 60,
+      bytesReceived: 1000,
+      packetsReceived: 100,
+      packetsLost: 0,
+    };
+    peer.stats.set("v", video);
+    peer.stats.set("t", {
+      id: "t",
+      type: "transport",
+      selectedCandidatePairId: "p",
+    });
+    peer.stats.set("p", {
+      id: "p",
+      type: "candidate-pair",
+      currentRoundTripTime: 0,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        roundTripMs: 0,
+        packetLossPercent: undefined,
+        bitrateMbps: undefined,
+        networkQuality: "measuring",
+      }),
+    );
+    peer.stats.set("v", {
+      ...video,
+      bytesReceived: 501000,
+      packetsReceived: 200,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        roundTripMs: 0,
+        packetLossPercent: 0,
+        bitrateMbps: 4,
+        networkQuality: "excellent",
+      }),
+    );
+    peer.stats.set("v", { ...video, bytesReceived: 1, packetsReceived: 1 });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        packetLossPercent: undefined,
+        bitrateMbps: undefined,
+        networkQuality: "measuring",
+      }),
+    );
+  });
   it("publishes presentation cadence and cancels frame observation on destruction", async () => {
     media[0].frameCallback!(0, {
       presentationTime: 0,

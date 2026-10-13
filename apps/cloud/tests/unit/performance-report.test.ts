@@ -12,6 +12,33 @@ const hardware: HardwareInfo = {
 };
 
 describe("performance evidence", () => {
+  it("excludes unknown network measurements from summaries and labels the Cloud app", () => {
+    const report = new PerformanceReport();
+    report.reset("cloud");
+    report.add({ ...emptyTelemetry }, defaultSettings);
+    report.add(
+      {
+        ...emptyTelemetry,
+        roundTripMs: 0,
+        packetLossPercent: 0,
+        framesPerSecond: 60,
+      },
+      defaultSettings,
+    );
+    const exported = report.export("v1", "live", hardware);
+    expect(exported.application.name).toBe("Afterglide Cloud");
+    expect(exported.samples[0].telemetry.roundTripMs).toBeUndefined();
+    expect(exported.samples[0].telemetry.codec).toBeUndefined();
+    expect(exported.summaries[0].roundTripMs).toEqual({
+      count: 1,
+      median: 0,
+      p95: 0,
+      p99: 0,
+    });
+    expect(exported.summaries[0].packetLossPercent?.count).toBe(1);
+    expect(exported.summaries[0].framesPerSecond?.median).toBe(60);
+  });
+
   it("retains a bounded chronological window without account or controller identifiers", () => {
     const report = new PerformanceReport();
     report.reset("cloud");

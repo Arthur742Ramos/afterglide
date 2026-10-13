@@ -1,18 +1,11 @@
-import {
-  intervalMeanMs,
-  selectedCandidatePair,
-  requestInteractivePlayout,
-  type MediaCounters,
-} from "./media-metrics";
+import { requestInteractivePlayout } from "./media-metrics";
+import { extractStreamStats, type StreamStatsSample } from "./telemetry";
 import type {
   AppSettings,
   IceCandidatePayload,
   StreamTelemetry,
 } from "../../shared/contracts";
-import {
-  assessNetworkQuality,
-  NETWORK_POLICY,
-} from "../../shared/network-policy";
+import { NETWORK_POLICY } from "../../shared/network-policy";
 import {
   applyKeyboardInput,
   emptyXboxInputFrame,
@@ -102,12 +95,8 @@ export class XboxStreamEngine {
   private connectionDeadlineTimer = 0;
   private disconnectedTimer = 0;
   private keepaliveFailures = 0;
-  private previousVideo?: MediaCounters;
+  private previousStats?: StreamStatsSample;
   private telemetryCollecting = false;
-  private previousBytes = 0;
-  private previousPacketsReceived = 0;
-  private previousPacketsLost = 0;
-  private previousStatsAt = 0;
   private activeGamepadIndex?: number;
   private activeGamepadId = "";
   private activeGamepadLabel = "";
@@ -800,112 +789,28 @@ export class XboxStreamEngine {
     try {
       const reports = await this.peer.getStats();
       if (this.destroyed || this.terminal) return;
-      let resolution = "Waiting for video";
-      let fps = 0;
-      let rtt = 0;
-      let packetLoss = 0;
-      let codec = "H.264";
-      let bytes = 0;
-      let packetsReceived = 0;
-      let packetsLost = 0;
-      let remoteCandidateId = "";
-      let videoReport: MediaCounters | undefined;
-      let connection: StreamTelemetry["connection"] = "unknown";
       const records = new Map<string, Record<string, unknown>>();
       reports.forEach((report) =>
         records.set(report.id, report as unknown as Record<string, unknown>),
       );
-      reports.forEach((report) => {
-        const record = report as unknown as Record<string, unknown>;
-        if (
-          record.type === "inbound-rtp" &&
-          (record.kind === "video" || record.mediaType === "video")
-        ) {
-          videoReport = record;
-          const width = Number(record.frameWidth ?? 0);
-          const height = Number(record.frameHeight ?? 0);
-          if (width && height) resolution = `${width} × ${height}`;
-          fps = Number(record.framesPerSecond ?? 0);
-          bytes = Number(record.bytesReceived ?? 0);
-          packetsReceived = Number(record.packetsReceived ?? 0);
-          packetsLost = Number(record.packetsLost ?? 0);
-          const codecReport = records.get(String(record.codecId ?? ""));
-          if (codecReport?.mimeType)
-            codec = String(codecReport.mimeType).replace("video/", "");
-        }
-      });
-      const pair = selectedCandidatePair(records);
-      if (pair) {
-        rtt = Number(pair.currentRoundTripTime ?? 0) * 1000;
-        remoteCandidateId = String(pair.remoteCandidateId ?? "");
-      }
-      const remote = records.get(remoteCandidateId);
-      if (remote?.address)
-        connection = isPrivateAddress(String(remote.address))
-          ? "local"
-          : "remote";
-      const now = performance.now();
-      const seconds = this.previousStatsAt
-        ? (now - this.previousStatsAt) / 1_000
-        : 0;
-      const bitrate =
-        seconds > 0
-          ? ((bytes - this.previousBytes) * 8) / seconds / 1_000_000
-          : 0;
-      const receivedDelta = Math.max(
-        0,
-        packetsReceived - this.previousPacketsReceived,
+      const { telemetry, sample } = extractStreamStats(
+        records,
+        this.previousStats,
+        performance.now(),
       );
-      const lostDelta = Math.max(0, packetsLost - this.previousPacketsLost);
-      packetLoss =
-        receivedDelta + lostDelta > 0
-          ? (lostDelta / (receivedDelta + lostDelta)) * 100
-          : 0;
-      this.previousBytes = bytes;
-      this.previousPacketsReceived = packetsReceived;
-      this.previousPacketsLost = packetsLost;
-      this.previousStatsAt = now;
       this.options.onTelemetry({
-        resolution,
-        framesPerSecond: fps,
-        roundTripMs: rtt,
-        packetLossPercent: packetLoss,
-        bitrateMbps: Math.max(0, bitrate),
-        codec,
-        connection,
-        videoDecoder:
-          typeof videoReport?.decoderImplementation === "string"
-            ? videoReport.decoderImplementation
-            : "Not reported",
-        decodeMs: videoReport
-          ? intervalMeanMs(
-              videoReport,
-              this.previousVideo,
-              "totalDecodeTime",
-              "framesDecoded",
-            )
-          : undefined,
-        jitterBufferMs: videoReport
-          ? intervalMeanMs(
-              videoReport,
-              this.previousVideo,
-              "jitterBufferDelay",
-              "jitterBufferEmittedCount",
-            )
-          : undefined,
+        ...telemetry,
         inputQueueBytes: this.channels.input.bufferedAmount,
-        ...this.frameMetrics.snapshot(videoReport),
-        networkQuality: assessNetworkQuality(rtt, packetLoss, fps),
+        ...this.frameMetrics.snapshot(sample.video),
         updatedAt: Date.now(),
       });
-      this.previousVideo = videoReport;
+      this.previousStats = sample;
     } catch {
       // A stats failure during shutdown must not interrupt play or reject unhandled.
     } finally {
       this.telemetryCollecting = false;
     }
   }
-
   private async addIceCandidate(candidate: IceCandidatePayload): Promise<void> {
     if (!candidate.candidate || candidate.candidate === "a=end-of-candidates")
       return;
@@ -1178,16 +1083,6 @@ function expandIpv6(address: string): string[] | undefined {
     ...Array.from({ length: missing }, () => "0"),
     ...rightGroups,
   ].map((group) => group.padStart(4, "0"));
-}
-
-function isPrivateAddress(address: string): boolean {
-  return (
-    address.startsWith("10.") ||
-    address.startsWith("192.168.") ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(address) ||
-    address.startsWith("fc") ||
-    address.startsWith("fd")
-  );
 }
 
 export function encodeGamepadPacketForTest(
