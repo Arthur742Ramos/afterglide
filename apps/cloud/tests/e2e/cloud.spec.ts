@@ -1006,7 +1006,7 @@ test("native window placement survives restart without changing credentials", as
       width,
       height,
     });
-    return window.getNormalBounds();
+    return { bounds: window.getNormalBounds(), workArea: area };
   });
   const stored = directory;
   await app.close();
@@ -1014,7 +1014,19 @@ test("native window placement survives restart without changing credentials", as
   const restored = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].getNormalBounds(),
   );
-  expect(restored).toEqual(expected);
+  // Mac CI reports one pixel less height when the native frame fills the
+  // available work area. Keep all other coordinates and non-edge sizes exact.
+  const { height, ...positionAndWidth } = restored;
+  const { height: expectedHeight, ...expectedPositionAndWidth } =
+    expected.bounds;
+  expect(positionAndWidth).toEqual(expectedPositionAndWidth);
+  if (
+    process.platform === "darwin" &&
+    expectedHeight === expected.workArea.height
+  ) {
+    expect(height).toBeGreaterThanOrEqual(expectedHeight - 1);
+    expect(height).toBeLessThanOrEqual(expectedHeight);
+  } else expect(height).toBe(expectedHeight);
 });
 
 test("background physical navigation is inert and held Accept is released on refocus", async () => {
