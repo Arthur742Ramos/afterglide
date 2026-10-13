@@ -8,6 +8,8 @@ import type {
 } from "../shared/contracts";
 import { Icon, type IconName } from "./icons";
 import { useControllerNavigation } from "./hooks/use-controller-navigation";
+import { createControllerPolling } from "./hooks/controller-polling";
+import { ControllerChordInput } from "./stream/controller-chord";
 import {
   CONTROLLER_CONTROL_GUIDE,
   KEYBOARD_CONTROL_GUIDE,
@@ -60,7 +62,7 @@ function useControllerDiagnostics(): ControllerDiagnostic[] {
   const [controllers, setControllers] = useState<ControllerDiagnostic[]>([]);
   useEffect(() => {
     let previous = "";
-    const refresh = () => {
+    const refresh = (): boolean => {
       const next = Array.from(navigator.getGamepads())
         .filter((gamepad): gamepad is Gamepad => Boolean(gamepad?.connected))
         .map((gamepad) => ({
@@ -83,15 +85,35 @@ function useControllerDiagnostics(): ControllerDiagnostic[] {
         previous = signature;
         setControllers(next);
       }
+      return next.length > 0;
     };
-    refresh();
-    const interval = window.setInterval(refresh, 125);
-    window.addEventListener("gamepadconnected", refresh);
-    window.addEventListener("gamepaddisconnected", refresh);
+    const polling = createControllerPolling(
+      {
+        requestFrame: (callback) => window.requestAnimationFrame(callback),
+        cancelFrame: (handle) => window.cancelAnimationFrame(handle),
+        setTimer: (callback, delay) => window.setTimeout(callback, delay),
+        clearTimer: (handle) => window.clearTimeout(handle),
+        now: () => performance.now(),
+      },
+      () => !document.hidden && document.hasFocus(),
+      refresh,
+      () => {},
+      125,
+    );
+    const refreshPolling = () => polling.refresh();
+    window.addEventListener("focus", refreshPolling);
+    window.addEventListener("blur", refreshPolling);
+    window.addEventListener("gamepadconnected", refreshPolling);
+    window.addEventListener("gamepaddisconnected", refreshPolling);
+    document.addEventListener("visibilitychange", refreshPolling);
+    polling.refresh();
     return () => {
-      clearInterval(interval);
-      window.removeEventListener("gamepadconnected", refresh);
-      window.removeEventListener("gamepaddisconnected", refresh);
+      polling.dispose();
+      window.removeEventListener("focus", refreshPolling);
+      window.removeEventListener("blur", refreshPolling);
+      window.removeEventListener("gamepadconnected", refreshPolling);
+      window.removeEventListener("gamepaddisconnected", refreshPolling);
+      document.removeEventListener("visibilitychange", refreshPolling);
     };
   }, []);
   return controllers;
@@ -1419,34 +1441,54 @@ function StreamView({
       if ((event as CustomEvent<string>).detail === "controls")
         toggleControls();
     };
-    let chordReleased = false;
+    const chord = new ControllerChordInput();
     let activeGamepadIndex: number | undefined;
-    let frame = 0;
-    const poll = () => {
+    const poll = (): boolean => {
       const gamepad = selectController(
         navigator.getGamepads(),
         snapshot.settings.preferredControllerId,
         activeGamepadIndex,
       );
       activeGamepadIndex = gamepad?.index;
-      const pressed = Boolean(
-        gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed,
-      );
-      if (!pressed) chordReleased = true;
-      else if (chordReleased) {
+      if (chord.consume(gamepad)) {
         toggleControls();
-        return;
       }
-      frame = requestAnimationFrame(poll);
+      return Boolean(gamepad);
     };
     window.addEventListener("afterglide-gamepad", onGamepadAction);
-    if (
-      controlsCaptured &&
-      snapshot.settings.controllerMenuShortcut === "stick-chord"
-    )
-      frame = requestAnimationFrame(poll);
+    const polling = createControllerPolling(
+      {
+        requestFrame: (callback) => window.requestAnimationFrame(callback),
+        cancelFrame: (handle) => window.cancelAnimationFrame(handle),
+        setTimer: (callback, delay) => window.setTimeout(callback, delay),
+        clearTimer: (handle) => window.clearTimeout(handle),
+        now: () => performance.now(),
+      },
+      () =>
+        controlsCaptured &&
+        snapshot.settings.controllerMenuShortcut === "stick-chord" &&
+        !document.hidden &&
+        document.hasFocus(),
+      poll,
+      () => {
+        activeGamepadIndex = undefined;
+        chord.reset();
+      },
+    );
+    const refreshPolling = () => polling.refresh();
+    window.addEventListener("focus", refreshPolling);
+    window.addEventListener("blur", refreshPolling);
+    window.addEventListener("gamepadconnected", refreshPolling);
+    window.addEventListener("gamepaddisconnected", refreshPolling);
+    document.addEventListener("visibilitychange", refreshPolling);
+    polling.refresh();
     return () => {
-      cancelAnimationFrame(frame);
+      polling.dispose();
+      window.removeEventListener("focus", refreshPolling);
+      window.removeEventListener("blur", refreshPolling);
+      window.removeEventListener("gamepadconnected", refreshPolling);
+      window.removeEventListener("gamepaddisconnected", refreshPolling);
+      document.removeEventListener("visibilitychange", refreshPolling);
       window.removeEventListener("afterglide-gamepad", onGamepadAction);
     };
   }, [

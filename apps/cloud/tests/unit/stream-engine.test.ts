@@ -79,6 +79,7 @@ let media: Media[];
 let focused: boolean;
 let button: number;
 let padIndex: number;
+let padId: string;
 let axis: number;
 let trigger: number;
 let controlsShortcut: boolean;
@@ -92,6 +93,7 @@ beforeEach(async () => {
   focused = true;
   button = 0;
   padIndex = 0;
+  padId = "pad";
   axis = 0;
   trigger = 0;
   controlsShortcut = false;
@@ -126,7 +128,7 @@ beforeEach(async () => {
     maxTouchPoints: 0,
     getGamepads: () => [
       {
-        id: "pad",
+        id: padId,
         index: padIndex,
         connected: true,
         mapping: "standard",
@@ -391,6 +393,7 @@ describe("real stream engine input lifecycle", () => {
   });
   it("owns the controls chord edge without forwarding stick clicks", () => {
     ready();
+    vi.advanceTimersByTime(4); // discover the controller with a neutral chord
     controlsShortcut = true;
     vi.advanceTimersByTime(4);
     expect(onControlsShortcut).toHaveBeenCalledTimes(1);
@@ -403,6 +406,55 @@ describe("real stream engine input lifecycle", () => {
     controlsShortcut = true;
     vi.advanceTimersByTime(4);
     expect(onControlsShortcut).toHaveBeenCalledTimes(2);
+  });
+  it.each(["blur", "hidden", "suspend"])(
+    "requires chord release after %s before opening local controls",
+    (reason) => {
+      ready();
+      vi.advanceTimersByTime(4);
+      if (reason === "blur") {
+        focused = false;
+        win.dispatchEvent(new Event("blur"));
+      } else if (reason === "hidden") {
+        doc.visibilityState = "hidden";
+        doc.dispatchEvent(new Event("visibilitychange"));
+      } else engine.setInputSuspended(true);
+      controlsShortcut = true;
+      vi.advanceTimersByTime(100);
+      expect(onControlsShortcut).not.toHaveBeenCalled();
+      if (reason === "blur") {
+        focused = true;
+        win.dispatchEvent(new Event("focus"));
+      } else if (reason === "hidden") {
+        doc.visibilityState = "visible";
+        doc.dispatchEvent(new Event("visibilitychange"));
+      } else engine.setInputSuspended(false);
+      vi.advanceTimersByTime(8);
+      expect(onControlsShortcut).not.toHaveBeenCalled();
+      controlsShortcut = false;
+      vi.advanceTimersByTime(4);
+      controlsShortcut = true;
+      vi.advanceTimersByTime(4);
+      expect(onControlsShortcut).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("suppresses a chord held on first discovery or same-index controller replacement", () => {
+    ready();
+    controlsShortcut = true;
+    vi.advanceTimersByTime(4);
+    expect(onControlsShortcut).not.toHaveBeenCalled();
+    controlsShortcut = false;
+    vi.advanceTimersByTime(4);
+    padId = "Replacement pad";
+    controlsShortcut = true;
+    win.dispatchEvent(new Event("gamepadconnected"));
+    vi.advanceTimersByTime(4);
+    expect(onControlsShortcut).not.toHaveBeenCalled();
+    controlsShortcut = false;
+    vi.advanceTimersByTime(4);
+    controlsShortcut = true;
+    vi.advanceTimersByTime(4);
+    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
   });
   it("does not queue stale state, and retries a focus-loss release while unfocused", () => {
     ready();
