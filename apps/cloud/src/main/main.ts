@@ -308,6 +308,7 @@ function registerIpc(appController: AppController): void {
   handle(IPC.searchCloudTitles, (query: string) =>
     appController.searchCloudTitles(query),
   );
+  handle(IPC.cancelCloudSearch, () => appController.cancelCloudSearch());
   handle(IPC.selectCloudTitle, (titleId: string) =>
     appController.selectCloudTitle(titleId),
   );

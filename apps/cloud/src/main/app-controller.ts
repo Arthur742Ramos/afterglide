@@ -12,10 +12,19 @@ import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
 import { sanitizeSettingsUpdate } from "../shared/controller-settings";
 import { NETWORK_POLICY } from "../shared/network-policy";
 import { errorForLog, safeError } from "./errors";
-import type { PlatformService, StreamTarget } from "./platform-service";
+import type {
+  PlatformService,
+  SessionStart,
+  StreamTarget,
+} from "./platform-service";
 import type { ReleaseCheckPort } from "./release-checker";
 import { SettingsStore } from "./settings-store";
 import { PerformanceReport, type DeviceMetrics } from "./performance-report";
+import {
+  CloudOperation,
+  CLOUD_OPERATION_LIMITS,
+  operationCancelled,
+} from "./operation-context";
 
 interface ActiveSession {
   id: string;
@@ -23,6 +32,7 @@ interface ActiveSession {
   source: StreamTarget["source"];
   targetId: string;
   targetName: string;
+  controller: AbortController;
 }
 
 interface NamedTarget extends StreamTarget {
@@ -41,8 +51,10 @@ export class AppController {
   private deviceMetrics?: DeviceMetrics;
   private recoveryStartedAt?: number;
   private recoveryMs?: number;
-  private retryPending = false;
-  private startingTarget = false;
+  private retryPending?: object;
+  private startingTarget?: AbortController;
+  private catalogOperation?: AbortController;
+  private searchOperation?: AbortController;
 
   constructor(
     private readonly platform: PlatformService,
@@ -78,8 +90,10 @@ export class AppController {
   }
 
   async initialize(): Promise<void> {
+    const generation = this.authGeneration;
     this.patch({ auth: { status: "restoring" } });
     const restored = await this.platform.restore();
+    if (generation !== this.authGeneration) return;
     if (!restored) {
       this.patch({ auth: { status: "signed-out" } });
       return;
@@ -93,6 +107,7 @@ export class AppController {
   }
 
   async beginSignIn(): Promise<void> {
+    this.cancelCatalogOperations();
     const generation = ++this.authGeneration;
     this.platform.cancelAuthentication();
     this.patch({ auth: { status: "waiting" } });
@@ -115,7 +130,10 @@ export class AppController {
         )
         .then(async () => {
           if (generation !== this.authGeneration) return;
-          this.patch({ auth: { status: "signed-in" } });
+          this.patch({
+            auth: { status: "signed-in" },
+            cloud: { available: false, titles: [], status: "idle" },
+          });
           await this.refreshCloudTitles();
         })
         .catch((error: unknown) => {
@@ -134,26 +152,53 @@ export class AppController {
   }
 
   async cancelSignIn(): Promise<void> {
+    this.cancelCatalogOperations();
     this.authGeneration += 1;
     this.platform.cancelAuthentication();
     this.patch({ auth: { status: "signed-out" } });
   }
 
   async signOut(): Promise<void> {
-    await this.stopStream();
-    this.lastTarget = undefined;
-    this.authGeneration += 1;
-    await this.platform.signOut();
-    this.patch({
-      auth: { status: "signed-out" },
-      cloud: {
-        available: false,
-        titles: [],
-        status: "idle",
-      },
-      session: idleSession(),
-      telemetry: { ...emptyTelemetry },
+    const generation = ++this.authGeneration;
+    this.cancelCatalogOperations();
+    const cleanup = this.stopStream().catch((error: unknown) => {
+      console.warn(
+        "Could not stop the remote Xbox session",
+        errorForLog(error),
+      );
     });
+    this.lastTarget = undefined;
+    try {
+      // Revoke local credentials before waiting on captured remote cleanup.
+      // A newer sign-in owns the snapshot as soon as its generation changes.
+      await this.platform.signOut();
+      if (generation !== this.authGeneration) return;
+      this.patch({
+        auth: { status: "signed-out" },
+        cloud: {
+          available: false,
+          titles: [],
+          status: "idle",
+        },
+        session: idleSession(),
+        telemetry: { ...emptyTelemetry },
+      });
+    } finally {
+      await cleanup;
+    }
+  }
+
+  private cancelCatalogOperations(): void {
+    this.catalogOperation?.abort();
+    this.catalogOperation = undefined;
+    this.cancelCloudSearch();
+    if (this.snapshot.cloud.hydrating)
+      this.patch({ cloud: { ...this.snapshot.cloud, hydrating: false } });
+  }
+
+  cancelCloudSearch(): void {
+    this.searchOperation?.abort();
+    this.searchOperation = undefined;
   }
 
   async refreshCloudTitles(): Promise<void> {
@@ -186,23 +231,32 @@ export class AppController {
         error: undefined,
       },
     });
+    const cancellation = new AbortController();
+    this.catalogOperation = cancellation;
+    const operation = new CloudOperation(
+      { signal: cancellation.signal },
+      CLOUD_OPERATION_LIMITS.catalogMs,
+    );
     try {
-      const titles = await this.platform.listCloudTitles((titles) => {
-        if (generation !== this.authGeneration) return;
-        this.patch({
-          cloud: {
-            available: true,
-            titles: mergeCloudTitles(this.snapshot.cloud.titles, titles),
-            status: "ready",
-            hydrating: true,
-            selectedTitleId: chooseCloudTitle(
-              titles,
-              this.snapshot.cloud.selectedTitleId ??
-                this.preferences.selectedTitleId,
-            )?.id,
-          },
-        });
-      });
+      const titles = await operation.wait(() =>
+        this.platform.listCloudTitles((titles) => {
+          if (generation !== this.authGeneration || operation.signal.aborted)
+            return;
+          this.patch({
+            cloud: {
+              available: true,
+              titles: mergeCloudTitles(this.snapshot.cloud.titles, titles),
+              status: "ready",
+              hydrating: true,
+              selectedTitleId: chooseCloudTitle(
+                titles,
+                this.snapshot.cloud.selectedTitleId ??
+                  this.preferences.selectedTitleId,
+              )?.id,
+            },
+          });
+        }, operation),
+      );
       if (generation !== this.authGeneration) return;
       const selectedTitleId = chooseCloudTitle(
         titles,
@@ -229,6 +283,10 @@ export class AppController {
           error: safe.message,
         },
       });
+    } finally {
+      if (this.catalogOperation === cancellation)
+        this.catalogOperation = undefined;
+      operation.dispose();
     }
   }
 
@@ -236,22 +294,43 @@ export class AppController {
     if (typeof query !== "string" || query.length > 128)
       throw new Error("Enter a search of up to 128 characters.");
     const generation = this.authGeneration;
+    this.cancelCloudSearch();
     if (this.snapshot.auth.status !== "signed-in") return [];
-    const titles = this.platform.searchCloudTitles
-      ? await this.platform.searchCloudTitles(query)
-      : this.snapshot.cloud.titles.filter((title) =>
-          `${title.name} ${title.publisher}`
-            .toLowerCase()
-            .includes(query.trim().toLowerCase()),
-        );
-    if (generation !== this.authGeneration) return [];
-    this.patch({
-      cloud: {
-        ...this.snapshot.cloud,
-        titles: mergeCloudTitles(this.snapshot.cloud.titles, titles),
-      },
-    });
-    return titles;
+    if (!query.trim()) return [];
+    const cancellation = new AbortController();
+    this.searchOperation = cancellation;
+    const operation = new CloudOperation(
+      { signal: cancellation.signal },
+      CLOUD_OPERATION_LIMITS.searchMs,
+    );
+    try {
+      const titles = this.platform.searchCloudTitles
+        ? await operation.wait(() =>
+            this.platform.searchCloudTitles!(query, operation),
+          )
+        : this.snapshot.cloud.titles.filter((title) =>
+            `${title.name} ${title.publisher}`
+              .toLowerCase()
+              .includes(query.trim().toLowerCase()),
+          );
+      if (generation !== this.authGeneration || cancellation.signal.aborted)
+        return [];
+      this.patch({
+        cloud: {
+          ...this.snapshot.cloud,
+          titles: mergeCloudTitles(this.snapshot.cloud.titles, titles),
+        },
+      });
+      return titles;
+    } catch (error) {
+      if (cancellation.signal.aborted || generation !== this.authGeneration)
+        return [];
+      throw error;
+    } finally {
+      if (this.searchOperation === cancellation)
+        this.searchOperation = undefined;
+      operation.dispose();
+    }
   }
 
   async selectCloudTitle(titleId: string): Promise<void> {
@@ -291,14 +370,34 @@ export class AppController {
       throw new Error(
         "The previous connection is still finishing. Try again shortly.",
       );
-    this.startingTarget = true;
+    const cancellation = new AbortController();
+    this.startingTarget = cancellation;
     const generation = ++this.connectionGeneration;
+    const operation = new CloudOperation(
+      { signal: cancellation.signal },
+      CLOUD_OPERATION_LIMITS.provisioningMs,
+    );
     this.lastTarget = { source: target.source, id: target.id };
     if (this.recoveryStartedAt === undefined) {
       this.performanceReport.reset(target.source);
       this.recoveryMs = undefined;
     }
     this.deviceMetrics = undefined;
+    let receivedCreation: SessionStart | undefined;
+    let creationCleanupStarted = false;
+    const cleanupCreation = () => {
+      if (!receivedCreation || creationCleanupStarted) return;
+      creationCleanupStarted = true;
+      const late = receivedCreation;
+      void this.platform
+        .stopSession(late.sessionPath, late.sessionId)
+        .catch((error: unknown) => {
+          console.warn(
+            "Could not stop the remote Xbox session",
+            errorForLog(error),
+          );
+        });
+    };
 
     try {
       this.setSession(
@@ -308,13 +407,25 @@ export class AppController {
         34,
         target,
       );
-      const started = await this.platform.startSession(
+      const creation = this.platform.startSession(
         target,
         this.snapshot.settings.resolution,
+        { signal: cancellation.signal, deadline: operation.deadline },
       );
-      if (generation !== this.connectionGeneration) {
-        await this.platform.stopSession(started.sessionPath);
-      }
+      // An adapter may ignore cancellation and return a created session late.
+      // Cleanup uses both path and ID so it cannot stop a newer reused path.
+      void creation
+        .then((late) => {
+          receivedCreation = late;
+          if (
+            generation !== this.connectionGeneration ||
+            cancellation.signal.aborted ||
+            Date.now() >= operation.deadline
+          )
+            cleanupCreation();
+        })
+        .catch(() => {});
+      const started = await operation.wait(() => creation);
       this.assertCurrent(generation);
       this.activeSession = {
         id: started.sessionId,
@@ -322,13 +433,18 @@ export class AppController {
         source: target.source,
         targetId: target.id,
         targetName: target.name,
+        controller: cancellation,
       };
+      // From here, stopActiveSession owns cleanup of the adopted session.
+      receivedCreation = undefined;
 
       let authorized = false;
-      const deadline = Date.now() + 180_000;
-      while (Date.now() < deadline) {
+      while (true) {
+        operation.check();
         this.assertCurrent(generation);
-        const state = await this.platform.getSessionState(started.sessionPath);
+        const state = await operation.wait(() =>
+          this.platform.getSessionState(started.sessionPath, operation),
+        );
         this.assertCurrent(generation);
 
         if (state.state === "Provisioned") {
@@ -359,7 +475,9 @@ export class AppController {
             target,
             started.sessionId,
           );
-          await this.platform.authorizeSession(started.sessionPath);
+          await operation.wait(() =>
+            this.platform.authorizeSession(started.sessionPath, operation),
+          );
         } else if (state.state === "Failed") {
           throw new Error(
             state.errorDetails?.message ??
@@ -375,19 +493,25 @@ export class AppController {
             started.sessionId,
           );
         }
-        await delay(this.platform.mock ? 40 : 750);
+        await operation.delay(this.platform.mock ? 40 : 750);
       }
-      throw new Error("Xbox streaming provisioning timed out.");
     } catch (error) {
-      if (generation !== this.connectionGeneration)
-        throw new Error("Connection cancelled.");
+      cleanupCreation();
+      if (generation !== this.connectionGeneration) throw operationCancelled();
       const safe = safeError(error);
+      cancellation.abort();
       console.error("Stream start failed", errorForLog(error));
-      await this.stopActiveSession();
+      void this.stopActiveSession().catch((cleanupError: unknown) => {
+        console.warn(
+          "Could not stop the remote Xbox session",
+          errorForLog(cleanupError),
+        );
+      });
       this.failSession(safe.code, safe.message, safe.recoverable, target);
       throw safe;
     } finally {
-      this.startingTarget = false;
+      if (this.startingTarget === cancellation) this.startingTarget = undefined;
+      operation.dispose();
     }
   }
 
@@ -396,14 +520,15 @@ export class AppController {
     if (!target) throw new Error("Choose something to play before retrying.");
     if (this.retryPending)
       throw new Error("A reconnection is already running.");
-    this.retryPending = true;
+    const retry = {};
+    this.retryPending = retry;
     const generation = ++this.connectionGeneration;
     try {
       await this.stopActiveSession();
       this.assertCurrent(generation);
       return await this.startCloudStream(target.id);
     } finally {
-      this.retryPending = false;
+      if (this.retryPending === retry) this.retryPending = undefined;
     }
   }
 
@@ -513,6 +638,9 @@ export class AppController {
 
   async stopStream(): Promise<void> {
     this.connectionGeneration += 1;
+    this.startingTarget?.abort();
+    this.startingTarget = undefined;
+    this.retryPending = undefined;
     this.recoveryStartedAt = undefined;
     this.recoveryMs = undefined;
     this.deviceMetrics = undefined;
@@ -650,7 +778,8 @@ export class AppController {
   private async stopActiveSession(): Promise<void> {
     const session = this.activeSession;
     this.activeSession = undefined;
-    if (session) await this.platform.stopSession(session.path);
+    session?.controller.abort();
+    if (session) await this.platform.stopSession(session.path, session.id);
   }
 
   private requireSession(sessionId: string): ActiveSession {
@@ -755,10 +884,6 @@ function isNetworkQuality(
     value === "good" ||
     value === "unstable"
   );
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function optionalMeasurement(

@@ -912,6 +912,7 @@ function CloudPage({
     return () => {
       active = false;
       clearTimeout(timer);
+      void window.afterglideCloud.cancelCloudSearch().catch(() => {});
     };
   }, [query]);
   const searchInput = useRef<HTMLInputElement>(null);

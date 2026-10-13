@@ -20,6 +20,12 @@ import type {
 } from "./platform-service";
 import { SecureTokenStore } from "./secure-token-store";
 import { authenticationTokenStore, ownedTokenStore } from "./auth-token-store";
+import {
+  CloudOperation,
+  CLOUD_OPERATION_LIMITS,
+  operationCancelled,
+  type OperationContext,
+} from "./operation-context";
 
 interface StreamTokenData {
   gsToken: string;
@@ -61,10 +67,13 @@ interface CatalogResponse {
 }
 
 interface SessionContext {
+  sessionId: string;
   host: string;
   token: string;
   sessionPath: string;
   resolution: 720 | 1080;
+  signal?: AbortSignal;
+  abort: () => void;
 }
 
 interface AuthenticationAttempt {
@@ -84,6 +93,9 @@ export class LivePlatformService implements PlatformService {
   private cloudCatalog?: { expiresAt: number; titles: CloudTitle[] };
   private authGeneration = 0;
   private authenticationAttempt?: AuthenticationAttempt;
+  private authOperations = new AbortController();
+  private sessionCreation = 0;
+  private pendingSessionCreations = new Set<number>();
   private cloudRows: CloudTitleResult[] = [];
   private recentIds = new Set<string>();
   private searchedProducts = new Map<string, CatalogProduct>();
@@ -151,10 +163,15 @@ export class LivePlatformService implements PlatformService {
       this.requireCurrentAttempt(attempt);
       // No await between ownership validation and encrypted-store publication.
       this.tokenStore.replaceFrom(attempt.store);
+      this.cloudRows = [];
+      this.recentIds.clear();
+      this.searchedProducts.clear();
       this.setCloudToken(cloud);
       this.authenticationAttempt = undefined;
       // A refresh of the previous account may have started while sign-in was
       // pending. Revoke that SDK client when the new account takes ownership.
+      this.authOperations.abort();
+      this.authOperations = new AbortController();
       this.authGeneration += 1;
       this.msal = this.sessionAuthentication();
     } catch (error) {
@@ -165,6 +182,8 @@ export class LivePlatformService implements PlatformService {
   }
 
   cancelAuthentication(): void {
+    this.authOperations.abort();
+    this.authOperations = new AbortController();
     this.authGeneration += 1;
     this.authenticationAttempt = undefined;
     this.msal = this.sessionAuthentication();
@@ -173,6 +192,7 @@ export class LivePlatformService implements PlatformService {
   async signOut(): Promise<void> {
     this.cancelAuthentication();
     this.cloudToken = undefined;
+    this.currentSession?.abort();
     this.currentSession = undefined;
     this.cloudCatalog = undefined;
     this.cloudRows = [];
@@ -207,9 +227,26 @@ export class LivePlatformService implements PlatformService {
 
   async listCloudTitles(
     onProgress?: (titles: CloudTitle[]) => void,
+    context?: OperationContext,
+  ): Promise<CloudTitle[]> {
+    const operation = new CloudOperation(
+      context,
+      CLOUD_OPERATION_LIMITS.catalogMs,
+      this.authOperations.signal,
+    );
+    try {
+      return await this.loadCloudTitles(onProgress, operation);
+    } finally {
+      operation.dispose();
+    }
+  }
+
+  private async loadCloudTitles(
+    onProgress: ((titles: CloudTitle[]) => void) | undefined,
+    operation: CloudOperation,
   ): Promise<CloudTitle[]> {
     const generation = this.authGeneration;
-    await this.ensureTokens();
+    await operation.wait(() => this.ensureTokens());
     const cloud = this.cloudToken;
     if (!cloud)
       throw new AfterglideError(
@@ -229,13 +266,27 @@ export class LivePlatformService implements PlatformService {
       );
     const host = normalizeHost(region.baseUri);
     const [all, recent] = await Promise.all([
-      this.requestJson<CloudTitlesResponse>(host, cloud.gsToken, "/v2/titles"),
+      this.requestJson<CloudTitlesResponse>(
+        host,
+        cloud.gsToken,
+        "/v2/titles",
+        {},
+        false,
+        operation,
+      ),
       this.requestJson<CloudTitlesResponse>(
         host,
         cloud.gsToken,
         "/v2/titles/mru?mr=25",
-      ).catch(() => ({ results: [] })),
+        {},
+        false,
+        operation,
+      ).catch(() => {
+        operation.check();
+        return { results: [] };
+      }),
     ]);
+    operation.check();
     const rows = (all.results ?? []).filter(
       (row): row is CloudTitleResult & { titleId: string } =>
         typeof row.titleId === "string" && row.titleId.length > 0,
@@ -248,6 +299,10 @@ export class LivePlatformService implements PlatformService {
     // Get recently played games into the first batch so they can launch early.
     this.cloudRows = rows;
     this.recentIds = recentIds;
+    const eligibleProducts = new Set(rows.map((row) => row.details?.productId));
+    for (const productId of this.searchedProducts.keys())
+      if (!eligibleProducts.has(productId))
+        this.searchedProducts.delete(productId);
     const prioritizedRows = [
       ...rows.filter((row) => recentIds.has(row.titleId)),
       ...rows,
@@ -285,9 +340,14 @@ export class LivePlatformService implements PlatformService {
             },
             body: JSON.stringify({ Products: batch }),
           },
+          false,
+          operation,
         );
         return { catalog, complete: true };
-      } catch {
+      } catch (error) {
+        operation.check();
+        if (error instanceof AfterglideError && error.code === "XBOX_TIMEOUT")
+          throw error;
         if (batch.length > 25) {
           // A slow or rejected bulk response should not erase a hundred covers.
           // Recover smaller pieces sequentially within this worker's slot.
@@ -309,9 +369,11 @@ export class LivePlatformService implements PlatformService {
     // Publish completed batches immediately; the first page must not wait for
     // every slow request in a large library. Keep four concurrent slots.
     for (let offset = 0; offset < batches.length; offset += 4) {
+      operation.check();
       await Promise.all(
         batches.slice(offset, offset + 4).map(async (batch) => {
           const result = await hydrate(batch);
+          operation.check();
           catalogResults.push(result);
           if (!onProgress || generation !== this.authGeneration) return;
           const available = [
@@ -352,15 +414,41 @@ export class LivePlatformService implements PlatformService {
     return structuredClone(titles);
   }
 
-  async searchCloudTitles(query: string): Promise<CloudTitle[]> {
-    await this.ensureTokens();
+  async searchCloudTitles(
+    query: string,
+    context?: OperationContext,
+  ): Promise<CloudTitle[]> {
+    const operation = new CloudOperation(
+      context,
+      CLOUD_OPERATION_LIMITS.searchMs,
+      this.authOperations.signal,
+    );
+    try {
+      return await this.searchTitles(query, operation);
+    } finally {
+      operation.dispose();
+    }
+  }
+
+  private async searchTitles(
+    query: string,
+    operation: CloudOperation,
+  ): Promise<CloudTitle[]> {
+    await operation.wait(() => this.ensureTokens());
     const generation = this.authGeneration;
     const cloud = this.cloudToken;
     if (!cloud || !query.trim()) return [];
     const products: CatalogProduct[] = [];
     let continuation: string | undefined;
     const seen = new Set<string>();
+    let pages = 0;
     do {
+      operation.check();
+      if (++pages > CLOUD_OPERATION_LIMITS.searchPages)
+        throw new AfterglideError(
+          "CATALOG_SEARCH_LIMIT",
+          "Cloud search returned too many pages. Try a more specific search.",
+        );
       const response = await this.requestJson<
         CatalogResponse & { ContinuationToken?: string }
       >(
@@ -382,9 +470,16 @@ export class LivePlatformService implements PlatformService {
             ProductFamilies: ["games"],
           }),
         },
+        false,
+        operation,
       );
       if (generation !== this.authGeneration) return [];
       products.push(...catalogProducts(response));
+      if (products.length > CLOUD_OPERATION_LIMITS.searchProducts)
+        throw new AfterglideError(
+          "CATALOG_SEARCH_LIMIT",
+          "Cloud search returned too many games. Try a more specific search.",
+        );
       continuation = response.ContinuationToken || undefined;
       if (continuation && seen.has(continuation))
         throw new AfterglideError(
@@ -394,8 +489,12 @@ export class LivePlatformService implements PlatformService {
       if (continuation) seen.add(continuation);
     } while (continuation);
     const available = new Set(products.map((product) => product.StoreId));
+    const eligibleProducts = new Set(
+      this.cloudRows.map((row) => row.details?.productId),
+    );
     for (const product of products)
-      if (product.StoreId) this.searchedProducts.set(product.StoreId, product);
+      if (product.StoreId && eligibleProducts.has(product.StoreId))
+        this.searchedProducts.set(product.StoreId, product);
     // Search is public; only return games present in the authenticated cloud list.
     return mapCloudTitles(
       this.cloudRows.filter((row) => available.has(row.details?.productId)),
@@ -407,64 +506,128 @@ export class LivePlatformService implements PlatformService {
   async startSession(
     target: StreamTarget,
     resolution: 720 | 1080,
+    context?: OperationContext,
   ): Promise<SessionStart> {
-    await this.ensureTokens();
-    const token = this.cloudToken;
-    if (!token)
-      throw new AfterglideError(
-        "XCLOUD_UNAVAILABLE",
-        "Cloud gaming is not available for this account or region.",
-      );
-    const region = chooseRegion(token);
-    if (!region)
-      throw new AfterglideError(
-        "NO_REGION",
-        "Xbox Cloud Gaming is not available in this region.",
-        false,
-      );
-
-    const host = normalizeHost(region.baseUri);
-    const response = await this.requestJson<SessionStart>(
-      host,
-      token.gsToken,
-      `/v5/sessions/${target.source}/play`,
-      {
-        method: "POST",
-        body: JSON.stringify(buildSessionPayload(target, resolution)),
-        headers: { "X-MS-Device-Info": deviceInfo(resolution) },
-      },
+    const operation = new CloudOperation(
+      context,
+      CLOUD_OPERATION_LIMITS.provisioningMs,
+      this.authOperations.signal,
     );
+    const creation = ++this.sessionCreation;
+    this.pendingSessionCreations.add(creation);
+    try {
+      await operation.wait(() => this.ensureTokens());
+      const token = this.cloudToken;
+      if (!token)
+        throw new AfterglideError(
+          "XCLOUD_UNAVAILABLE",
+          "Cloud gaming is not available for this account or region.",
+        );
+      const region = chooseRegion(token);
+      if (!region)
+        throw new AfterglideError(
+          "NO_REGION",
+          "Xbox Cloud Gaming is not available in this region.",
+          false,
+        );
 
-    this.currentSession = {
-      host,
-      token: token.gsToken,
-      sessionPath: response.sessionPath,
-      resolution,
-    };
-    return response;
+      const host = normalizeHost(region.baseUri);
+      const sessionContext = (response: SessionStart): SessionContext => {
+        const controller = new AbortController();
+        const unlink: Array<() => void> = [];
+        for (const signal of [context?.signal, this.authOperations.signal]) {
+          if (!signal) continue;
+          const abort = () => controller.abort(signal.reason);
+          if (signal.aborted) abort();
+          else {
+            signal.addEventListener("abort", abort, { once: true });
+            unlink.push(() => signal.removeEventListener("abort", abort));
+          }
+        }
+        return {
+          host,
+          token: token.gsToken,
+          sessionId: response.sessionId,
+          sessionPath: response.sessionPath,
+          resolution,
+          signal: controller.signal,
+          abort: () => {
+            controller.abort();
+            for (const remove of unlink) remove();
+          },
+        };
+      };
+      const response = await this.requestJson<SessionStart>(
+        host,
+        token.gsToken,
+        `/v5/sessions/${target.source}/play`,
+        {
+          method: "POST",
+          body: JSON.stringify(buildSessionPayload(target, resolution)),
+          headers: { "X-MS-Device-Info": deviceInfo(resolution) },
+        },
+        false,
+        operation,
+        (late) => {
+          void this.cleanupLateSession(sessionContext(late), creation);
+        },
+      );
+      if (creation !== this.sessionCreation || operation.signal.aborted) {
+        await this.cleanupLateSession(sessionContext(response), creation);
+        throw operationCancelled();
+      }
+      this.currentSession?.abort();
+      this.currentSession = sessionContext(response);
+      return response;
+    } finally {
+      this.pendingSessionCreations.delete(creation);
+      operation.dispose();
+    }
   }
 
-  async getSessionState(sessionPath: string): Promise<SessionStateResult> {
+  async getSessionState(
+    sessionPath: string,
+    context?: OperationContext,
+  ): Promise<SessionStateResult> {
     const session = this.requireSession(sessionPath);
     return this.requestJson(
       session.host,
       session.token,
       `/${sessionPath}/state`,
+      { signal: session.signal },
+      false,
+      context,
     );
   }
 
-  async authorizeSession(sessionPath: string): Promise<void> {
+  async authorizeSession(
+    sessionPath: string,
+    context?: OperationContext,
+  ): Promise<void> {
     const session = this.requireSession(sessionPath);
-    const transferToken = await this.msal.getMsalToken();
-    await this.requestJson(
-      session.host,
-      session.token,
-      `/${sessionPath}/connect`,
-      {
-        method: "POST",
-        body: JSON.stringify({ userToken: transferToken.data.lpt }),
-      },
+    const operation = new CloudOperation(
+      context,
+      NETWORK_POLICY.requestTimeoutMs,
+      session.signal,
     );
+    try {
+      const transferToken = await operation.wait(() =>
+        this.msal.getMsalToken(),
+      );
+      await this.requestJson(
+        session.host,
+        session.token,
+        `/${sessionPath}/connect`,
+        {
+          method: "POST",
+          body: JSON.stringify({ userToken: transferToken.data.lpt }),
+        },
+        false,
+        operation,
+      );
+    } finally {
+      operation.dispose();
+    }
   }
 
   async exchangeSdp(
@@ -472,36 +635,56 @@ export class LivePlatformService implements PlatformService {
     offer: RTCSessionDescriptionInit,
   ): Promise<string> {
     const session = this.requireSession(sessionPath);
-    await this.requestJson(session.host, session.token, `/${sessionPath}/sdp`, {
-      method: "POST",
-      body: JSON.stringify({
-        messageType: "offer",
-        sdp: offer.sdp,
-        requestId: "1",
-        configuration: {
-          chatConfiguration: {
-            bytesPerSample: 2,
-            expectedClipDurationMs: 20,
-            format: { codec: "opus", container: "webm" },
-            numChannels: 1,
-            sampleFrequencyHz: 24_000,
-          },
-          chat: { minVersion: 1, maxVersion: 1 },
-          control: { minVersion: 1, maxVersion: 3 },
-          input: { minVersion: 1, maxVersion: 9 },
-          message: { minVersion: 1, maxVersion: 1 },
-          reliableinput: { minVersion: 9, maxVersion: 9 },
-          unreliableinput: { minVersion: 9, maxVersion: 9 },
+    const operation = new CloudOperation(
+      undefined,
+      NETWORK_POLICY.exchangeTimeoutMs,
+      session.signal,
+    );
+    try {
+      await this.requestJson(
+        session.host,
+        session.token,
+        `/${sessionPath}/sdp`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            messageType: "offer",
+            sdp: offer.sdp,
+            requestId: "1",
+            configuration: {
+              chatConfiguration: {
+                bytesPerSample: 2,
+                expectedClipDurationMs: 20,
+                format: { codec: "opus", container: "webm" },
+                numChannels: 1,
+                sampleFrequencyHz: 24_000,
+              },
+              chat: { minVersion: 1, maxVersion: 1 },
+              control: { minVersion: 1, maxVersion: 3 },
+              input: { minVersion: 1, maxVersion: 9 },
+              message: { minVersion: 1, maxVersion: 1 },
+              reliableinput: { minVersion: 9, maxVersion: 9 },
+              unreliableinput: { minVersion: 9, maxVersion: 9 },
+            },
+          }),
         },
-      }),
-    });
-    const answer = await this.pollExchange(session, `/${sessionPath}/sdp`);
-    if (!answer.exchangeResponse)
-      throw new AfterglideError(
-        "SDP_EMPTY",
-        "The Xbox returned an empty video response.",
+        false,
+        operation,
       );
-    return answer.exchangeResponse;
+      const answer = await this.pollExchange(
+        session,
+        `/${sessionPath}/sdp`,
+        operation,
+      );
+      if (!answer.exchangeResponse)
+        throw new AfterglideError(
+          "SDP_EMPTY",
+          "The Xbox returned an empty video response.",
+        );
+      return answer.exchangeResponse;
+    } finally {
+      operation.dispose();
+    }
   }
 
   async exchangeIce(
@@ -509,17 +692,37 @@ export class LivePlatformService implements PlatformService {
     candidates: string[],
   ): Promise<string> {
     const session = this.requireSession(sessionPath);
-    await this.requestJson(session.host, session.token, `/${sessionPath}/ice`, {
-      method: "POST",
-      body: JSON.stringify({ candidates }),
-    });
-    const response = await this.pollExchange(session, `/${sessionPath}/ice`);
-    if (!response.exchangeResponse)
-      throw new AfterglideError(
-        "ICE_EMPTY",
-        "The Xbox returned no network route.",
+    const operation = new CloudOperation(
+      undefined,
+      NETWORK_POLICY.exchangeTimeoutMs,
+      session.signal,
+    );
+    try {
+      await this.requestJson(
+        session.host,
+        session.token,
+        `/${sessionPath}/ice`,
+        {
+          method: "POST",
+          body: JSON.stringify({ candidates }),
+        },
+        false,
+        operation,
       );
-    return response.exchangeResponse;
+      const response = await this.pollExchange(
+        session,
+        `/${sessionPath}/ice`,
+        operation,
+      );
+      if (!response.exchangeResponse)
+        throw new AfterglideError(
+          "ICE_EMPTY",
+          "The Xbox returned no network route.",
+        );
+      return response.exchangeResponse;
+    } finally {
+      operation.dispose();
+    }
   }
 
   async keepalive(sessionPath: string): Promise<void> {
@@ -531,14 +734,21 @@ export class LivePlatformService implements PlatformService {
       {
         method: "POST",
         body: "{}",
+        signal: session.signal,
       },
     );
   }
 
-  async stopSession(sessionPath: string): Promise<void> {
+  async stopSession(sessionPath: string, sessionId?: string): Promise<void> {
     const session = this.currentSession;
-    if (!session || session.sessionPath !== sessionPath) return;
+    if (
+      !session ||
+      session.sessionPath !== sessionPath ||
+      (sessionId !== undefined && session.sessionId !== sessionId)
+    )
+      return;
     this.currentSession = undefined;
+    session.abort();
     await this.requestJson(session.host, session.token, `/${sessionPath}`, {
       method: "DELETE",
     }).catch((error: unknown) => {
@@ -547,6 +757,31 @@ export class LivePlatformService implements PlatformService {
         errorForLog(error),
       );
     });
+  }
+
+  private async cleanupLateSession(
+    session: SessionContext,
+    creation: number,
+  ): Promise<void> {
+    session.abort();
+    // Never delete a path reused by a newer active session, or guess which
+    // server session a newer unresolved creation will return.
+    if (
+      this.currentSession?.sessionPath === session.sessionPath ||
+      [...this.pendingSessionCreations].some((pending) => pending > creation)
+    )
+      return;
+    if (
+      typeof session.sessionPath !== "string" ||
+      !/^v[0-9]+\/sessions\/cloud\/[A-Za-z0-9_-]+$/.test(session.sessionPath)
+    )
+      return;
+    await this.requestJson(
+      session.host,
+      session.token,
+      `/${session.sessionPath}`,
+      { method: "DELETE" },
+    ).catch(() => {});
   }
 
   private async refreshServiceTokens(): Promise<void> {
@@ -601,22 +836,24 @@ export class LivePlatformService implements PlatformService {
         "The cloud session is no longer active.",
       );
     }
+    if (this.currentSession.signal?.aborted) throw operationCancelled();
     return this.currentSession;
   }
 
   private async pollExchange(
     session: SessionContext,
     path: string,
+    operation: CloudOperation,
   ): Promise<{ exchangeResponse?: string | null }> {
-    const deadline = Date.now() + NETWORK_POLICY.exchangeTimeoutMs;
-    while (Date.now() < deadline) {
+    while (true) {
+      operation.check();
       const response = await this.requestJson<
         | {
             exchangeResponse?: string | null;
             errorDetails?: { code?: string | null; message?: string | null };
           }
         | undefined
-      >(session.host, session.token, path, {}, true);
+      >(session.host, session.token, path, {}, true, operation);
       if (response?.exchangeResponse) return response;
       if (response?.errorDetails?.message)
         throw new AfterglideError(
@@ -625,12 +862,8 @@ export class LivePlatformService implements PlatformService {
           true,
           { cause: new Error(response.errorDetails.message) },
         );
-      await delay(250);
+      await operation.delay(250);
     }
-    throw new AfterglideError(
-      "EXCHANGE_TIMEOUT",
-      "The Xbox did not finish negotiating the stream.",
-    );
   }
 
   private async requestJson<T>(
@@ -639,7 +872,16 @@ export class LivePlatformService implements PlatformService {
     path: string,
     init: RequestInit = {},
     allowEmpty = false,
+    context?: OperationContext,
+    onLateResult?: (result: T) => void,
   ): Promise<T> {
+    const operation = new CloudOperation(
+      context,
+      host.includes("catalog.gamepass.com")
+        ? NETWORK_POLICY.catalogTimeoutMs
+        : NETWORK_POLICY.requestTimeoutMs,
+      init.signal ?? undefined,
+    );
     const method = init.method?.toUpperCase() ?? "GET";
     // Catalog hydration uses POST for an immutable lookup; session POSTs must
     // remain single-attempt to avoid creating duplicate cloud sessions.
@@ -649,69 +891,94 @@ export class LivePlatformService implements PlatformService {
         host === "https://catalog.gamepass.com" &&
         (path.startsWith("/v3/products?") || path.startsWith("/search/v2?")));
     const attempts = readOnly ? NETWORK_POLICY.maxReadRetries + 1 : 1;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        host.includes("catalog.gamepass.com")
-          ? NETWORK_POLICY.catalogTimeoutMs
-          : NETWORK_POLICY.requestTimeoutMs,
-      );
-      try {
-        const response = await fetch(`${host}${path}`, {
-          ...init,
-          signal: controller.signal,
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            "X-Gssv-Client": "XboxComBrowser",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            "X-MS-Device-Info": deviceInfo(
-              this.currentSession?.resolution ?? 1080,
-            ),
-            ...init.headers,
-          },
-        });
-        if (!response.ok) {
+    try {
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        operation.check();
+        let retryAfter: string | null = null;
+        let transientStatus = false;
+        let received = false;
+        let completedResult: T | undefined;
+        let lateHandled = false;
+        const handleLateResult = (value: T) => {
+          if (
+            !lateHandled &&
+            onLateResult &&
+            (operation.signal.aborted || Date.now() >= operation.deadline)
+          ) {
+            lateHandled = true;
+            onLateResult(value);
+          }
+        };
+        try {
+          const work = async (): Promise<T> => {
+            const response = await fetch(`${host}${path}`, {
+              ...init,
+              signal: operation.signal,
+              headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+                "X-Gssv-Client": "XboxComBrowser",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                "X-MS-Device-Info": deviceInfo(
+                  this.currentSession?.resolution ?? 1080,
+                ),
+                ...init.headers,
+              },
+            });
+            if (!response.ok) {
+              transientStatus = isTransientHttpStatus(response.status);
+              retryAfter = response.headers.get("retry-after");
+              throw new AfterglideError(
+                `XBOX_HTTP_${response.status}`,
+                `Xbox streaming returned status ${response.status}.`,
+              );
+            }
+            if (
+              response.status === 204 ||
+              response.headers.get("content-length") === "0"
+            ) {
+              return (allowEmpty ? undefined : {}) as T;
+            }
+            const body = await response.text();
+            if (!body) return (allowEmpty ? undefined : {}) as T;
+            return JSON.parse(body) as T;
+          };
+          const result = work();
+          if (onLateResult)
+            void result.then(
+              (value) => {
+                received = true;
+                completedResult = value;
+                handleLateResult(value);
+              },
+              () => {},
+            );
+          return await operation.wait(() => result);
+        } catch (error) {
+          if (received) handleLateResult(completedResult as T);
+          operation.check();
           if (
             attempt + 1 < attempts &&
-            isTransientHttpStatus(response.status)
+            (transientStatus || isTransientRequestError(error))
           ) {
-            await delay(
-              retryDelayMs(attempt, response.headers.get("retry-after")),
-            );
+            await operation.delay(retryDelayMs(attempt, retryAfter));
             continue;
           }
-          throw new AfterglideError(
-            `XBOX_HTTP_${response.status}`,
-            `Xbox streaming returned status ${response.status}.`,
-          );
+          if (error instanceof DOMException && error.name === "AbortError")
+            throw new AfterglideError(
+              "XBOX_TIMEOUT",
+              "Xbox services took too long to respond. Check your network and try again.",
+            );
+          throw error;
         }
-        if (
-          response.status === 204 ||
-          response.headers.get("content-length") === "0"
-        ) {
-          return (allowEmpty ? undefined : {}) as T;
-        }
-        const body = await response.text();
-        if (!body) return (allowEmpty ? undefined : {}) as T;
-        return JSON.parse(body) as T;
-      } catch (error) {
-        if (attempt + 1 < attempts && isTransientRequestError(error)) {
-          await delay(retryDelayMs(attempt));
-          continue;
-        }
-        if (error instanceof DOMException && error.name === "AbortError")
-          throw new AfterglideError(
-            "XBOX_TIMEOUT",
-            "Xbox services took too long to respond. Check your network and try again.",
-          );
-        throw error;
-      } finally {
-        clearTimeout(timeout);
       }
+      throw new AfterglideError(
+        "XBOX_NETWORK",
+        "Xbox services did not respond.",
+      );
+    } finally {
+      operation.dispose();
     }
-    throw new AfterglideError("XBOX_NETWORK", "Xbox services did not respond.");
   }
 }
 
@@ -864,10 +1131,6 @@ function deviceInfo(resolution: 720 | 1080): string {
       },
     },
   });
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function parseIceExchange(exchange: string): IceCandidatePayload[] {

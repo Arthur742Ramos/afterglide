@@ -1,4 +1,5 @@
 import type { CloudTitle, DeviceCode, StreamSource } from "../shared/contracts";
+import type { OperationContext } from "./operation-context";
 
 export interface StreamTarget {
   source: StreamSource;
@@ -33,19 +34,30 @@ export interface PlatformService {
   signOut(): Promise<void>;
   listCloudTitles(
     onProgress?: (titles: CloudTitle[]) => void,
+    operation?: OperationContext,
   ): Promise<CloudTitle[]>;
-  searchCloudTitles?(query: string): Promise<CloudTitle[]>;
+  searchCloudTitles?(
+    query: string,
+    operation?: OperationContext,
+  ): Promise<CloudTitle[]>;
   startSession(
     target: StreamTarget,
     resolution: 720 | 1080,
+    operation?: OperationContext,
   ): Promise<SessionStart>;
-  getSessionState(sessionPath: string): Promise<SessionStateResult>;
-  authorizeSession(sessionPath: string): Promise<void>;
+  getSessionState(
+    sessionPath: string,
+    operation?: OperationContext,
+  ): Promise<SessionStateResult>;
+  authorizeSession(
+    sessionPath: string,
+    operation?: OperationContext,
+  ): Promise<void>;
   exchangeSdp(
     sessionPath: string,
     offer: RTCSessionDescriptionInit,
   ): Promise<string>;
   exchangeIce(sessionPath: string, candidates: string[]): Promise<string>;
   keepalive(sessionPath: string): Promise<void>;
-  stopSession(sessionPath: string): Promise<void>;
+  stopSession(sessionPath: string, sessionId?: string): Promise<void>;
 }
