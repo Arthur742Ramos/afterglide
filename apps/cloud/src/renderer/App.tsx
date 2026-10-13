@@ -2816,7 +2816,7 @@ function ControllerDiagnostics({
                   </div>
                   <div>
                     <dt>Support</dt>
-                    <dd>
+                    <dd className="controller-support">
                       {controller.mapping} · {controller.buttons} buttons ·{" "}
                       {controller.rumble
                         ? "Rumble API available — unverified"

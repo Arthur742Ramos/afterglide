@@ -58,6 +58,8 @@ changes. Visibility and connection can prevent reset; physical stopping is not
 guaranteed by a rejected browser call. See the
 [Gamepad haptics API](https://www.w3.org/TR/gamepad/#gamepadhapticactuator-interface).
 USB/Bluetooth, OS, driver and Chromium versions can expose different capabilities.
+A report's delay plus duration is capped at five seconds. Preempted effects are
+not queued or replayed.
 
 This client does not implement adaptive triggers, gyro, touchpad input, speaker,
 microphone, headset routing, advanced Sony haptics or Xbox trigger motors.

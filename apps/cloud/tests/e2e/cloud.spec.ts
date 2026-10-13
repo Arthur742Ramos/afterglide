@@ -1339,9 +1339,38 @@ test("DualSense physical prompts and capability diagnostics follow the selected 
   });
   await expect(diagnostic).toContainText("Create + Options");
   await diagnostic.scrollIntoViewIfNeeded();
+  const support = diagnostic.locator(".controller-support");
+  await expect
+    .poll(() =>
+      support.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    )
+    .toBe(true);
   await page.screenshot({
     path: join(root, "artifacts/e2e/cloud-controller-dualsense-settings.png"),
   });
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(2),
+  );
+  await support.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      support.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: join(
+      root,
+      "artifacts/e2e/cloud-controller-dualsense-settings-200.png",
+    ),
+  });
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1),
+  );
   await page.evaluate(() => {
     const state = (
       window as unknown as {

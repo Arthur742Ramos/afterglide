@@ -2276,6 +2276,10 @@ kbd.wide {
   display: flex;
   gap: 6px;
 }
+.controller-diagnostics dd.controller-support {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .controller-card-badges span {
   padding: 3px 6px;
   border-radius: 4px;
