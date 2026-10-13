@@ -12,7 +12,11 @@ import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
 import { sanitizeSettingsUpdate } from "../shared/controller-settings";
 import { NETWORK_POLICY } from "../shared/network-policy";
 import { errorForLog, safeError } from "./errors";
-import type { PlatformService, StreamTarget } from "./platform-service";
+import type {
+  PlatformService,
+  SessionStart,
+  StreamTarget,
+} from "./platform-service";
 import type { ReleaseCheckPort } from "./release-checker";
 import { SettingsStore } from "./settings-store";
 import { PerformanceReport, type DeviceMetrics } from "./performance-report";
@@ -379,6 +383,21 @@ export class AppController {
       this.recoveryMs = undefined;
     }
     this.deviceMetrics = undefined;
+    let receivedCreation: SessionStart | undefined;
+    let creationCleanupStarted = false;
+    const cleanupCreation = () => {
+      if (!receivedCreation || creationCleanupStarted) return;
+      creationCleanupStarted = true;
+      const late = receivedCreation;
+      void this.platform
+        .stopSession(late.sessionPath, late.sessionId)
+        .catch((error: unknown) => {
+          console.warn(
+            "Could not stop the remote Xbox session",
+            errorForLog(error),
+          );
+        });
+    };
 
     try {
       this.setSession(
@@ -397,11 +416,13 @@ export class AppController {
       // Cleanup uses both path and ID so it cannot stop a newer reused path.
       void creation
         .then((late) => {
+          receivedCreation = late;
           if (
             generation !== this.connectionGeneration ||
-            cancellation.signal.aborted
+            cancellation.signal.aborted ||
+            Date.now() >= operation.deadline
           )
-            return this.platform.stopSession(late.sessionPath, late.sessionId);
+            cleanupCreation();
         })
         .catch(() => {});
       const started = await operation.wait(() => creation);
@@ -414,6 +435,8 @@ export class AppController {
         targetName: target.name,
         controller: cancellation,
       };
+      // From here, stopActiveSession owns cleanup of the adopted session.
+      receivedCreation = undefined;
 
       let authorized = false;
       while (true) {
@@ -473,6 +496,7 @@ export class AppController {
         await operation.delay(this.platform.mock ? 40 : 750);
       }
     } catch (error) {
+      cleanupCreation();
       if (generation !== this.connectionGeneration) throw operationCancelled();
       const safe = safeError(error);
       cancellation.abort();

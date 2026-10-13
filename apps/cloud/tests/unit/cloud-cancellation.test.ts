@@ -558,6 +558,25 @@ function controller(
 }
 
 describe("launch ownership after cancellation", () => {
+  it("cleans an adapter creation returned after the deadline before timers fire", async () => {
+    vi.useFakeTimers();
+    const created = deferred<SessionStart>();
+    const stop = vi.fn(async () => {});
+    const app = controller(async () => created.promise, undefined, {
+      stopSession: stop,
+    });
+    await app.initialize();
+    const starting = app.startCloudStream("A").catch((error: unknown) => error);
+    await flush();
+    vi.setSystemTime(Date.now() + 180_001);
+    created.resolve(session("A"));
+    expect(await starting).toMatchObject({ code: "XBOX_TIMEOUT" });
+    await flush();
+    expect(stop).toHaveBeenCalledWith(session("A").sessionPath, "A");
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(app.getSnapshot().session.phase).toBe("error");
+  });
+
   it("does not let A's pending logout revoke B's newer successful sign-in", async () => {
     const deletion = deferred<void>();
     let signedIn = true;
