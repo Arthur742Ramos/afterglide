@@ -968,14 +968,12 @@ function CloudPage({
   const returnFocus = useRef(focusSearch ? "search" : focusTarget.current);
   useLayoutEffect(() => {
     if (!returnFocus.current) return;
-    const frame = requestAnimationFrame(() => {
-      section.current
-        ?.querySelector<HTMLElement>(
-          `[data-library-focus="${CSS.escape(returnFocus.current)}"]`,
-        )
-        ?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
+    // The DOM is committed: restore before a later user choice can occur.
+    section.current
+      ?.querySelector<HTMLElement>(
+        `[data-library-focus="${CSS.escape(returnFocus.current)}"]`,
+      )
+      ?.focus();
   }, []);
   const [search, setSearch] = useState<{
     query: string;

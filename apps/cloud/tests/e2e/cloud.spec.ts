@@ -404,6 +404,80 @@ test("Settings returns to the same Library search, filter, page and focus", asyn
   await expect(page.locator(".game-grid button")).toHaveCount(1);
 });
 
+for (const choice of ["search", "rail", "restore"] as const) {
+  test(`Library return preserves ${choice} focus before the next renderer frame`, async () => {
+    const page = await launch();
+    const lastGame = page.locator(".game-grid button").last();
+    await expect(page.locator(".game-grid button")).toHaveCount(3);
+    const savedFocus = await lastGame.getAttribute("data-library-focus");
+    const search = page.getByRole("textbox", { name: "Search cloud games" });
+    const settings = page.getByRole("button", {
+      name: "Settings",
+      exact: true,
+    });
+    for (const factor of [1, 2]) {
+      await zoom(page, factor);
+      await lastGame.focus();
+      await settings.click();
+      await expect(
+        page.getByRole("switch", { name: "Performance overlay" }),
+      ).toBeFocused();
+      // Hold renderer frames to exercise an early focus choice before any
+      // deferred callbacks can overwrite it (the former restoration did so).
+      await page.evaluate(() => {
+        const request = window.requestAnimationFrame;
+        const cancel = window.cancelAnimationFrame;
+        const frames = new Map<number, FrameRequestCallback>();
+        let handle = 0;
+        window.requestAnimationFrame = (callback) => {
+          frames.set(--handle, callback);
+          return handle;
+        };
+        window.cancelAnimationFrame = (id) => {
+          if (!frames.delete(id)) cancel.call(window, id);
+        };
+        Object.assign(window, {
+          releaseLibraryFrames: () => {
+            window.requestAnimationFrame = request;
+            window.cancelAnimationFrame = cancel;
+            for (const callback of frames.values()) callback(performance.now());
+            frames.clear();
+            Reflect.deleteProperty(window, "releaseLibraryFrames");
+          },
+        });
+      });
+      await page.getByRole("button", { name: "Library", exact: true }).click();
+      await expect(search).toBeVisible();
+      if (choice === "search") await search.focus();
+      if (choice === "rail") await settings.focus();
+      const expected =
+        choice === "search" ? search : choice === "rail" ? settings : lastGame;
+      if (choice !== "restore") await expect(expected).toBeFocused();
+      const restored = await page.evaluate(() => {
+        (
+          window as unknown as { releaseLibraryFrames: () => void }
+        ).releaseLibraryFrames();
+        const active = document.activeElement as HTMLElement;
+        return {
+          focus:
+            active.dataset.libraryFocus ?? active.getAttribute("aria-label"),
+        };
+      });
+      // Check the immediate outcome: polling must not hide a focus override.
+      expect(restored.focus).toBe(
+        choice === "search"
+          ? "search"
+          : choice === "rail"
+            ? "Settings"
+            : savedFocus,
+      );
+      // Let the existing 40 ms navigation autofocus pass finish as well.
+      await page.waitForTimeout(100);
+      await expect(expected).toBeFocused();
+    }
+  });
+}
+
 for (const entry of ["native", "pointer", "controller"] as const) {
   test(`${entry} Settings entry focuses preferences and preserves Library return`, async () => {
     const page = await launch();
@@ -616,6 +690,7 @@ test("polished Library and Settings remain accessible at desktop sizes and 200 p
   await reachable(
     page,
     page.getByRole("textbox", { name: "Search cloud games" }),
+    true,
   );
   await accessible(page);
   await page.screenshot({
@@ -1096,12 +1171,19 @@ async function zoom(page: Page, factor: number) {
 async function reachable(
   page: Page,
   action: import("@playwright/test").Locator,
+  center = false,
 ) {
   // Choose keyboard focus before scrolling: a pending entry autofocus pass
   // must preserve this newer choice instead of scrolling to its default.
   await action.focus();
   await expect(action).toBeFocused();
-  await action.scrollIntoViewIfNeeded();
+  if (center) {
+    // The enlarged Library search can land on a fractional CSS-pixel edge.
+    // Center this case while retaining the strict visibility checks below.
+    await action.evaluate((element) =>
+      element.scrollIntoView({ block: "center", inline: "center" }),
+    );
+  } else await action.scrollIntoViewIfNeeded();
   await expect(action).toBeInViewport({ ratio: 1 });
   await expect(action).toBeFocused();
   expect(
