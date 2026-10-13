@@ -1097,8 +1097,13 @@ async function reachable(
   page: Page,
   action: import("@playwright/test").Locator,
 ) {
+  // Choose keyboard focus before scrolling: a pending entry autofocus pass
+  // must preserve this newer choice instead of scrolling to its default.
+  await action.focus();
+  await expect(action).toBeFocused();
   await action.scrollIntoViewIfNeeded();
   await expect(action).toBeInViewport({ ratio: 1 });
+  await expect(action).toBeFocused();
   expect(
     await action.evaluate((element) => {
       const rect = element.getBoundingClientRect();
