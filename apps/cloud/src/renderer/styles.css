@@ -2276,6 +2276,10 @@ kbd.wide {
   display: flex;
   gap: 6px;
 }
+.controller-diagnostics dd.controller-support {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .controller-card-badges span {
   padding: 3px 6px;
   border-radius: 4px;
@@ -2842,6 +2846,7 @@ button:active:not(:disabled) {
 }
 .cloud-play {
   min-width: 220px;
+  white-space: nowrap;
 }
 .cloud-library {
   margin-top: 24px;
@@ -2996,7 +3001,7 @@ button:active:not(:disabled) {
   .cloud-feature {
     min-height: 150px;
     padding: 18px;
-    grid-template-columns: 140px minmax(0, 1fr) 190px;
+    grid-template-columns: 140px minmax(0, 1fr) max-content;
     gap: 18px;
   }
   .featured-art {

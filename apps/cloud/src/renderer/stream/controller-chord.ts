@@ -1,4 +1,7 @@
-import type { GamepadLike } from "./controller-input";
+import {
+  controllerSupportsStandardMapping,
+  type GamepadLike,
+} from "./controller-input";
 
 /** A physical chord must have a neutral sample after mount, resume or hotplug. */
 export class ControllerChordInput {
@@ -11,7 +14,7 @@ export class ControllerChordInput {
   }
 
   consume(gamepad: GamepadLike | undefined): boolean {
-    if (!gamepad) {
+    if (!controllerSupportsStandardMapping(gamepad)) {
       this.reset();
       return false;
     }

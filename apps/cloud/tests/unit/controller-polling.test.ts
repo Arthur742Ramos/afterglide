@@ -211,6 +211,15 @@ describe("controller polling scheduling", () => {
 });
 
 describe("physical local-controls chord", () => {
+  it("ignores raw layouts even when the raw stick-button indices are held", () => {
+    const chord = new ControllerChordInput();
+    const raw = { ...gamepad(), mapping: "" };
+    expect(chord.consume(raw)).toBe(false);
+    expect(chord.consume({ ...gamepad([10, 11]), mapping: "" })).toBe(false);
+    expect(chord.consume(gamepad([10, 11]))).toBe(false);
+    chord.consume(gamepad());
+    expect(chord.consume(gamepad([10, 11]))).toBe(true);
+  });
   it("requires release after mount, resume, disconnect and same-index replacement", () => {
     const chord = new ControllerChordInput();
     expect(chord.consume(gamepad([10, 11]))).toBe(false);
@@ -236,6 +245,19 @@ describe("physical local-controls chord", () => {
 });
 
 describe("physical controller navigation edges", () => {
+  it("does not interpret raw mappings as standard navigation", () => {
+    const input = new ControllerNavigationInput();
+    expect(
+      input.actions(
+        { ...gamepad([0, 1, 12], undefined, undefined, [1, 1]), mapping: "" },
+        0,
+      ),
+    ).toEqual([]);
+    expect(input.actions({ ...gamepad([0, 12]), mapping: "" }, 16)).toEqual([]);
+    expect(input.actions(gamepad([0]), 32)).toEqual([]);
+    input.actions(gamepad(), 48);
+    expect(input.actions(gamepad([0]), 64)).toEqual(["accept"]);
+  });
   it("does not accept when Back is released while both buttons were held on mount or refocus", () => {
     const input = new ControllerNavigationInput();
     for (const reset of [false, true]) {

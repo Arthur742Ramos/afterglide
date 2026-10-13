@@ -16,6 +16,9 @@ import {
 } from "./input-schema";
 import {
   controllerInputFrame,
+  connectedGamepads,
+  controllerSupportsRumble,
+  ControllerInputReleaseGate,
   friendlyControllerName,
   selectController,
   tuningForGamepad,
@@ -38,7 +41,7 @@ const defaultPlaybackSettings: PlaybackSettings = {
 };
 
 export interface ControllerStatus {
-  state: "connected" | "switched" | "disconnected";
+  state: "connected" | "switched" | "disconnected" | "unsupported";
   label: string;
 }
 
@@ -103,6 +106,10 @@ export class XboxStreamEngine {
   private activeGamepadLabel = "";
   private sampledInput = false;
   private readonly controlsShortcut = new ControllerChordInput();
+  private readonly gamepadRelease = new ControllerInputReleaseGate();
+  private unsupportedControllerKey = "";
+  private unsupportedControllerLabel = "";
+  private rumbleActuator?: GamepadLike["vibrationActuator"];
 
   constructor(private readonly options: StreamEngineOptions) {
     this.channels = {
@@ -195,7 +202,7 @@ export class XboxStreamEngine {
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onBlur);
-    window.addEventListener("focus", this.updateInputPolling);
+    window.addEventListener("focus", this.onFocus);
     window.addEventListener("gamepadconnected", this.onGamepadChange);
     window.addEventListener("gamepaddisconnected", this.onGamepadChange);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
@@ -282,6 +289,7 @@ export class XboxStreamEngine {
     this.inputSuspended = suspended;
     this.controlsShortcut.reset();
     if (suspended) this.releaseInput();
+    else this.primeControllerRelease();
     this.updateInputPolling();
   }
 
@@ -351,7 +359,21 @@ export class XboxStreamEngine {
     this.updateInputPolling();
   };
 
-  private onGamepadChange = (): void => {
+  private onFocus = (): void => {
+    this.primeControllerRelease();
+    this.updateInputPolling();
+  };
+
+  private onGamepadChange = (event: Event): void => {
+    const changed = (event as GamepadEvent).gamepad;
+    if (
+      (event.type === "gamepaddisconnected" &&
+        (!changed || changed.index === this.activeGamepadIndex)) ||
+      (event.type === "gamepadconnected" &&
+        changed?.index === this.activeGamepadIndex &&
+        changed?.id === this.activeGamepadId)
+    )
+      this.releaseInput();
     this.sampledInput = false;
     this.updateInputPolling();
     this.inputLoop();
@@ -368,7 +390,7 @@ export class XboxStreamEngine {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onBlur);
-    window.removeEventListener("focus", this.updateInputPolling);
+    window.removeEventListener("focus", this.onFocus);
     window.removeEventListener("gamepadconnected", this.onGamepadChange);
     window.removeEventListener("gamepaddisconnected", this.onGamepadChange);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
@@ -520,6 +542,15 @@ export class XboxStreamEngine {
     packet.setUint8(14, Math.max(1, navigator.maxTouchPoints));
     this.channels.input.send(packet);
     this.inputActive = true;
+    // Seed while startup controls are still held, before the first input tick.
+    if (document.hasFocus() && document.visibilityState === "visible") {
+      const gamepad = this.resolveGamepad();
+      if (gamepad)
+        this.gamepadRelease.prime(
+          gamepad,
+          tuningForGamepad(this.options.controllerSettings, gamepad),
+        );
+    }
     this.updateInputPolling();
   }
 
@@ -623,6 +654,7 @@ export class XboxStreamEngine {
           : undefined,
         this.options.reserveControlChord,
         this.sampledFrame,
+        this.gamepadRelease,
       ) ?? resetXboxInputFrame(this.sampledFrame);
     const now = performance.now();
     const failure =
@@ -671,6 +703,10 @@ export class XboxStreamEngine {
   }
 
   private releaseInput = (): void => {
+    this.gamepadRelease.arm();
+    this.controlsShortcut.reset();
+    this.stopRumble();
+    this.primeControllerRelease();
     this.pressedKeys.clear();
     this.inputBuffer.clear();
     if (this.inputActive)
@@ -678,11 +714,33 @@ export class XboxStreamEngine {
     this.updateInputPolling();
   };
 
+  private primeControllerRelease(): void {
+    if (
+      this.inputActive &&
+      !this.inputSuspended &&
+      !this.destroyed &&
+      !this.terminal &&
+      document.hasFocus() &&
+      document.visibilityState === "visible"
+    ) {
+      const gamepad = selectController(
+        navigator.getGamepads(),
+        this.options.controllerSettings.preferredControllerId,
+        this.activeGamepadIndex,
+      );
+      if (gamepad)
+        this.gamepadRelease.prime(
+          gamepad,
+          tuningForGamepad(this.options.controllerSettings, gamepad),
+        );
+    }
+  }
+
   private onVisibilityChange = (): void => {
     if (document.visibilityState !== "visible") {
       this.controlsShortcut.reset();
       this.releaseInput();
-    }
+    } else this.primeControllerRelease();
     this.frameMetrics.setVisible(document.visibilityState === "visible");
     this.updateInputPolling();
   };
@@ -720,7 +778,9 @@ export class XboxStreamEngine {
       this.destroyed ||
       this.terminal ||
       this.inputSuspended ||
-      !document.hasFocus()
+      !this.inputActive ||
+      !document.hasFocus() ||
+      document.visibilityState !== "visible"
     )
       return;
     if (!(event.data instanceof ArrayBuffer)) return;
@@ -731,29 +791,87 @@ export class XboxStreamEngine {
       ? tuningForGamepad(this.options.controllerSettings, gamepad)
       : undefined;
     if (!gamepad || !tuning || tuning.rumble === "off") return;
-    const actuator = gamepad?.vibrationActuator;
-    if (!actuator || !("playEffect" in actuator)) return;
+    if (!controllerSupportsRumble(gamepad)) return;
+    const actuator = gamepad.vibrationActuator!;
     const intensity = tuning.rumble === "low" ? 0.45 : 1;
-    void actuator
-      .playEffect("dual-rumble", {
-        startDelay: report.getUint16(10, true),
-        duration: report.getUint16(8, true),
-        weakMagnitude: (report.getUint8(5) / 100) * intensity,
-        strongMagnitude: (report.getUint8(4) / 100) * intensity,
-      })
-      .catch(() => {
-        /* Devices may disconnect during vibration. */
+    if (this.rumbleActuator && this.rumbleActuator !== actuator)
+      this.stopRumble();
+    this.rumbleActuator = actuator;
+    const duration = Math.min(5000, report.getUint16(8, true));
+    try {
+      // The browser preempts older dual-rumble effects. Never queue a replay.
+      void Promise.resolve(
+        actuator.playEffect("dual-rumble", {
+          startDelay: Math.min(5000 - duration, report.getUint16(10, true)),
+          duration,
+          weakMagnitude: Math.min(1, report.getUint8(5) / 100) * intensity,
+          strongMagnitude: Math.min(1, report.getUint8(4) / 100) * intensity,
+        }),
+      ).catch(() => {
+        // Unsupported, hidden or disconnected devices do not interrupt play.
       });
+    } catch {
+      // Legacy implementations may throw synchronously instead of rejecting.
+    }
+  }
+
+  private stopRumble(): void {
+    const actuator = this.rumbleActuator;
+    this.rumbleActuator = undefined;
+    if (!actuator) return;
+    try {
+      const stopped =
+        typeof actuator.reset === "function"
+          ? actuator.reset()
+          : actuator.playEffect("dual-rumble", {
+              duration: 0,
+              startDelay: 0,
+              weakMagnitude: 0,
+              strongMagnitude: 0,
+            });
+      void Promise.resolve(stopped).catch(() => {});
+    } catch {
+      // Removal and visibility changes can make haptics unavailable immediately.
+    }
   }
 
   private resolveGamepad(): GamepadLike | undefined {
     const previousIndex = this.activeGamepadIndex;
     const previousLabel = this.activeGamepadLabel;
+    const gamepads = navigator.getGamepads();
     const gamepad = selectController(
-      navigator.getGamepads(),
+      gamepads,
       this.options.controllerSettings.preferredControllerId,
       previousIndex,
     );
+    const unsupported =
+      !gamepad &&
+      connectedGamepads(gamepads).find(
+        (candidate) =>
+          !this.options.controllerSettings.preferredControllerId ||
+          candidate.id ===
+            this.options.controllerSettings.preferredControllerId,
+      );
+    const unsupportedKey = unsupported
+      ? JSON.stringify([unsupported.id, unsupported.index, unsupported.mapping])
+      : "";
+    if (unsupportedKey !== this.unsupportedControllerKey) {
+      const previousUnsupportedLabel = this.unsupportedControllerLabel;
+      this.unsupportedControllerKey = unsupportedKey;
+      this.unsupportedControllerLabel = unsupported
+        ? friendlyControllerName(unsupported.id)
+        : "";
+      if (unsupported)
+        this.options.onControllerStatus({
+          state: "unsupported",
+          label: this.unsupportedControllerLabel,
+        });
+      else if (!gamepad && previousUnsupportedLabel)
+        this.options.onControllerStatus({
+          state: "disconnected",
+          label: previousUnsupportedLabel,
+        });
+    }
     if (
       gamepad?.index === previousIndex &&
       (gamepad?.id ?? "") === this.activeGamepadId
@@ -771,7 +889,7 @@ export class XboxStreamEngine {
         state: previousIndex === undefined ? "connected" : "switched",
         label: this.activeGamepadLabel,
       });
-    } else if (previousIndex !== undefined) {
+    } else if (previousIndex !== undefined && !unsupported) {
       this.options.onControllerStatus({
         state: "disconnected",
         label: previousLabel || "Controller",
@@ -957,11 +1075,12 @@ function readInputFrame(
   tuning: ReturnType<typeof tuningForGamepad> | undefined,
   reserveControlChord = true,
   target = emptyXboxInputFrame(),
+  releaseGate?: ControllerInputReleaseGate,
 ): InputFrame | undefined {
   if (!gamepad && keys.size === 0) return undefined;
   const frame =
     gamepad && tuning
-      ? controllerInputFrame(gamepad, tuning, target)
+      ? controllerInputFrame(gamepad, tuning, target, releaseGate)
       : resetXboxInputFrame(target);
   applyKeyboardInput(frame, keys);
   normalizeInputChords(frame, reserveControlChord);
