@@ -3,6 +3,7 @@ import type {
   AppSettings,
   CloudTitle,
   AppSnapshot,
+  SnapshotUpdate,
   DesktopCommand,
   IceCandidatePayload,
   StreamApi,
@@ -67,7 +68,7 @@ const api: StreamApi = {
   onSnapshot: (listener) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      snapshot: AppSnapshot,
+      snapshot: SnapshotUpdate,
     ) => listener(snapshot);
     ipcRenderer.on(IPC.snapshot, handler);
     return () => ipcRenderer.removeListener(IPC.snapshot, handler);

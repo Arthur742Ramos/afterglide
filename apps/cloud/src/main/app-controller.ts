@@ -41,6 +41,7 @@ interface NamedTarget extends StreamTarget {
 
 export class AppController {
   private window?: BrowserWindow;
+  private lastBroadcastTitles?: CloudTitle[];
   private activeSession?: ActiveSession;
   private connectionGeneration = 0;
   private authGeneration = 0;
@@ -64,6 +65,7 @@ export class AppController {
     private readonly releaseChecker?: ReleaseCheckPort,
   ) {
     this.snapshot = {
+      revision: 0,
       auth: { status: "restoring" },
       cloud: {
         available: false,
@@ -83,6 +85,7 @@ export class AppController {
 
   attachWindow(window: BrowserWindow): void {
     this.window = window;
+    this.lastBroadcastTitles = undefined;
   }
 
   setFullscreenState(fullscreen: boolean): void {
@@ -733,7 +736,11 @@ export class AppController {
     };
     // Telemetry is a one-way high-frequency path. Keep it for reports and later
     // snapshots without cloning and rebroadcasting the full application state.
-    this.snapshot = { ...this.snapshot, telemetry: sanitized };
+    this.snapshot = {
+      ...this.snapshot,
+      telemetry: sanitized,
+      revision: this.snapshot.revision + 1,
+    };
     if (this.activeSession && this.snapshot.session.phase === "streaming")
       this.performanceReport.add(
         sanitized,
@@ -840,9 +847,20 @@ export class AppController {
   }
 
   private patch(update: Partial<AppSnapshot>): void {
-    this.snapshot = { ...this.snapshot, ...update };
-    if (!this.window?.isDestroyed())
-      this.window?.webContents.send(IPC.snapshot, this.getSnapshot());
+    this.snapshot = {
+      ...this.snapshot,
+      ...update,
+      revision: this.snapshot.revision + 1,
+    };
+    if (!this.window || this.window.isDestroyed()) return;
+    const { cloud, ...state } = this.snapshot;
+    const { titles, ...metadata } = cloud;
+    // Electron serializes the payload: no extra deep clone before IPC is needed.
+    this.window.webContents.send(IPC.snapshot, {
+      ...state,
+      cloud: titles === this.lastBroadcastTitles ? metadata : cloud,
+    });
+    this.lastBroadcastTitles = titles;
   }
 }
 
