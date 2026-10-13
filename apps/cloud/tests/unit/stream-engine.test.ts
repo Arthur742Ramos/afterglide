@@ -8,12 +8,17 @@ import {
 class Channel extends EventTarget {
   readyState = "connecting";
   bufferedAmount = 0;
+  failSend = false;
+  closeCalls = 0;
   sent: unknown[] = [];
   send(value: unknown) {
+    if (this.failSend) throw new Error("send failed");
     this.sent.push(value);
   }
   close() {
+    this.closeCalls += 1;
     this.readyState = "closed";
+    this.dispatchEvent(new Event("close"));
   }
   open() {
     this.readyState = "open";
@@ -21,6 +26,7 @@ class Channel extends EventTarget {
   }
 }
 class Peer extends EventTarget {
+  closeCalls = 0;
   channels: Record<string, Channel> = {};
   channelOptions: Record<string, RTCDataChannelInit> = {};
   stats = new Map<string, Record<string, unknown>>();
@@ -44,7 +50,9 @@ class Peer extends EventTarget {
   async getStats() {
     return this.stats;
   }
-  close() {}
+  close() {
+    this.closeCalls += 1;
+  }
 }
 class Media extends EventTarget {
   style = { objectFit: "" };
@@ -181,6 +189,7 @@ function ack() {
   );
 }
 function ready() {
+  peer.channels.message.open();
   peer.channels.control.open();
   peer.channels.input.open();
   ack();
@@ -197,11 +206,136 @@ function a(frame: DataView) {
 
 describe("real stream engine input lifecycle", () => {
   it("requires playing video before reporting a successful stream", () => {
+    ready();
     peer.connectionState = "connected";
     peer.dispatchEvent(new Event("connectionstatechange"));
     expect(onConnected).not.toHaveBeenCalled();
     media[0].dispatchEvent(new Event("playing"));
     expect(onConnected).toHaveBeenCalledTimes(1);
+  });
+  it("keeps the startup deadline when video plays without the input handshake", async () => {
+    media[0].dispatchEvent(new Event("playing"));
+    expect(onConnected).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("input connection timed out"),
+    );
+    expect(peer.closeCalls).toBe(1);
+    ready();
+    expect(onConnected).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+  it("reports playable readiness once when input becomes ready after video", () => {
+    media[0].dispatchEvent(new Event("playing"));
+    ready();
+    ack();
+    media[0].dispatchEvent(new Event("playing"));
+    expect(onConnected).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(60_000);
+    expect(onError).not.toHaveBeenCalled();
+  });
+  it.each(["waiting", "pause", "ended"])(
+    "keeps startup pending if video enters %s before input readiness",
+    (event) => {
+      media[0].dispatchEvent(new Event("playing"));
+      media[0].dispatchEvent(new Event(event));
+      ready();
+      expect(onConnected).not.toHaveBeenCalled();
+      media[0].dispatchEvent(new Event("playing"));
+      expect(onConnected).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each(["control", "input", "message"] as const)(
+    "does not become playable without the %s channel",
+    (missing) => {
+      for (const name of ["control", "input", "message"] as const) {
+        if (name !== missing) peer.channels[name].open();
+      }
+      ack();
+      media[0].dispatchEvent(new Event("playing"));
+      expect(onConnected).not.toHaveBeenCalled();
+      peer.channels[missing].open();
+      expect(onConnected).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each(["control", "input", "message"] as const)(
+    "fails startup and cleans up once when required %s closes",
+    (name) => {
+      peer.channels[name].close();
+      peer.channels[name].dispatchEvent(new Event("error"));
+      media[0].dispatchEvent(new Event("playing"));
+      ready();
+      vi.advanceTimersByTime(60_000);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining(name));
+      expect(onConnected).not.toHaveBeenCalled();
+      expect(onInterrupted).not.toHaveBeenCalled();
+      expect(peer.closeCalls).toBe(1);
+    },
+  );
+  it.each(["control", "input", "message"] as const)(
+    "interrupts a playable stream and releases input once when required %s errors",
+    (name) => {
+      ready();
+      media[0].dispatchEvent(new Event("playing"));
+      button = 1;
+      vi.advanceTimersByTime(4);
+      peer.channels[name].dispatchEvent(new Event("error"));
+      peer.channels[name].close();
+      peer.dispatchEvent(new Event("connectionstatechange"));
+      vi.advanceTimersByTime(60_000);
+      expect(onInterrupted).toHaveBeenCalledTimes(1);
+      expect(onError).not.toHaveBeenCalled();
+      expect(frames().map(a)).toEqual([true, false]);
+      expect(peer.closeCalls).toBe(1);
+    },
+  );
+  it.each(["control", "input"] as const)(
+    "fails startup if the %s initialization send throws",
+    (name) => {
+      peer.channels[name].failSend = true;
+      media[0].dispatchEvent(new Event("playing"));
+      ready();
+      expect(onConnected).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(peer.closeCalls).toBe(1);
+    },
+  );
+  it.each(["control", "input", "message"] as const)(
+    "interrupts once when a playable stream's required %s channel closes",
+    (name) => {
+      ready();
+      media[0].dispatchEvent(new Event("playing"));
+      button = 1;
+      vi.advanceTimersByTime(4);
+      peer.channels[name].close();
+      expect(onInterrupted).toHaveBeenCalledTimes(1);
+      expect(onError).not.toHaveBeenCalled();
+      expect(peer.closeCalls).toBe(1);
+      expect(frames().map(a)).toEqual(
+        name === "input" ? [true] : [true, false],
+      );
+    },
+  );
+  it("fails startup when the message handshake or configuration cannot be sent", () => {
+    peer.channels.message.failSend = true;
+    expect(() => ready()).not.toThrow();
+    media[0].dispatchEvent(new Event("playing"));
+    expect(onConnected).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(peer.closeCalls).toBe(1);
+  });
+  it("keeps optional chat closure independent and ignores all channels after destruction", () => {
+    peer.channels.chat.close();
+    ready();
+    media[0].dispatchEvent(new Event("playing"));
+    expect(onConnected).toHaveBeenCalledTimes(1);
+    engine.destroy();
+    engine.destroy();
+    peer.channels.message.dispatchEvent(new Event("error"));
+    expect(onError).not.toHaveBeenCalled();
+    expect(onInterrupted).not.toHaveBeenCalled();
+    expect(peer.closeCalls).toBe(1);
   });
   it("times out a transport that never delivers video", async () => {
     peer.connectionState = "connected";
@@ -233,6 +367,7 @@ describe("real stream engine input lifecycle", () => {
     expect(onError).not.toHaveBeenCalled();
   });
   it("waits for both input channels after an early handshake, and starts once", () => {
+    peer.channels.message.open();
     expect(peer.channelOptions.input).toEqual({
       ordered: true,
       protocol: "1.0",

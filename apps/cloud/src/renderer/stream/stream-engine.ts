@@ -89,6 +89,7 @@ export class XboxStreamEngine {
   private destroyed = false;
   private terminal = false;
   private connected = false;
+  private videoPlaying = false;
   private inputActive = false;
   private inputSuspended = false;
   private sequence = 0;
@@ -133,8 +134,11 @@ export class XboxStreamEngine {
       }),
     };
     this.channels.input.binaryType = "arraybuffer";
-    for (const channel of [this.channels.control, this.channels.input]) {
+    for (const name of ["control", "input", "message"] as const) {
+      const channel = this.channels[name];
       channel.addEventListener("open", () => this.activateInput());
+      channel.addEventListener("close", () => this.failRequiredChannel(name));
+      channel.addEventListener("error", () => this.failRequiredChannel(name));
     }
     this.channels.input.bufferedAmountLowThreshold = 0;
     this.channels.input.addEventListener("bufferedamountlow", () =>
@@ -188,9 +192,15 @@ export class XboxStreamEngine {
     this.peer.addEventListener("connectionstatechange", () =>
       this.handleConnectionState(),
     );
-    this.video.addEventListener("playing", () => this.markConnected(), {
-      once: true,
+    this.video.addEventListener("playing", () => {
+      this.videoPlaying = true;
+      this.markConnected();
     });
+    for (const event of ["waiting", "pause", "ended"]) {
+      this.video.addEventListener(event, () => {
+        this.videoPlaying = false;
+      });
+    }
 
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
@@ -206,7 +216,10 @@ export class XboxStreamEngine {
       this.connectionDeadlineTimer = window.setTimeout(() => {
         if (!this.connected && !this.destroyed) {
           this.notifyError(
-            "The video connection timed out. Check your network and try again.",
+            this.videoPlaying
+              ? "The Xbox input connection timed out. Reconnect to try again."
+              : "The video connection timed out. Check your network and try again.",
+            true,
           );
         }
       }, NETWORK_POLICY.connectionDeadlineMs);
@@ -392,7 +405,7 @@ export class XboxStreamEngine {
       clearTimeout(this.disconnectedTimer);
       this.disconnectedTimer = 0;
       // Transport connectivity alone does not prove video is decoding.
-      // Keep the startup deadline until the video element actually plays.
+      // Keep the startup deadline until video and input are both usable.
       return;
     }
     if (this.connected && this.peer.connectionState === "disconnected") {
@@ -409,7 +422,17 @@ export class XboxStreamEngine {
   }
 
   private markConnected(): void {
-    if (this.connected || this.destroyed || this.terminal) return;
+    if (
+      this.connected ||
+      this.destroyed ||
+      this.terminal ||
+      !this.videoPlaying ||
+      !this.inputActive ||
+      this.channels.control.readyState !== "open" ||
+      this.channels.input.readyState !== "open" ||
+      this.channels.message.readyState !== "open"
+    )
+      return;
     this.connected = true;
     clearTimeout(this.connectionDeadlineTimer);
     this.options.onConnected();
@@ -425,6 +448,7 @@ export class XboxStreamEngine {
   }
 
   private handleMessage(event: MessageEvent): void {
+    if (this.destroyed || this.terminal) return;
     try {
       const data = JSON.parse(String(event.data)) as {
         type?: string;
@@ -434,8 +458,8 @@ export class XboxStreamEngine {
       };
       if (data.type === "HandshakeAck") {
         this.handshakeAcknowledged = true;
-        this.activateInput();
         this.sendClientConfiguration();
+        this.activateInput();
       } else if (
         data.target ===
         "/streaming/sessionLifetimeManagement/serverInitiatedDisconnect"
@@ -467,19 +491,28 @@ export class XboxStreamEngine {
       this.inputActive ||
       !this.handshakeAcknowledged ||
       this.channels.control.readyState !== "open" ||
-      this.channels.input.readyState !== "open"
+      this.channels.input.readyState !== "open" ||
+      this.channels.message.readyState !== "open"
     )
       return;
-    this.authorizeControl();
-    this.startInput();
+    if (!this.authorizeControl()) return;
+    try {
+      this.startInput();
+      this.markConnected();
+    } catch {
+      this.failRequiredChannel("input");
+    }
   }
 
-  private authorizeControl(): void {
-    this.send(this.channels.control, {
-      message: "authorizationRequest",
-      accessKey: "4BDB3609-C1F1-4195-9B37-FEFF45DA8B8E",
-    });
-    this.send(this.channels.control, {
+  private authorizeControl(): boolean {
+    if (
+      !this.send(this.channels.control, {
+        message: "authorizationRequest",
+        accessKey: "4BDB3609-C1F1-4195-9B37-FEFF45DA8B8E",
+      })
+    )
+      return false;
+    return this.send(this.channels.control, {
       message: "gamepadChanged",
       gamepadIndex: 0,
       wasAdded: true,
@@ -883,15 +916,37 @@ export class XboxStreamEngine {
     }
   }
 
-  private send(channel: RTCDataChannel, value: unknown): void {
-    if (channel.readyState !== "open") return;
-    channel.send(typeof value === "string" ? value : JSON.stringify(value));
+  private send(channel: RTCDataChannel, value: unknown): boolean {
+    if (this.destroyed || this.terminal || channel.readyState !== "open")
+      return false;
+    try {
+      channel.send(typeof value === "string" ? value : JSON.stringify(value));
+      return true;
+    } catch {
+      this.failRequiredChannel(
+        channel === this.channels.control ? "control" : "message",
+      );
+      return false;
+    }
   }
 
-  private notifyInterrupted(): void {
+  private failRequiredChannel(name: "control" | "input" | "message"): void {
+    if (this.destroyed || this.terminal) return;
+    // Neutral is attempted before closing the remaining transport. A closed
+    // required channel cannot recover within the same peer connection.
+    if (this.connected) this.notifyInterrupted(true);
+    else
+      this.notifyError(
+        `The Xbox ${name} connection was lost before the stream was ready. Reconnect to try again.`,
+        true,
+      );
+  }
+
+  private notifyInterrupted(closeTransport = false): void {
     if (this.destroyed || this.terminal) return;
     this.terminal = true;
-    this.releaseInput();
+    if (closeTransport) this.destroy();
+    else this.releaseInput();
     this.frameMetrics.stop();
     clearTimeout(this.disconnectedTimer);
     clearInterval(this.keepaliveTimer);
@@ -899,10 +954,11 @@ export class XboxStreamEngine {
     this.options.onInterrupted();
   }
 
-  private notifyError(message: string): void {
+  private notifyError(message: string, closeTransport = false): void {
     if (this.destroyed || this.terminal) return;
     this.terminal = true;
-    this.releaseInput();
+    if (closeTransport) this.destroy();
+    else this.releaseInput();
     this.frameMetrics.stop();
     clearTimeout(this.connectionDeadlineTimer);
     clearTimeout(this.disconnectedTimer);
