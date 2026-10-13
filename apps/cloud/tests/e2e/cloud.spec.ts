@@ -142,13 +142,13 @@ test("search failure has a retry and never claims it is still loading", async ()
     .getByRole("textbox", { name: "Search cloud games" })
     .fill("unmatched-game");
   await expect(page.getByRole("alert")).toHaveText(
-    "Cloud search didn't finish. Try your search again.",
+    /Cloud search didn['’]t finish\. Try your search again\./,
   );
   await expect(page.getByText(/Checking all cloud games/)).toHaveCount(0);
   await expect(page.getByText("Searching all cloud games.")).toHaveCount(0);
   await page.getByRole("button", { name: "Retry search" }).click();
   await expect(
-    page.getByText('No games match "unmatched-game".'),
+    page.getByText(/No games match ["“]unmatched-game["”]\./),
   ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
@@ -187,6 +187,23 @@ test("failed artwork keeps a usable fallback and retries a replacement URL", asy
   await expect(artwork).toHaveAttribute(
     "src",
     "https://images.xboxlive.com/e2e-replacement.svg",
+  );
+  await expect(fallback).toHaveCount(0);
+  // Returning to a previously failed URL must try the image again.
+  snapshot.cloud.titles[0].imageUrl =
+    "https://images.xboxlive.com/e2e-cover.svg";
+  await app.evaluate(
+    ({ BrowserWindow }, value) => {
+      BrowserWindow.getAllWindows()[0].webContents.send(
+        value.channel,
+        value.snapshot,
+      );
+    },
+    { channel: IPC.snapshot, snapshot },
+  );
+  await expect(artwork).toHaveAttribute(
+    "src",
+    "https://images.xboxlive.com/e2e-cover.svg",
   );
   await expect(fallback).toHaveCount(0);
 });
@@ -261,6 +278,51 @@ test("Settings directional input advances exactly one control", async () => {
   await polling.first().focus();
   await page.evaluate(() => window.afterglideCloudTest?.injectGamepad("right"));
   await expect(polling.nth(1)).toBeFocused();
+});
+
+test("fast unchanged Settings saves retain the initiating control", async () => {
+  const page = await launch();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const automatic = page
+    .getByRole("group", { name: "Active controller", exact: true })
+    .getByRole("button")
+    .first();
+  await automatic.click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await expect(automatic).toBeFocused();
+  await automatic.click();
+  await expect(page.locator(".settings-list")).toBeEnabled();
+  await page.waitForTimeout(100);
+  await expect(automatic).toBeFocused();
+});
+
+test("Settings save completion restores its control without stealing moved focus", async () => {
+  const page = await launch();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  // Isolate focus behavior with a delayed IPC reply; persistence is exercised
+  // separately by the real disk-failure/retry test above.
+  await app.evaluate(({ ipcMain }, channel) => {
+    let attempts = 0;
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (attempts++ === 0) throw new Error("Simulated save failure");
+    });
+  }, IPC.updateSettings);
+  const origin = page.getByRole("switch", { name: "Reduce motion" });
+  await origin.click();
+  await expect(origin).toBeDisabled();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(origin).toBeFocused();
+  await page.getByRole("button", { name: "Retry saving" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await expect(origin).toBeFocused();
+  await origin.click();
+  await expect(origin).toBeDisabled();
+  const library = page.getByRole("button", { name: "Library", exact: true });
+  await library.focus();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await expect(library).toBeFocused();
 });
 
 test("signing out clears account-scoped Library search, filter and paging", async () => {

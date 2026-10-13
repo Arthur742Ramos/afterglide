@@ -1154,7 +1154,7 @@ function CloudPage({
 
       {snapshot.cloud.status === "ready" && selected && !query.trim() && (
         <article className="cloud-feature">
-          <GameArtwork title={selected} featured />
+          <GameArtwork key={selected.imageUrl} title={selected} featured />
           <div className="cloud-feature-copy">
             <h2>{selected.name}</h2>
             <p>{selected.publisher}</p>
@@ -1224,7 +1224,7 @@ function CloudPage({
                     onDoubleClick={() => void onPlay(title.id)}
                     aria-label={`${title.name}, ${title.publisher}`}
                   >
-                    <GameArtwork title={title} />
+                    <GameArtwork key={title.imageUrl} title={title} />
                     <strong>{title.name}</strong>
                     <span>{title.publisher}</span>
                   </button>
@@ -2214,8 +2214,43 @@ function SettingsPage({
   >("idle");
   const pendingSave = useRef(false);
   const retrySave = useRef<(() => Promise<void>) | undefined>(undefined);
-  const save = async (operation: () => Promise<void>) => {
+  const retryOrigin = useRef<HTMLElement | undefined>(undefined);
+  const focusCleanup = useRef<() => void>(() => {});
+  const restoreSavedFocus = useRef<(() => void) | undefined>(undefined);
+  const [saveCompletion, setSaveCompletion] = useState(0);
+  useEffect(() => () => focusCleanup.current(), []);
+  useLayoutEffect(() => {
+    if (saveState === "saving") return;
+    const restore = restoreSavedFocus.current;
+    restoreSavedFocus.current = undefined;
+    restore?.();
+  }, [saveState, saveCompletion]);
+  const save = async (
+    operation: () => Promise<void>,
+    previousOrigin?: HTMLElement,
+  ) => {
     if (pendingSave.current) return;
+    focusCleanup.current();
+    const initiator = document.activeElement;
+    const origin =
+      previousOrigin ??
+      (initiator instanceof HTMLElement ? initiator : undefined);
+    retryOrigin.current = origin;
+    let focusMoved = false;
+    const onFocus = (event: FocusEvent) => {
+      if (event.target !== initiator && event.target !== origin)
+        focusMoved = true;
+    };
+    const onBlur = () => {
+      focusMoved = true;
+    };
+    const cleanup = () => {
+      document.removeEventListener("focusin", onFocus);
+      window.removeEventListener("blur", onBlur);
+    };
+    focusCleanup.current = cleanup;
+    document.addEventListener("focusin", onFocus);
+    window.addEventListener("blur", onBlur);
     pendingSave.current = true;
     retrySave.current = operation;
     setSaveState("saving");
@@ -2227,6 +2262,23 @@ function SettingsPage({
       setSaveState("error");
     } finally {
       pendingSave.current = false;
+      // Run after React has committed the enabled fieldset, including fast IPC
+      // and unchanged-value replies that can finish before the next frame.
+      restoreSavedFocus.current = () => {
+        cleanup();
+        if (
+          !focusMoved &&
+          origin?.isConnected &&
+          !origin.matches(":disabled") &&
+          document.hasFocus() &&
+          (document.activeElement === document.body ||
+            document.activeElement === initiator ||
+            document.activeElement === origin)
+        ) {
+          origin.focus({ preventScroll: true });
+        }
+      };
+      setSaveCompletion((completion) => completion + 1);
     }
   };
   const update = (settings: Partial<AppSettings>) =>
@@ -2294,7 +2346,8 @@ function SettingsPage({
             className="text-action"
             data-focusable
             onClick={() => {
-              if (retrySave.current) void save(retrySave.current);
+              if (retrySave.current)
+                void save(retrySave.current, retryOrigin.current);
             }}
           >
             Retry saving
