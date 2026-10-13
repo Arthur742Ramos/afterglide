@@ -550,15 +550,22 @@ export class AppController {
   updateTelemetry(telemetry: StreamTelemetry): void {
     const sanitized: StreamTelemetry = {
       resolution: String(telemetry.resolution).slice(0, 32),
-      framesPerSecond: clamp(telemetry.framesPerSecond, 0, 240),
-      roundTripMs: clamp(telemetry.roundTripMs, 0, 10_000),
-      packetLossPercent: clamp(telemetry.packetLossPercent, 0, 100),
-      bitrateMbps: clamp(telemetry.bitrateMbps, 0, 500),
-      codec: String(telemetry.codec).slice(0, 48),
+      framesPerSecond: optionalMeasurement(telemetry.framesPerSecond, 240),
+      roundTripMs: optionalMeasurement(telemetry.roundTripMs, 10_000),
+      packetLossPercent: optionalMeasurement(telemetry.packetLossPercent, 100),
+      bitrateMbps: optionalMeasurement(telemetry.bitrateMbps, 500),
+      codec:
+        typeof telemetry.codec === "string" && telemetry.codec.trim()
+          ? telemetry.codec.slice(0, 48)
+          : undefined,
       connection: isConnectionType(telemetry.connection)
         ? telemetry.connection
         : "unknown",
-      videoDecoder: String(telemetry.videoDecoder).slice(0, 80),
+      videoDecoder:
+        typeof telemetry.videoDecoder === "string" &&
+        telemetry.videoDecoder.trim()
+          ? telemetry.videoDecoder.slice(0, 80)
+          : undefined,
       decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
       jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
       inputQueueBytes: optionalMeasurement(
@@ -586,9 +593,14 @@ export class AppController {
         Number.MAX_SAFE_INTEGER,
       ),
       recoveryMs: this.recoveryMs,
-      networkQuality: isNetworkQuality(telemetry.networkQuality)
-        ? telemetry.networkQuality
-        : "measuring",
+      networkQuality:
+        optionalMeasurement(telemetry.roundTripMs, 10_000) !== undefined &&
+        optionalMeasurement(telemetry.packetLossPercent, 100) !== undefined &&
+        optionalMeasurement(telemetry.framesPerSecond, 240) !== undefined &&
+        optionalMeasurement(telemetry.bitrateMbps, 500) !== undefined &&
+        isNetworkQuality(telemetry.networkQuality)
+          ? telemetry.networkQuality
+          : "measuring",
       updatedAt: Date.now(),
     };
     // Telemetry is a one-way high-frequency path. Keep it for reports and later
@@ -726,10 +738,6 @@ function isIceCandidatePayload(value: unknown): value is IceCandidatePayload {
     (candidate.sdpMLineIndex === null ||
       typeof candidate.sdpMLineIndex === "number")
   );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, Number.isFinite(value) ? value : 0));
 }
 
 function isConnectionType(
