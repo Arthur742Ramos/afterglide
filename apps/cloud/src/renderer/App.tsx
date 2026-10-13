@@ -1453,10 +1453,17 @@ function StreamView({
     overlayRef.current = true;
     setOverlay(true);
     if (focusFirst) {
+      const startingFocus = document.activeElement;
       cancelAnimationFrame(focusFrame.current ?? 0);
       focusFrame.current = window.requestAnimationFrame(() => {
         focusFrame.current = undefined;
         if (!controlsCapturedRef.current) return;
+        if (
+          document.activeElement !== startingFocus &&
+          document.activeElement !== root.current &&
+          document.activeElement !== document.body
+        )
+          return;
         header.current
           ?.querySelector<HTMLButtonElement>("[data-autofocus]")
           ?.focus();

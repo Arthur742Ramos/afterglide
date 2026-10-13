@@ -1309,6 +1309,7 @@ test("DualSense physical prompts and capability diagnostics follow the selected 
   });
   await expect(page.locator(".controller-footer")).toContainText("Cross");
   await expect(page.locator(".controller-footer")).toContainText("Circle");
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
   await page.setViewportSize({ width: 960, height: 600 });
   await expect
     .poll(() =>
@@ -1337,6 +1338,7 @@ test("DualSense physical prompts and capability diagnostics follow the selected 
     state.pad.buttons[9] = { pressed: true, value: 1 };
   });
   await expect(diagnostic).toContainText("Create + Options");
+  await diagnostic.scrollIntoViewIfNeeded();
   await page.screenshot({
     path: join(root, "artifacts/e2e/cloud-controller-dualsense-settings.png"),
   });
@@ -1484,6 +1486,9 @@ for (const device of [
     ).toBeVisible();
     await page.getByRole("button", { name: "Leave Xbox stream" }).focus();
     await button(0, false);
+    await expect(
+      page.getByRole("button", { name: "Leave Xbox stream" }),
+    ).toBeFocused();
     await button(0, true);
     await expect(
       page.getByRole("heading", { name: "Your cloud library." }),
