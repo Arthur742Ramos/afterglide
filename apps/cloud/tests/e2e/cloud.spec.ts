@@ -8,6 +8,7 @@ import {
   type Page,
 } from "@playwright/test";
 import axeCore from "axe-core";
+import { IPC } from "../../src/shared/contracts";
 
 const root = join(import.meta.dirname, "../..");
 let app: ElectronApplication;
@@ -124,6 +125,231 @@ test("library search, recent filter and paging remain reachable", async () => {
     .getByRole("button", { name: "Recently played", exact: true })
     .click();
   await expect(page.locator(".game-grid button")).toHaveCount(1);
+});
+
+test("search failure has a retry and never claims it is still loading", async () => {
+  const page = await launch();
+  await expect(page.locator(".game-grid button")).toHaveCount(3);
+  await app.evaluate(({ ipcMain }, channel) => {
+    let attempts = 0;
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, () => {
+      if (attempts++ === 0) throw new Error("Simulated search interruption");
+      return [];
+    });
+  }, IPC.searchCloudTitles);
+  await page
+    .getByRole("textbox", { name: "Search cloud games" })
+    .fill("unmatched-game");
+  await expect(page.getByRole("alert")).toHaveText(
+    "Cloud search didn't finish. Try your search again.",
+  );
+  await expect(page.getByText(/Checking all cloud games/)).toHaveCount(0);
+  await expect(page.getByText("Searching all cloud games.")).toHaveCount(0);
+  await page.getByRole("button", { name: "Retry search" }).click();
+  await expect(
+    page.getByText('No games match "unmatched-game".'),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("failed artwork keeps a usable fallback and retries a replacement URL", async () => {
+  const page = await launch("cloud-artwork");
+  await page.route("https://images.xboxlive.com/**", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#244477"/></svg>',
+    }),
+  );
+  await page.reload();
+  const artwork = page.locator(".cloud-feature img");
+  await expect(artwork).toBeVisible();
+  const before = await artwork.boundingBox();
+  await artwork.dispatchEvent("error");
+  const fallback = page.locator(".cloud-feature .game-art-fallback");
+  await expect(fallback).toBeVisible();
+  expect(await fallback.boundingBox()).toEqual(before);
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeEnabled();
+  const snapshot = await page.evaluate(() =>
+    window.afterglideCloud.getSnapshot(),
+  );
+  snapshot.cloud.titles[0].imageUrl =
+    "https://images.xboxlive.com/e2e-replacement.svg";
+  await app.evaluate(
+    ({ BrowserWindow }, value) => {
+      BrowserWindow.getAllWindows()[0].webContents.send(
+        value.channel,
+        value.snapshot,
+      );
+    },
+    { channel: IPC.snapshot, snapshot },
+  );
+  await expect(artwork).toHaveAttribute(
+    "src",
+    "https://images.xboxlive.com/e2e-replacement.svg",
+  );
+  await expect(fallback).toHaveCount(0);
+});
+
+test("Settings returns to the same Library search, filter, page and focus", async () => {
+  const page = await launch("large-cloud-catalog");
+  await page.getByRole("button", { name: "Show 32 more games" }).click();
+  const lastGame = page.locator(".game-grid button").last();
+  await lastGame.focus();
+  await nativeCommand("desktop-settings");
+  await expect(
+    page.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".game-grid button")).toHaveCount(80);
+  // Controller navigation's initial focus pass must not overwrite restoration.
+  await page.waitForTimeout(100);
+  await expect(lastGame).toBeFocused();
+  await page
+    .getByRole("button", { name: "Recently played", exact: true })
+    .click();
+  const search = page.getByRole("textbox", { name: "Search cloud games" });
+  await search.fill("Cloud Game 01");
+  await search.focus();
+  await nativeCommand("desktop-settings");
+  await expect(
+    page.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(search).toHaveValue("Cloud Game 01");
+  await page.waitForTimeout(100);
+  await expect(search).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Recently played", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".game-grid button")).toHaveCount(1);
+});
+
+test("Settings save failure leaves previous values active and supports retry", async () => {
+  const page = await launch();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const blocker = join(directory, "preferences.json.tmp");
+  mkdirSync(blocker);
+  const reduceMotion = page.getByRole("switch", { name: "Reduce motion" });
+  await reduceMotion.click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Settings couldn't be saved. Your previous settings are still active.",
+  );
+  await expect(reduceMotion).toHaveAttribute("aria-checked", "false");
+  expect(
+    await page.evaluate(
+      async () =>
+        (await window.afterglideCloud.getSnapshot()).settings.reducedMotion,
+    ),
+  ).toBe(false);
+  rmSync(blocker, { recursive: true, force: true });
+  await page.getByRole("button", { name: "Retry saving" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await expect(reduceMotion).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("Settings directional input advances exactly one control", async () => {
+  const page = await launch();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const polling = page
+    .getByRole("group", { name: "Input polling", exact: true })
+    .getByRole("button");
+  await polling.first().focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(polling.nth(1)).toBeFocused();
+  await polling.first().focus();
+  await page.evaluate(() => window.afterglideCloudTest?.injectGamepad("right"));
+  await expect(polling.nth(1)).toBeFocused();
+});
+
+test("signing out clears account-scoped Library search, filter and paging", async () => {
+  const page = await launch("large-cloud-catalog");
+  await page.getByRole("button", { name: "Show 32 more games" }).click();
+  await page
+    .getByRole("button", { name: "Recently played", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Search cloud games" })
+    .fill("Cloud Game 01");
+  await nativeCommand("desktop-settings");
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /Sign in with Microsoft/ }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Search cloud games" }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "All games", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeFocused();
+});
+
+test("polished Library and Settings remain accessible at desktop sizes and 200 percent zoom", async () => {
+  const page = await launch("long-content");
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 960, height: 600 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.getByRole("button", { name: "Library", exact: true }).click();
+    await reachable(page, page.getByRole("button", { name: /Play again/ }));
+    await accessible(page);
+    expect(
+      await page
+        .locator(
+          ".game-grid button > span,.cloud-library-title span,.demo-notice",
+        )
+        .evaluateAll((elements) =>
+          elements.every(
+            (element) => parseFloat(getComputedStyle(element).fontSize) >= 14,
+          ),
+        ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(
+        root,
+        `artifacts/e2e/cloud-polish-library-${viewport.width}.png`,
+      ),
+    });
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await reachable(page, page.getByRole("switch", { name: "Reduce motion" }));
+    await accessible(page);
+    expect(
+      await page
+        .locator(".setting-row span,.controller-diagnostics-note")
+        .evaluateAll((elements) =>
+          elements.every(
+            (element) => parseFloat(getComputedStyle(element).fontSize) >= 14,
+          ),
+        ),
+    ).toBe(true);
+    await page.locator(".page").evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await page.screenshot({
+      path: join(
+        root,
+        `artifacts/e2e/cloud-polish-settings-${viewport.width}.png`,
+      ),
+    });
+  }
+  await zoom(page, 2);
+  await reachable(page, page.getByRole("switch", { name: "Reduce motion" }));
+  await accessible(page);
+  await page.screenshot({
+    path: join(root, "artifacts/e2e/cloud-polish-settings-200.png"),
+  });
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await reachable(
+    page,
+    page.getByRole("textbox", { name: "Search cloud games" }),
+  );
+  await accessible(page);
+  await page.screenshot({
+    path: join(root, "artifacts/e2e/cloud-polish-library-200.png"),
+  });
 });
 
 test("controller play, directional local controls and return to Library", async () => {
