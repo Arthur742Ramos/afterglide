@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -11,6 +12,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   AppSettings,
   AppSnapshot,
+  SnapshotUpdate,
   CloudTitle,
   ControllerTuning,
   StreamDescriptor,
@@ -37,6 +39,7 @@ import {
   type ControllerFamily,
 } from "./controller-presentation";
 import { useControllerFamily } from "./hooks/use-controller-family";
+import { hydrateSnapshot, mergeSnapshot } from "./snapshot-state";
 import type { ControllerStatus } from "./stream/stream-engine";
 import { QuickSettings } from "./components/QuickSettings";
 import { StreamRecovery, type RecoveryState } from "./recovery";
@@ -208,13 +211,16 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    let receivedSnapshot = false;
+    let latest: SnapshotUpdate | undefined;
     const unsubscribe = window.afterglideCloud.onSnapshot((value) => {
-      receivedSnapshot = true;
-      if (active) setSnapshot(value);
+      if (!latest || value.revision > latest.revision) latest = value;
+      if (active) setSnapshot((current) => mergeSnapshot(current, value));
     });
     void window.afterglideCloud.getSnapshot().then((value) => {
-      if (active && !receivedSnapshot) setSnapshot(value);
+      // Capture at reply time: later events have their own queued state updates.
+      const pending = latest;
+      if (active)
+        setSnapshot((current) => hydrateSnapshot(current, value, pending));
     });
     return () => {
       active = false;
@@ -1008,18 +1014,22 @@ function CloudPage({
     };
   }, [query, searchAttempt]);
   const searchInput = useRef<HTMLInputElement>(null);
-  const selected = snapshot.cloud.titles.find(
-    (title) => title.id === snapshot.cloud.selectedTitleId,
+  const selected = useMemo(
+    () =>
+      snapshot.cloud.titles.find(
+        (title) => title.id === snapshot.cloud.selectedTitleId,
+      ),
+    [snapshot.cloud.titles, snapshot.cloud.selectedTitleId],
   );
-  const localMatches = snapshot.cloud.titles.filter(
-    (title) =>
-      (!recentOnly || title.recentlyPlayed) &&
-      `${title.name} ${title.publisher}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
-  const filtered =
-    query.trim() && search?.query === query.trim()
+  const filtered = useMemo(() => {
+    const localMatches = snapshot.cloud.titles.filter(
+      (title) =>
+        (!recentOnly || title.recentlyPlayed) &&
+        `${title.name} ${title.publisher}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    );
+    return query.trim() && search?.query === query.trim()
       ? [
           ...new Map(
             [
@@ -1031,7 +1041,11 @@ function CloudPage({
           ).values(),
         ]
       : localMatches;
-  const visibleTitles = filtered.slice(0, visibleCount);
+  }, [snapshot.cloud.titles, recentOnly, query, search]);
+  const visibleTitles = useMemo(
+    () => filtered.slice(0, visibleCount),
+    [filtered, visibleCount],
+  );
 
   return (
     <section
