@@ -153,6 +153,166 @@ test("search failure has a retry and never claims it is still loading", async ()
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
+for (const input of ["keyboard", "controller"] as const) {
+  for (const result of ["empty", "matching"] as const) {
+    test(`successful ${result} retry preserves ${input} focus in search`, async () => {
+      const page = await launch();
+      await expect(page.locator(".game-grid button")).toHaveCount(3);
+      const title = await page.evaluate(async () => ({
+        ...(await window.afterglideCloud.getSnapshot()).cloud.titles[0],
+        name: "Focus retry fixture",
+      }));
+      await app.evaluate(
+        ({ ipcMain }, value) => {
+          let attempts = 0;
+          ipcMain.removeHandler(value.channel);
+          ipcMain.handle(value.channel, () => {
+            if (attempts++ === 0) throw new Error("Simulated search failure");
+            return value.titles;
+          });
+        },
+        {
+          channel: IPC.searchCloudTitles,
+          titles: result === "empty" ? [] : [title],
+        },
+      );
+      const search = page.getByRole("textbox", { name: "Search cloud games" });
+      await search.fill("Focus retry");
+      const retry = page.getByRole("button", { name: "Retry search" });
+      await expect(retry).toBeVisible();
+      await retry.focus();
+      if (input === "keyboard") await page.keyboard.press("Enter");
+      else
+        await page.evaluate(() =>
+          window.afterglideCloudTest!.injectGamepad("accept"),
+        );
+      await expect(retry).toHaveCount(0);
+      if (result === "empty")
+        await expect(page.getByText(/No games match/)).toBeVisible();
+      await expect(page.locator(".game-grid button")).toHaveCount(
+        result === "empty" ? 0 : 1,
+      );
+      await expect(page.getByText(/Searching all cloud games/)).toHaveCount(0);
+      await expect(search).toHaveValue("Focus retry");
+      await expect(search).toBeFocused();
+      if (input === "keyboard" && result === "empty")
+        await page.screenshot({
+          path: join(root, "artifacts/e2e/cloud-audit-retry-focus.png"),
+        });
+    });
+  }
+}
+
+for (const moved of ["another control", "Settings"] as const) {
+  test(`pending retry preserves a newer focus choice in ${moved}`, async () => {
+    const page = await launch();
+    await expect(page.locator(".game-grid button")).toHaveCount(3);
+    await app.evaluate(({ ipcMain }, channel) => {
+      let attempts = 0;
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, () => {
+        if (attempts++ === 0) throw new Error("Simulated search failure");
+        return new Promise((resolve) => {
+          (
+            globalThis as unknown as { releaseAuditSearch: () => void }
+          ).releaseAuditSearch = () => resolve([]);
+        });
+      });
+    }, IPC.searchCloudTitles);
+    const search = page.getByRole("textbox", { name: "Search cloud games" });
+    await search.fill("Focus retry");
+    const retry = page.getByRole("button", { name: "Retry search" });
+    await expect(retry).toBeVisible();
+    await retry.focus();
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(() =>
+        app.evaluate(
+          () =>
+            typeof (
+              globalThis as unknown as { releaseAuditSearch?: () => void }
+            ).releaseAuditSearch,
+        ),
+      )
+      .toBe("function");
+    if (moved === "another control") {
+      await search.focus();
+      await page.keyboard.press("Tab");
+      await expect(
+        page.getByRole("button", { name: "Clear game search" }),
+      ).toBeFocused();
+    } else {
+      await nativeCommand("desktop-settings");
+      await expect(
+        page.getByRole("switch", { name: "Performance overlay" }),
+      ).toBeFocused();
+    }
+    await app.evaluate(() =>
+      (
+        globalThis as unknown as { releaseAuditSearch: () => void }
+      ).releaseAuditSearch(),
+    );
+    if (moved === "another control") {
+      await expect(page.getByText(/No games match/)).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Clear game search" }),
+      ).toBeFocused();
+      await expect(search).toHaveValue("Focus retry");
+    } else {
+      // A queued cancelled reply cannot focus the unmounted search input.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      await expect(
+        page.getByRole("switch", { name: "Performance overlay" }),
+      ).toBeFocused();
+      await expect(search).toHaveCount(0);
+    }
+  });
+}
+
+test("rapid keyboard retries retain focus through another failure and success", async () => {
+  const page = await launch();
+  await expect(page.locator(".game-grid button")).toHaveCount(3);
+  await app.evaluate(({ ipcMain }, channel) => {
+    let attempts = 0;
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, () => {
+      (
+        globalThis as unknown as { auditSearchAttempts: number }
+      ).auditSearchAttempts = ++attempts;
+      if (attempts < 3) throw new Error("Simulated repeated search failure");
+      return [];
+    });
+  }, IPC.searchCloudTitles);
+  const search = page.getByRole("textbox", { name: "Search cloud games" });
+  await search.fill("Focus retry");
+  const retry = page.getByRole("button", { name: "Retry search" });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expect(retry).toBeVisible();
+    await retry.focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await expect(search).toBeFocused();
+    await expect
+      .poll(() =>
+        app.evaluate(
+          () =>
+            (globalThis as unknown as { auditSearchAttempts: number })
+              .auditSearchAttempts,
+        ),
+      )
+      .toBe(attempt + 2);
+  }
+  await expect(page.getByText(/No games match/)).toBeVisible();
+  await expect(retry).toHaveCount(0);
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("Focus retry");
+});
+
 test("failed artwork keeps a usable fallback and retries a replacement URL", async () => {
   const page = await launch("cloud-artwork");
   await page.route("https://images.xboxlive.com/**", (route) =>
@@ -243,6 +403,53 @@ test("Settings returns to the same Library search, filter, page and focus", asyn
   ).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".game-grid button")).toHaveCount(1);
 });
+
+for (const entry of ["native", "pointer", "controller"] as const) {
+  test(`${entry} Settings entry focuses preferences and preserves Library return`, async () => {
+    const page = await launch();
+    await expect(page.locator(".game-grid button")).toHaveCount(3);
+    const search = page.getByRole("textbox", { name: "Search cloud games" });
+    await search.fill("Sea");
+    await expect(page.locator(".game-grid button")).toHaveCount(1);
+    await search.focus();
+    const settings = page.getByRole("button", {
+      name: "Settings",
+      exact: true,
+    });
+    if (entry === "native") await nativeCommand("desktop-settings");
+    else if (entry === "pointer") await settings.click();
+    else {
+      await settings.focus();
+      await page.evaluate(() =>
+        window.afterglideCloudTest!.injectGamepad("accept"),
+      );
+    }
+    await expect(
+      page.getByRole("switch", { name: "Performance overlay" }),
+    ).toBeFocused();
+    if (entry === "native")
+      await page.screenshot({
+        path: join(root, "artifacts/e2e/cloud-audit-settings-focus.png"),
+      });
+    const polling = page
+      .getByRole("group", { name: "Input polling", exact: true })
+      .getByRole("button")
+      .first();
+    await polling.focus();
+    await page.evaluate(() =>
+      window.afterglideCloud.updateSettings({ volume: 0.5 }),
+    );
+    await expect(polling).toBeFocused();
+    if (entry === "controller")
+      await page.evaluate(() =>
+        window.afterglideCloudTest!.injectGamepad("back"),
+      );
+    else await page.keyboard.press("Escape");
+    await expect(search).toHaveValue("Sea");
+    await expect(search).toBeFocused();
+    await expect(page.locator(".game-grid button")).toHaveCount(1);
+  });
+}
 
 test("Settings save failure leaves previous values active and supports retry", async () => {
   const page = await launch();
@@ -890,8 +1097,13 @@ async function reachable(
   page: Page,
   action: import("@playwright/test").Locator,
 ) {
+  // Choose keyboard focus before scrolling: a pending entry autofocus pass
+  // must preserve this newer choice instead of scrolling to its default.
+  await action.focus();
+  await expect(action).toBeFocused();
   await action.scrollIntoViewIfNeeded();
   await expect(action).toBeInViewport({ ratio: 1 });
+  await expect(action).toBeFocused();
   expect(
     await action.evaluate((element) => {
       const rect = element.getBoundingClientRect();
