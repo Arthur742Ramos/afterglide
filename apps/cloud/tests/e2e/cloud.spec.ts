@@ -690,6 +690,7 @@ test("polished Library and Settings remain accessible at desktop sizes and 200 p
   await reachable(
     page,
     page.getByRole("textbox", { name: "Search cloud games" }),
+    true,
   );
   await accessible(page);
   await page.screenshot({
@@ -1170,16 +1171,19 @@ async function zoom(page: Page, factor: number) {
 async function reachable(
   page: Page,
   action: import("@playwright/test").Locator,
+  center = false,
 ) {
   // Choose keyboard focus before scrolling: a pending entry autofocus pass
   // must preserve this newer choice instead of scrolling to its default.
   await action.focus();
   await expect(action).toBeFocused();
-  // Center the control rather than leaving it on a fractional CSS-pixel edge
-  // at desktop zoom. Keep the full-viewport and hit-testing assertions below.
-  await action.evaluate((element) =>
-    element.scrollIntoView({ block: "center", inline: "center" }),
-  );
+  if (center) {
+    // The enlarged Library search can land on a fractional CSS-pixel edge.
+    // Center this case while retaining the strict visibility checks below.
+    await action.evaluate((element) =>
+      element.scrollIntoView({ block: "center", inline: "center" }),
+    );
+  } else await action.scrollIntoViewIfNeeded();
   await expect(action).toBeInViewport({ ratio: 1 });
   await expect(action).toBeFocused();
   expect(
