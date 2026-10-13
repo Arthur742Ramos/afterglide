@@ -116,7 +116,7 @@ export class ControllerNavigationInput {
         );
     }
     if (gamepad.buttons[1]?.pressed) active.add("back");
-    else if (gamepad.buttons[0]?.pressed) active.add("accept");
+    if (gamepad.buttons[0]?.pressed) active.add("accept");
     // Confirmation/back held on mount, refocus or hotplug must be released.
     if (changed) {
       for (const action of ["accept", "back"]) {
@@ -125,6 +125,9 @@ export class ControllerNavigationInput {
     }
     const actions: string[] = [];
     active.forEach((action) => {
+      // Track both physical edges even when Back masks Accept. Releasing Back
+      // must not turn an already-held Accept into a new press.
+      if (action === "accept" && active.has("back")) return;
       if (!this.previous.has(action)) {
         actions.push(action);
         if (repeatingActions.has(action))

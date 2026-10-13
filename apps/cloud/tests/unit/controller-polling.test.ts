@@ -236,6 +236,27 @@ describe("physical local-controls chord", () => {
 });
 
 describe("physical controller navigation edges", () => {
+  it("does not accept when Back is released while both buttons were held on mount or refocus", () => {
+    const input = new ControllerNavigationInput();
+    for (const reset of [false, true]) {
+      if (reset) input.reset();
+      expect(input.actions(gamepad([0, 1]), 0)).toEqual([]);
+      expect(input.actions(gamepad([0]), 16)).toEqual([]);
+      expect(input.actions(gamepad(), 32)).toEqual([]);
+      expect(input.actions(gamepad([0]), 48)).toEqual(["accept"]);
+    }
+  });
+
+  it("keeps an already-held Accept suppressed when Back masks it and is released", () => {
+    const input = new ControllerNavigationInput();
+    input.actions(gamepad(), 0);
+    expect(input.actions(gamepad([0]), 16)).toEqual(["accept"]);
+    expect(input.actions(gamepad([0, 1]), 32)).toEqual(["back"]);
+    expect(input.actions(gamepad([0]), 48)).toEqual([]);
+    input.actions(gamepad(), 64);
+    expect(input.actions(gamepad([0]), 80)).toEqual(["accept"]);
+  });
+
   it.each([0, 1])(
     "requires release for held button %i on mount and reset",
     (button) => {
