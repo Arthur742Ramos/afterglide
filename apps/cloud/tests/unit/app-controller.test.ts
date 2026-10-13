@@ -192,7 +192,8 @@ describe("AppController", () => {
     await expect(
       controller.startCloudStream("cloud-game"),
     ).rejects.toBeDefined();
-    expect(stop).toHaveBeenCalledWith("v5/sessions/cloud/session");
+    expect(stop).toHaveBeenCalledWith("v5/sessions/cloud/session", "session");
+    expect(stop).toHaveBeenCalledTimes(1);
     expect(controller.getSnapshot().session.phase).toBe("error");
   });
 
@@ -492,12 +493,18 @@ describe("AppController", () => {
     });
     const stop = vi.spyOn(platform, "stopSession");
     const starting = controller.startCloudStream("cloud-game");
-    const rejected = expect(starting).rejects.toThrow("Connection cancelled");
+    const rejected = expect(starting).rejects.toMatchObject({
+      code: "OPERATION_CANCELLED",
+      recoverable: false,
+    });
     await startCalled;
     await controller.stopStream();
     finishStart({ sessionId: "late", sessionPath: "late-path" });
     await rejected;
-    expect(stop).toHaveBeenCalledWith("late-path");
+    await vi.waitFor(() =>
+      expect(stop).toHaveBeenCalledWith("late-path", "late"),
+    );
+    expect(stop).toHaveBeenCalledTimes(1);
     expect(controller.getSnapshot().session.phase).toBe("idle");
   });
 

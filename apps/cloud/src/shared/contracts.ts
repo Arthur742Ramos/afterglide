@@ -187,6 +187,7 @@ export interface StreamApi {
   signOut(): Promise<void>;
   refreshCloudTitles(): Promise<void>;
   searchCloudTitles(query: string): Promise<CloudTitle[]>;
+  cancelCloudSearch(): Promise<void>;
   selectCloudTitle(titleId: string): Promise<void>;
   startCloudStream(titleId: string): Promise<StreamDescriptor>;
   retryStream(): Promise<StreamDescriptor>;
@@ -271,6 +272,7 @@ export const IPC = {
   signOut: "afterglide-cloud:sign-out",
   refreshCloudTitles: "afterglide-cloud:refresh-cloud-titles",
   searchCloudTitles: "afterglide-cloud:search-cloud-titles",
+  cancelCloudSearch: "afterglide-cloud:cancel-cloud-search",
   selectCloudTitle: "afterglide-cloud:select-cloud-title",
   startCloudStream: "afterglide-cloud:start-cloud-stream",
   retryStream: "afterglide-cloud:retry-stream",

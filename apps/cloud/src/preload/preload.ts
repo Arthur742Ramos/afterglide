@@ -32,6 +32,8 @@ const api: StreamApi = {
     ipcRenderer.invoke(IPC.refreshCloudTitles) as Promise<void>,
   searchCloudTitles: (query) =>
     ipcRenderer.invoke(IPC.searchCloudTitles, query) as Promise<CloudTitle[]>,
+  cancelCloudSearch: () =>
+    ipcRenderer.invoke(IPC.cancelCloudSearch) as Promise<void>,
   selectCloudTitle: (titleId) =>
     ipcRenderer.invoke(IPC.selectCloudTitle, titleId) as Promise<void>,
   startCloudStream: (titleId) =>
