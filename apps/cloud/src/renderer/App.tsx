@@ -968,7 +968,16 @@ function CloudPage({
   const returnFocus = useRef(focusSearch ? "search" : focusTarget.current);
   useLayoutEffect(() => {
     if (!returnFocus.current) return;
+    const startingFocus = document.activeElement;
     const frame = requestAnimationFrame(() => {
+      // Restore the previous Library control only while navigation still owns
+      // focus. A newer choice, including one in the rail, takes precedence.
+      if (
+        document.activeElement !== startingFocus &&
+        document.activeElement !== document.body &&
+        document.activeElement !== section.current
+      )
+        return;
       section.current
         ?.querySelector<HTMLElement>(
           `[data-library-focus="${CSS.escape(returnFocus.current)}"]`,

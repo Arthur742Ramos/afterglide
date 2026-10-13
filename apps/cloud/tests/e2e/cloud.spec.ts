@@ -404,6 +404,82 @@ test("Settings returns to the same Library search, filter, page and focus", asyn
   await expect(page.locator(".game-grid button")).toHaveCount(1);
 });
 
+for (const choice of ["search", "rail", "restore"] as const) {
+  test(`Library return preserves ${choice} focus when its restore frame is delayed`, async () => {
+    const page = await launch();
+    const playAgain = page.getByRole("button", { name: /Play again/ });
+    const search = page.getByRole("textbox", { name: "Search cloud games" });
+    const settings = page.getByRole("button", {
+      name: "Settings",
+      exact: true,
+    });
+    for (const factor of [1, 2]) {
+      await zoom(page, factor);
+      await playAgain.focus();
+      await settings.click();
+      await expect(
+        page.getByRole("switch", { name: "Performance overlay" }),
+      ).toBeFocused();
+      // Hold renderer frames so a newer focus choice deterministically lands
+      // between the Library commit and its deferred return-focus callback.
+      await page.evaluate(() => {
+        const request = window.requestAnimationFrame;
+        const cancel = window.cancelAnimationFrame;
+        const frames = new Map<number, FrameRequestCallback>();
+        let handle = 0;
+        window.requestAnimationFrame = (callback) => {
+          frames.set(--handle, callback);
+          return handle;
+        };
+        window.cancelAnimationFrame = (id) => {
+          if (!frames.delete(id)) cancel.call(window, id);
+        };
+        Object.assign(window, {
+          releaseLibraryFrames: () => {
+            window.requestAnimationFrame = request;
+            window.cancelAnimationFrame = cancel;
+            const count = frames.size;
+            for (const callback of frames.values()) callback(performance.now());
+            frames.clear();
+            Reflect.deleteProperty(window, "releaseLibraryFrames");
+            return count;
+          },
+        });
+      });
+      await page.getByRole("button", { name: "Library", exact: true }).click();
+      await expect(search).toBeVisible();
+      if (choice === "search") await search.focus();
+      if (choice === "rail") await settings.focus();
+      const expected =
+        choice === "search" ? search : choice === "rail" ? settings : playAgain;
+      if (choice !== "restore") await expect(expected).toBeFocused();
+      const restored = await page.evaluate(() => {
+        const frames = (
+          window as unknown as { releaseLibraryFrames: () => number }
+        ).releaseLibraryFrames();
+        const active = document.activeElement as HTMLElement;
+        return {
+          frames,
+          focus:
+            active.dataset.libraryFocus ?? active.getAttribute("aria-label"),
+        };
+      });
+      expect(restored.frames).toBeGreaterThan(0);
+      // Check the immediate outcome: polling must not hide a focus override.
+      expect(restored.focus).toBe(
+        choice === "search"
+          ? "search"
+          : choice === "rail"
+            ? "Settings"
+            : "play",
+      );
+      // Let the existing 40 ms navigation autofocus pass finish as well.
+      await page.waitForTimeout(100);
+      await expect(expected).toBeFocused();
+    }
+  });
+}
+
 for (const entry of ["native", "pointer", "controller"] as const) {
   test(`${entry} Settings entry focuses preferences and preserves Library return`, async () => {
     const page = await launch();
