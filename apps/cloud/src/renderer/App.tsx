@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   AppSettings,
   AppSnapshot,
@@ -27,6 +34,11 @@ import { StreamRecovery, type RecoveryState } from "./recovery";
 
 type Page = "cloud" | "diagnostics" | "settings";
 const CLOUD_PAGE_SIZE = 48;
+interface LibraryBrowseState {
+  query: string;
+  recentOnly: boolean;
+  visibleCount: number;
+}
 const GAMEPAD_BUTTON_LABELS = [
   "A",
   "B",
@@ -146,6 +158,12 @@ function DemoNotice({
 export function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | undefined>(undefined);
   const [page, setPage] = useState<Page>("cloud");
+  const [libraryBrowse, setLibraryBrowse] = useState<LibraryBrowseState>({
+    query: "",
+    recentOnly: false,
+    visibleCount: CLOUD_PAGE_SIZE,
+  });
+  const libraryFocus = useRef("");
   const [searchRequested, setSearchRequested] = useState(false);
   const [descriptor, setDescriptor] = useState<StreamDescriptor | undefined>(
     undefined,
@@ -206,6 +224,17 @@ export function App() {
   }, [recovery]);
 
   const signedIn = snapshot?.auth.status === "signed-in";
+  useEffect(() => {
+    if (!snapshot || snapshot.auth.status === "signed-in") return;
+    libraryFocus.current = "";
+    setLibraryBrowse((current) =>
+      !current.query &&
+      !current.recentOnly &&
+      current.visibleCount === CLOUD_PAGE_SIZE
+        ? current
+        : { query: "", recentOnly: false, visibleCount: CLOUD_PAGE_SIZE },
+    );
+  }, [snapshot?.auth.status]);
   const inStream = Boolean(descriptor) && snapshot?.session.phase !== "error";
   const focusScope =
     page === "cloud" ? `${page}:${snapshot?.cloud.status}` : page;
@@ -338,11 +367,11 @@ export function App() {
           {page === "settings" ? (
             <SettingsPage
               snapshot={snapshot}
-              onReviewSetup={() => {
-                setPage("cloud");
-                void window.afterglideCloud.updateSettings({
+              onReviewSetup={async () => {
+                await window.afterglideCloud.updateSettings({
                   onboardingComplete: false,
                 });
+                setPage("cloud");
               }}
             />
           ) : (
@@ -429,17 +458,24 @@ export function App() {
     return (
       <Shell snapshot={snapshot} page={page} onPage={setPage}>
         {page === "cloud" && (
-          <CloudPage snapshot={snapshot} onPlay={startCloudStream} />
+          <CloudPage
+            snapshot={snapshot}
+            onPlay={startCloudStream}
+            browse={libraryBrowse}
+            onBrowse={setLibraryBrowse}
+            focusTarget={libraryFocus}
+            focusSearch={searchRequested}
+          />
         )}
         {page === "diagnostics" && <DiagnosticsPage snapshot={snapshot} />}
         {page === "settings" && (
           <SettingsPage
             snapshot={snapshot}
-            onReviewSetup={() => {
-              setPage("cloud");
-              void window.afterglideCloud.updateSettings({
+            onReviewSetup={async () => {
+              await window.afterglideCloud.updateSettings({
                 onboardingComplete: false,
               });
+              setPage("cloud");
             }}
           />
         )}
@@ -872,13 +908,45 @@ function Shell({
 function CloudPage({
   snapshot,
   onPlay,
+  browse,
+  onBrowse,
+  focusTarget,
+  focusSearch,
 }: {
   snapshot: AppSnapshot;
   onPlay: (titleId: string) => Promise<void>;
+  browse: LibraryBrowseState;
+  onBrowse: Dispatch<SetStateAction<LibraryBrowseState>>;
+  focusTarget: MutableRefObject<string>;
+  focusSearch: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const [recentOnly, setRecentOnly] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(CLOUD_PAGE_SIZE);
+  const { query, recentOnly, visibleCount } = browse;
+  const setQuery = (value: string) =>
+    onBrowse((current) => ({
+      ...current,
+      query: value,
+      visibleCount: CLOUD_PAGE_SIZE,
+    }));
+  const setRecentOnly = (value: boolean) =>
+    onBrowse((current) => ({
+      ...current,
+      recentOnly: value,
+      visibleCount: CLOUD_PAGE_SIZE,
+    }));
+  const [searchAttempt, setSearchAttempt] = useState(0);
+  const section = useRef<HTMLElement>(null);
+  const returnFocus = useRef(focusSearch ? "search" : focusTarget.current);
+  useLayoutEffect(() => {
+    if (!returnFocus.current) return;
+    const frame = requestAnimationFrame(() => {
+      section.current
+        ?.querySelector<HTMLElement>(
+          `[data-library-focus="${CSS.escape(returnFocus.current)}"]`,
+        )
+        ?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const [search, setSearch] = useState<{
     query: string;
     status: "loading" | "ready" | "error";
@@ -914,7 +982,7 @@ function CloudPage({
       clearTimeout(timer);
       void window.afterglideCloud.cancelCloudSearch().catch(() => {});
     };
-  }, [query]);
+  }, [query, searchAttempt]);
   const searchInput = useRef<HTMLInputElement>(null);
   const selected = snapshot.cloud.titles.find(
     (title) => title.id === snapshot.cloud.selectedTitleId,
@@ -941,10 +1009,15 @@ function CloudPage({
       : localMatches;
   const visibleTitles = filtered.slice(0, visibleCount);
 
-  useEffect(() => setVisibleCount(CLOUD_PAGE_SIZE), [query, recentOnly]);
-
   return (
-    <section className="page cloud-page">
+    <section
+      ref={section}
+      className="page cloud-page"
+      onFocusCapture={(event) => {
+        const key = (event.target as HTMLElement).dataset.libraryFocus;
+        if (key) focusTarget.current = key;
+      }}
+    >
       <div className="cloud-heading">
         <div className="page-heading">
           <h1>Your cloud library.</h1>
@@ -959,6 +1032,7 @@ function CloudPage({
             <input
               ref={searchInput}
               id="cloud-game-search"
+              data-library-focus="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search games"
@@ -969,6 +1043,7 @@ function CloudPage({
               <button
                 type="button"
                 aria-label="Clear game search"
+                data-library-focus="clear-search"
                 data-focusable
                 onClick={() => {
                   setQuery("");
@@ -987,6 +1062,7 @@ function CloudPage({
           <button
             data-focusable
             aria-pressed={!recentOnly}
+            data-library-focus="all-games"
             className={!recentOnly ? "active" : ""}
             onClick={() => setRecentOnly(false)}
           >
@@ -995,6 +1071,7 @@ function CloudPage({
           <button
             data-focusable
             aria-pressed={recentOnly}
+            data-library-focus="recent-games"
             className={recentOnly ? "active" : ""}
             onClick={() => setRecentOnly(true)}
           >
@@ -1008,6 +1085,7 @@ function CloudPage({
             snapshot.cloud.status === "loading" || snapshot.cloud.hydrating
           }
           onClick={() => void window.afterglideCloud.refreshCloudTitles()}
+          data-library-focus="refresh"
         >
           <Icon name="refresh" /> Refresh library
         </button>
@@ -1035,9 +1113,19 @@ function CloudPage({
         </p>
       )}
       {query.trim() && search?.status === "error" && (
-        <p className="inline-error" role="status">
-          {search.error}
-        </p>
+        <div className="search-error">
+          <p className="inline-error" role="alert">
+            {search.error}
+          </p>
+          <button
+            className="text-action"
+            data-focusable
+            data-library-focus="retry-search"
+            onClick={() => setSearchAttempt((attempt) => attempt + 1)}
+          >
+            Retry search
+          </button>
+        </div>
       )}
       {(snapshot.cloud.status === "unavailable" ||
         snapshot.cloud.status === "error") && (
@@ -1066,7 +1154,7 @@ function CloudPage({
 
       {snapshot.cloud.status === "ready" && selected && !query.trim() && (
         <article className="cloud-feature">
-          <GameArtwork title={selected} featured />
+          <GameArtwork key={selected.imageUrl} title={selected} featured />
           <div className="cloud-feature-copy">
             <h2>{selected.name}</h2>
             <p>{selected.publisher}</p>
@@ -1076,6 +1164,7 @@ function CloudPage({
           </div>
           <button
             className="primary-action cloud-play"
+            data-library-focus="play"
             data-focusable
             data-autofocus
             disabled={!navigator.onLine}
@@ -1107,9 +1196,11 @@ function CloudPage({
           {filtered.length === 0 ? (
             <p className="cloud-empty">
               {query
-                ? search?.status !== "ready"
-                  ? `Checking all cloud games for “${query}”…`
-                  : `No games match “${query}”.`
+                ? search?.status === "error"
+                  ? "No games from your loaded library match this search. Retry to check all cloud games."
+                  : search?.status !== "ready"
+                    ? `Checking all cloud games for “${query}”…`
+                    : `No games match “${query}”.`
                 : recentOnly
                   ? "No recently played games yet. Choose All games to explore."
                   : "No cloud games are currently available for this account."}
@@ -1120,6 +1211,7 @@ function CloudPage({
                 {visibleTitles.map((title) => (
                   <button
                     key={title.id}
+                    data-library-focus={`game:${title.id}`}
                     className={title.id === selected?.id ? "selected" : ""}
                     data-focusable
                     aria-pressed={title.id === selected?.id}
@@ -1132,7 +1224,7 @@ function CloudPage({
                     onDoubleClick={() => void onPlay(title.id)}
                     aria-label={`${title.name}, ${title.publisher}`}
                   >
-                    <GameArtwork title={title} />
+                    <GameArtwork key={title.imageUrl} title={title} />
                     <strong>{title.name}</strong>
                     <span>{title.publisher}</span>
                   </button>
@@ -1141,9 +1233,13 @@ function CloudPage({
               {visibleTitles.length < filtered.length && (
                 <button
                   className="secondary-action cloud-load-more"
+                  data-library-focus="load-more"
                   data-focusable
                   onClick={() =>
-                    setVisibleCount((count) => count + CLOUD_PAGE_SIZE)
+                    onBrowse((current) => ({
+                      ...current,
+                      visibleCount: current.visibleCount + CLOUD_PAGE_SIZE,
+                    }))
                   }
                 >
                   {`Show ${Math.min(
@@ -1167,13 +1263,15 @@ function GameArtwork({
   title: CloudTitle;
   featured?: boolean;
 }) {
-  return title.imageUrl ? (
+  const [failedUrl, setFailedUrl] = useState<string>();
+  return title.imageUrl && failedUrl !== title.imageUrl ? (
     <img
       className={featured ? "featured-art" : "game-art"}
       src={title.imageUrl}
       alt=""
       loading={featured ? "eager" : "lazy"}
       referrerPolicy="no-referrer"
+      onError={() => setFailedUrl(title.imageUrl)}
     />
   ) : (
     <div
@@ -2109,10 +2207,82 @@ function SettingsPage({
   onReviewSetup,
 }: {
   snapshot: AppSnapshot;
-  onReviewSetup: () => void;
+  onReviewSetup: () => Promise<void>;
 }) {
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const pendingSave = useRef(false);
+  const retrySave = useRef<(() => Promise<void>) | undefined>(undefined);
+  const retryOrigin = useRef<HTMLElement | undefined>(undefined);
+  const focusCleanup = useRef<() => void>(() => {});
+  const restoreSavedFocus = useRef<(() => void) | undefined>(undefined);
+  const [saveCompletion, setSaveCompletion] = useState(0);
+  useEffect(() => () => focusCleanup.current(), []);
+  useLayoutEffect(() => {
+    if (saveState === "saving") return;
+    const restore = restoreSavedFocus.current;
+    restoreSavedFocus.current = undefined;
+    restore?.();
+  }, [saveState, saveCompletion]);
+  const save = async (
+    operation: () => Promise<void>,
+    previousOrigin?: HTMLElement,
+  ) => {
+    if (pendingSave.current) return;
+    focusCleanup.current();
+    const initiator = document.activeElement;
+    const origin =
+      previousOrigin ??
+      (initiator instanceof HTMLElement ? initiator : undefined);
+    retryOrigin.current = origin;
+    let focusMoved = false;
+    const onFocus = (event: FocusEvent) => {
+      if (event.target !== initiator && event.target !== origin)
+        focusMoved = true;
+    };
+    const onBlur = () => {
+      focusMoved = true;
+    };
+    const cleanup = () => {
+      document.removeEventListener("focusin", onFocus);
+      window.removeEventListener("blur", onBlur);
+    };
+    focusCleanup.current = cleanup;
+    document.addEventListener("focusin", onFocus);
+    window.addEventListener("blur", onBlur);
+    pendingSave.current = true;
+    retrySave.current = operation;
+    setSaveState("saving");
+    try {
+      await operation();
+      setSaveState("saved");
+      retrySave.current = undefined;
+    } catch {
+      setSaveState("error");
+    } finally {
+      pendingSave.current = false;
+      // Run after React has committed the enabled fieldset, including fast IPC
+      // and unchanged-value replies that can finish before the next frame.
+      restoreSavedFocus.current = () => {
+        cleanup();
+        if (
+          !focusMoved &&
+          origin?.isConnected &&
+          !origin.matches(":disabled") &&
+          document.hasFocus() &&
+          (document.activeElement === document.body ||
+            document.activeElement === initiator ||
+            document.activeElement === origin)
+        ) {
+          origin.focus({ preventScroll: true });
+        }
+      };
+      setSaveCompletion((completion) => completion + 1);
+    }
+  };
   const update = (settings: Partial<AppSettings>) =>
-    void window.afterglideCloud.updateSettings(settings);
+    void save(() => window.afterglideCloud.updateSettings(settings));
   const controllers = useControllerDiagnostics();
   const controllerIds = Array.from(
     new Map(
@@ -2161,7 +2331,35 @@ function SettingsPage({
         <h1>Settings</h1>
         <p>Controller and playback preferences for Windows and macOS.</p>
       </div>
-      <div className="settings-list">
+      <div className="settings-save-status">
+        <p role={saveState === "error" ? "alert" : "status"}>
+          {saveState === "saving"
+            ? "Saving settings."
+            : saveState === "saved"
+              ? "Settings saved."
+              : saveState === "error"
+                ? "Settings couldn't be saved. Your previous settings are still active."
+                : "Changes save automatically."}
+        </p>
+        {saveState === "error" && (
+          <button
+            className="text-action"
+            data-focusable
+            onClick={() => {
+              if (retrySave.current)
+                void save(retrySave.current, retryOrigin.current);
+            }}
+          >
+            Retry saving
+          </button>
+        )}
+      </div>
+      <fieldset
+        className="settings-list"
+        disabled={saveState === "saving"}
+        aria-label="Playback and controller preferences"
+        aria-busy={saveState === "saving"}
+      >
         <SettingRow
           icon="display"
           title="Stream quality"
@@ -2472,12 +2670,12 @@ function SettingsPage({
           <button
             className="secondary-action compact-action"
             data-focusable
-            onClick={onReviewSetup}
+            onClick={() => void save(onReviewSetup)}
           >
             Review setup
           </button>
         </SettingRow>
-      </div>
+      </fieldset>
       <div className="account-row">
         <div>
           <span>MICROSOFT ACCOUNT</span>
