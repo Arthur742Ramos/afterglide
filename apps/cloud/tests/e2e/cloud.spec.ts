@@ -405,9 +405,11 @@ test("Settings returns to the same Library search, filter, page and focus", asyn
 });
 
 for (const choice of ["search", "rail", "restore"] as const) {
-  test(`Library return preserves ${choice} focus when its restore frame is delayed`, async () => {
+  test(`Library return preserves ${choice} focus before the next renderer frame`, async () => {
     const page = await launch();
-    const playAgain = page.getByRole("button", { name: /Play again/ });
+    const lastGame = page.locator(".game-grid button").last();
+    await expect(page.locator(".game-grid button")).toHaveCount(3);
+    const savedFocus = await lastGame.getAttribute("data-library-focus");
     const search = page.getByRole("textbox", { name: "Search cloud games" });
     const settings = page.getByRole("button", {
       name: "Settings",
@@ -415,13 +417,13 @@ for (const choice of ["search", "rail", "restore"] as const) {
     });
     for (const factor of [1, 2]) {
       await zoom(page, factor);
-      await playAgain.focus();
+      await lastGame.focus();
       await settings.click();
       await expect(
         page.getByRole("switch", { name: "Performance overlay" }),
       ).toBeFocused();
-      // Hold renderer frames so a newer focus choice deterministically lands
-      // between the Library commit and its deferred return-focus callback.
+      // Hold renderer frames to exercise an early focus choice before any
+      // deferred callbacks can overwrite it (the former restoration did so).
       await page.evaluate(() => {
         const request = window.requestAnimationFrame;
         const cancel = window.cancelAnimationFrame;
@@ -438,11 +440,9 @@ for (const choice of ["search", "rail", "restore"] as const) {
           releaseLibraryFrames: () => {
             window.requestAnimationFrame = request;
             window.cancelAnimationFrame = cancel;
-            const count = frames.size;
             for (const callback of frames.values()) callback(performance.now());
             frames.clear();
             Reflect.deleteProperty(window, "releaseLibraryFrames");
-            return count;
           },
         });
       });
@@ -451,27 +451,25 @@ for (const choice of ["search", "rail", "restore"] as const) {
       if (choice === "search") await search.focus();
       if (choice === "rail") await settings.focus();
       const expected =
-        choice === "search" ? search : choice === "rail" ? settings : playAgain;
+        choice === "search" ? search : choice === "rail" ? settings : lastGame;
       if (choice !== "restore") await expect(expected).toBeFocused();
       const restored = await page.evaluate(() => {
-        const frames = (
-          window as unknown as { releaseLibraryFrames: () => number }
+        (
+          window as unknown as { releaseLibraryFrames: () => void }
         ).releaseLibraryFrames();
         const active = document.activeElement as HTMLElement;
         return {
-          frames,
           focus:
             active.dataset.libraryFocus ?? active.getAttribute("aria-label"),
         };
       });
-      expect(restored.frames).toBeGreaterThan(0);
       // Check the immediate outcome: polling must not hide a focus override.
       expect(restored.focus).toBe(
         choice === "search"
           ? "search"
           : choice === "rail"
             ? "Settings"
-            : "play",
+            : savedFocus,
       );
       // Let the existing 40 ms navigation autofocus pass finish as well.
       await page.waitForTimeout(100);
@@ -1177,7 +1175,11 @@ async function reachable(
   // must preserve this newer choice instead of scrolling to its default.
   await action.focus();
   await expect(action).toBeFocused();
-  await action.scrollIntoViewIfNeeded();
+  // Center the control rather than leaving it on a fractional CSS-pixel edge
+  // at desktop zoom. Keep the full-viewport and hit-testing assertions below.
+  await action.evaluate((element) =>
+    element.scrollIntoView({ block: "center", inline: "center" }),
+  );
   await expect(action).toBeInViewport({ ratio: 1 });
   await expect(action).toBeFocused();
   expect(

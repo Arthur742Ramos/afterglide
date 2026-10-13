@@ -69,6 +69,7 @@ export function useControllerNavigation(
   preferredControllerId = "",
 ): void {
   const previousScope = useRef<string | undefined>(undefined);
+  const previousFocusables = useRef<HTMLElement[]>([]);
   useEffect(() => {
     if (!enabled) return;
     const scopeChanged =
@@ -82,6 +83,12 @@ export function useControllerNavigation(
           "[data-focusable]:not([disabled])",
         ),
       ).filter((element) => element.offsetParent !== null);
+    // A restored control in the new page already owns focus. Only force entry
+    // away from controls carried over from the previous scope, such as the rail.
+    const needsScopeFocus =
+      scopeChanged &&
+      previousFocusables.current.includes(startingFocus as HTMLElement);
+    previousFocusables.current = focusables();
 
     const perform = (action: string): void => {
       if (action === "accept") {
@@ -162,7 +169,7 @@ export function useControllerNavigation(
     const initial = window.setTimeout(() => {
       const items = focusables();
       if (
-        (!scopeChanged || document.activeElement !== startingFocus) &&
+        (!needsScopeFocus || document.activeElement !== startingFocus) &&
         (items.includes(document.activeElement as HTMLElement) ||
           isTextEntry(document.activeElement))
       )
