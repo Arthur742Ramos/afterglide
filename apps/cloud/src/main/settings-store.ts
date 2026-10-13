@@ -32,25 +32,28 @@ export class SettingsStore {
 
   updateSettings(update: Partial<AppSettings>): AppSettings {
     const current = this.settings;
-    this.state.settings = {
+    const settings = {
       ...current,
       ...sanitizeSettingsUpdate(update, current),
     };
-    this.save();
+    if (JSON.stringify(settings) === JSON.stringify(current)) return current;
+    this.save({ ...this.state, settings });
     return this.settings;
   }
 
   setSelectedTitle(id: string | undefined): void {
-    this.state.selectedTitleId = id;
-    this.save();
+    if (this.state.selectedTitleId === id) return;
+    this.save({ ...this.state, selectedTitleId: id });
   }
 
-  private save(): void {
+  private save(next: StoredPreferences): void {
     mkdirSync(dirname(this.path), { recursive: true });
     const temporary = `${this.path}.tmp`;
-    writeFileSync(temporary, JSON.stringify(this.state, null, 2), {
+    writeFileSync(temporary, JSON.stringify(next, null, 2), {
       mode: 0o600,
     });
     renameSync(temporary, this.path);
+    // Publish memory only after the atomic disk commit succeeds.
+    this.state = next;
   }
 }
