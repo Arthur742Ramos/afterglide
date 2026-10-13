@@ -62,6 +62,8 @@ This builds one development DMG for the native Node architecture and never notar
 
 Xbox negotiates quality. There are no forced bitrate, resolution or latency promises, and no alternate-device impersonation for a quality preset. The overlay reports received resolution, FPS, RTT, loss, bitrate, decoder and frame pacing where available. RTT is a network measure, not input-to-photon latency.
 
+See the [performance measurement procedure](docs/PERFORMANCE-CAMPAIGN.md), [operation budgets and cancellation limits](docs/OPERATION-LIMITS.md) and [native/live-stream qualification gates](docs/NATIVE-QUALIFICATION.md) for the evidence required before performance or distribution claims.
+
 ## Verify and package
 
 ```sh
