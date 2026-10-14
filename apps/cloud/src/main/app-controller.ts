@@ -63,6 +63,9 @@ export class AppController {
     hardware: HardwareInfo,
     private readonly version: string,
     private readonly releaseChecker?: ReleaseCheckPort,
+    private readonly onSessionPhaseChanged?: (
+      phase: AppSnapshot["session"]["phase"],
+    ) => void,
   ) {
     this.snapshot = {
       revision: 0,
@@ -112,6 +115,10 @@ export class AppController {
 
   getSnapshot(): AppSnapshot {
     return structuredClone(this.snapshot);
+  }
+
+  getSessionPhase(): AppSnapshot["session"]["phase"] {
+    return this.snapshot.session.phase;
   }
 
   async beginSignIn(): Promise<void> {
@@ -891,11 +898,14 @@ export class AppController {
   }
 
   private patch(update: Partial<AppSnapshot>): void {
+    const previousPhase = this.snapshot.session.phase;
     this.snapshot = {
       ...this.snapshot,
       ...update,
       revision: this.snapshot.revision + 1,
     };
+    if (this.snapshot.session.phase !== previousPhase)
+      this.onSessionPhaseChanged?.(this.snapshot.session.phase);
     if (!this.window || this.window.isDestroyed()) return;
     const { cloud, ...state } = this.snapshot;
     const { titles, ...metadata } = cloud;

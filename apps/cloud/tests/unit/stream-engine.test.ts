@@ -246,6 +246,86 @@ function actuator() {
 }
 
 describe("real stream engine input lifecycle", () => {
+  it("retains stall backoff across waiting ticks, failed stats and hidden playback", async () => {
+    let at = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => at);
+    const receivers = ["video", "audio"].map((kind) => ({
+      jitterBufferTarget: null as number | null,
+      track: { kind, stop() {} },
+    })) as unknown as RTCRtpReceiver[];
+    peer.receivers = receivers;
+    for (const receiver of receivers)
+      peer.dispatchEvent(
+        Object.assign(new Event("track"), {
+          receiver,
+          track: receiver.track,
+          streams: [{}],
+        }),
+      );
+    ready();
+    engine.setInputSuspended(true);
+    media[0].dispatchEvent(new Event("playing"));
+    peer.stats.set("t", {
+      id: "t",
+      type: "transport",
+      selectedCandidatePairId: "p",
+    });
+    peer.stats.set("p", {
+      id: "p",
+      type: "candidate-pair",
+      currentRoundTripTime: 0.035,
+    });
+    let second = -1;
+    const tick = async () => {
+      at = ++second * 1000;
+      peer.stats.set("v", {
+        id: "v",
+        type: "inbound-rtp",
+        kind: "video",
+        timestamp: at,
+        framesDecoded: second * 60,
+        packetsReceived: second * 100,
+        packetsLost: 0,
+        bytesReceived: second * 10000,
+        jitter: 0.002,
+        freezeCount: 0,
+        framesDropped: 0,
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+    };
+    const targets = () =>
+      receivers.map((receiver) => receiver.jitterBufferTarget);
+    for (let i = 0; i <= 11; i++) await tick();
+    expect(targets()).toEqual([0, 0]);
+    media[0].dispatchEvent(new Event("waiting"));
+    expect(targets()).toEqual([null, null]);
+    for (let i = 0; i < 3; i++) {
+      media[0].dispatchEvent(new Event("waiting"));
+      await tick();
+    }
+    const stats = vi
+      .spyOn(peer, "getStats")
+      .mockRejectedValueOnce(new Error("Unavailable"));
+    await tick();
+    stats.mockRestore();
+    doc.visibilityState = "hidden";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    await tick();
+    doc.visibilityState = "visible";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    media[0].dispatchEvent(new Event("playing"));
+    await tick(); // New baseline after suspension.
+    await tick(); // Start the healthy window.
+    for (let i = 1; i < 20; i++) {
+      await tick();
+      expect(targets()).toEqual([null, null]);
+    }
+    await tick();
+    expect(targets()).toEqual([0, 0]);
+    expect(onError).not.toHaveBeenCalled();
+    expect(onInterrupted).not.toHaveBeenCalled();
+  });
+
   it.each(["waiting", "hidden", "disconnected", "stats-failure"] as const)(
     "keeps both receivers automatic on startup, adapts after healthy video, and resets on %s",
     async (reason) => {

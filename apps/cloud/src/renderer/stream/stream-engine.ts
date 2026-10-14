@@ -203,7 +203,9 @@ export class XboxStreamEngine {
     for (const event of ["waiting", "pause", "ended"]) {
       this.video.addEventListener(event, () => {
         this.videoPlaying = false;
-        this.resetPlayout();
+        this.suspendPlayout(
+          event === "waiting" && document.visibilityState === "visible",
+        );
       });
     }
 
@@ -423,8 +425,8 @@ export class XboxStreamEngine {
     this.options.container.replaceChildren();
   }
 
-  private resetPlayout(): void {
-    this.playout.reset();
+  private suspendPlayout(mediaDisturbance = false): void {
+    this.playout.suspend(mediaDisturbance);
     for (const receiver of this.mediaReceivers)
       applyPlayoutTarget(receiver, null);
   }
@@ -453,7 +455,7 @@ export class XboxStreamEngine {
     }
     if (this.connected && this.peer.connectionState === "disconnected") {
       this.transportDisconnected = true;
-      this.resetPlayout();
+      this.suspendPlayout();
       this.releaseInput();
       clearTimeout(this.disconnectedTimer);
       this.disconnectedTimer = window.setTimeout(() => {
@@ -462,7 +464,7 @@ export class XboxStreamEngine {
       }, NETWORK_POLICY.disconnectedGraceMs);
     }
     if (this.connected && this.peer.connectionState === "failed") {
-      this.resetPlayout();
+      this.suspendPlayout();
       this.notifyInterrupted();
     }
     if (!this.connected && this.peer.connectionState === "failed")
@@ -775,7 +777,7 @@ export class XboxStreamEngine {
 
   private onVisibilityChange = (): void => {
     if (document.visibilityState !== "visible") {
-      this.resetPlayout();
+      this.suspendPlayout();
       this.controlsShortcut.reset();
       this.releaseInput();
     } else this.primeControllerRelease();
@@ -975,7 +977,7 @@ export class XboxStreamEngine {
         document.visibilityState === "visible"
       )
         this.playout.update(sample.video, telemetry, sample.observedAt);
-      else this.playout.reset();
+      else this.playout.suspend();
       for (const receiver of this.mediaReceivers)
         applyPlayoutTarget(receiver, this.playout.target);
       this.options.onTelemetry({
@@ -990,7 +992,7 @@ export class XboxStreamEngine {
       this.previousStats = sample;
     } catch {
       // A stats failure during shutdown must not interrupt play or reject unhandled.
-      if (!this.destroyed && !this.terminal) this.resetPlayout();
+      if (!this.destroyed && !this.terminal) this.suspendPlayout();
     } finally {
       this.telemetryCollecting = false;
     }
@@ -1148,6 +1150,24 @@ function chooseInputUpdate(
     : undefined;
 }
 
+const gamepadButtonMasks: ReadonlyArray<readonly [ButtonName, number]> = [
+  ["Nexus", 2],
+  ["Menu", 4],
+  ["View", 8],
+  ["A", 16],
+  ["B", 32],
+  ["X", 64],
+  ["Y", 128],
+  ["DPadUp", 256],
+  ["DPadDown", 512],
+  ["DPadLeft", 1_024],
+  ["DPadRight", 2_048],
+  ["LeftShoulder", 4_096],
+  ["RightShoulder", 8_192],
+  ["LeftThumb", 16_384],
+  ["RightThumb", 32_768],
+];
+
 function writeGamepad(
   packet: DataView,
   offset: number,
@@ -1155,24 +1175,7 @@ function writeGamepad(
 ): void {
   packet.setUint8(offset, frame.GamepadIndex);
   let mask = 0;
-  const masks: Array<[ButtonName, number]> = [
-    ["Nexus", 2],
-    ["Menu", 4],
-    ["View", 8],
-    ["A", 16],
-    ["B", 32],
-    ["X", 64],
-    ["Y", 128],
-    ["DPadUp", 256],
-    ["DPadDown", 512],
-    ["DPadLeft", 1_024],
-    ["DPadRight", 2_048],
-    ["LeftShoulder", 4_096],
-    ["RightShoulder", 8_192],
-    ["LeftThumb", 16_384],
-    ["RightThumb", 32_768],
-  ];
-  masks.forEach(([name, value]) => {
+  gamepadButtonMasks.forEach(([name, value]) => {
     if (frame[name] > 0) mask |= value;
   });
   packet.setUint16(offset + 1, mask, true);

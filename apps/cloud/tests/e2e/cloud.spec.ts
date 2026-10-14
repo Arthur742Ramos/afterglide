@@ -60,6 +60,47 @@ test.afterEach(async () => {
   expect(errors).toEqual([]);
 });
 
+test("display-sleep protection starts during pending provisioning and releases on cancel", async () => {
+  const page = await launch("pending-cloud-launch");
+  await app.evaluate(({ powerSaveBlocker }) => {
+    const ids: number[] = [];
+    const start = powerSaveBlocker.start.bind(powerSaveBlocker);
+    powerSaveBlocker.start = (type) => {
+      const id = start(type);
+      ids.push(id);
+      return id;
+    };
+    (
+      globalThis as unknown as { streamSleepBlockers: number[] }
+    ).streamSleepBlockers = ids;
+  });
+  await page.getByRole("button", { name: /Play again/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      async () => (await window.afterglideCloud.getSnapshot()).session.phase,
+    ),
+  ).toBe("provisioning");
+  expect(
+    await app.evaluate(({ powerSaveBlocker }) => {
+      const ids = (globalThis as unknown as { streamSleepBlockers: number[] })
+        .streamSleepBlockers;
+      return ids.length === 1 && powerSaveBlocker.isStarted(ids[0]);
+    }),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
+  expect(
+    await app.evaluate(({ powerSaveBlocker }) =>
+      (
+        globalThis as unknown as { streamSleepBlockers: number[] }
+      ).streamSleepBlockers.every((id) => !powerSaveBlocker.isStarted(id)),
+    ),
+  ).toBe(true);
+});
+
 test("the FPS pipeline is readable in the overlay and Health at desktop and large zoom", async () => {
   const page = await launch();
   await play(page);

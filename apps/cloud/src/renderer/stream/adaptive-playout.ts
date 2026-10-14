@@ -31,10 +31,25 @@ export class AdaptivePlayoutPolicy {
   private mediaDisturbances = 0;
 
   reset(): void {
-    this.target = null;
-    this.baseline = undefined;
-    this.healthySince = undefined;
+    this.suspend();
     this.mediaDisturbances = 0;
+  }
+
+  /** Restart observations without forgetting earlier low-delay disturbances. */
+  suspend(mediaDisturbance = false): void {
+    this.automatic(mediaDisturbance);
+    this.baseline = undefined;
+  }
+
+  private automatic(mediaDisturbance: boolean): void {
+    // Only the first fallback from low delay counts, even across repeated waits.
+    if (this.target === 0 && mediaDisturbance)
+      this.mediaDisturbances = Math.min(
+        PLAYOUT_POLICY.maxBackoffExponent,
+        this.mediaDisturbances + 1,
+      );
+    this.target = null;
+    this.healthySince = undefined;
   }
 
   update(
@@ -53,7 +68,7 @@ export class AdaptivePlayoutPolicy {
       frames === undefined ||
       !Number.isFinite(observedAt)
     ) {
-      this.reset();
+      this.suspend();
       return;
     }
     const current: Baseline = {
@@ -88,14 +103,7 @@ export class AdaptivePlayoutPolicy {
       ) &&
       within(telemetry.roundTripMs, PLAYOUT_POLICY.maxHealthyRoundTripMs);
     if (!healthy) {
-      if (this.target === 0 && !mediaHealthy) {
-        this.mediaDisturbances = Math.min(
-          PLAYOUT_POLICY.maxBackoffExponent,
-          this.mediaDisturbances + 1,
-        );
-      }
-      this.target = null;
-      this.healthySince = undefined;
+      this.automatic(!mediaHealthy);
       return;
     }
     this.healthySince ??= observedAt;

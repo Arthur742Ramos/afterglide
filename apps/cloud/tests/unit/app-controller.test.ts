@@ -17,6 +17,7 @@ import type {
 } from "../../src/main/platform-service";
 import { SettingsStore } from "../../src/main/settings-store";
 import { emptyTelemetry } from "../../src/shared/contracts";
+import { syncDisplaySleepBlocker } from "../../src/main/desktop-policy";
 
 let directory = "";
 afterEach(() => {
@@ -101,7 +102,10 @@ class FakePlatform implements PlatformService {
   async stopSession() {}
 }
 
-function makeController(platform: FakePlatform) {
+function makeController(
+  platform: FakePlatform,
+  onPhase?: ConstructorParameters<typeof AppController>[5],
+) {
   directory = mkdtempSync(join(tmpdir(), "afterglide-controller-"));
   return new AppController(
     platform,
@@ -117,10 +121,111 @@ function makeController(platform: FakePlatform) {
       },
     },
     "test",
+    undefined,
+    onPhase,
   );
 }
 
 describe("AppController", () => {
+  it.each(["cancel", "failure"] as const)(
+    "holds display-sleep protection before creation settles, then releases on %s",
+    async (outcome) => {
+      const platform = new FakePlatform();
+      const active = new Set<number>();
+      const blocker = {
+        start: vi.fn(() => {
+          active.add(1);
+          return 1;
+        }),
+        stop: vi.fn((id: number) => {
+          active.delete(id);
+        }),
+        isStarted: (id: number) => active.has(id),
+      };
+      let id: number | undefined;
+      const phases: string[] = [];
+      const controller = makeController(platform, (phase) => {
+        phases.push(phase);
+        expect(controller.getSessionPhase()).toBe(phase);
+        id = syncDisplaySleepBlocker(phase, id, blocker);
+      });
+      await controller.initialize();
+      let resolve!: (value: { sessionId: string; sessionPath: string }) => void;
+      let reject!: (error: Error) => void;
+      const pending = new Promise<{ sessionId: string; sessionPath: string }>(
+        (yes, no) => {
+          resolve = yes;
+          reject = no;
+        },
+      );
+      vi.spyOn(platform, "startSession").mockImplementation(() => {
+        expect(active.has(1)).toBe(true);
+        return pending;
+      });
+      const stop = vi.spyOn(platform, "stopSession");
+      const starting = controller.startCloudStream("cloud-game");
+      const rejected = expect(starting).rejects.toThrow();
+      expect(phases).toEqual(["provisioning"]);
+      expect(blocker.start).toHaveBeenCalledTimes(1);
+      if (outcome === "cancel") {
+        await controller.stopStream();
+        expect(active.size).toBe(0);
+        resolve({ sessionId: "late", sessionPath: "late-path" });
+      } else reject(new Error("Synthetic creation failure"));
+      await rejected;
+      expect(active.size).toBe(0);
+      expect(phases.at(-1)).toBe(outcome === "cancel" ? "idle" : "error");
+      expect(blocker.stop).toHaveBeenCalledTimes(1);
+      expect(blocker.start).toHaveBeenCalledTimes(1);
+      if (outcome === "cancel")
+        await vi.waitFor(() =>
+          expect(stop).toHaveBeenCalledWith("late-path", "late"),
+        );
+    },
+  );
+
+  it("holds one blocker through provisioning, authorization, negotiation and recovery", async () => {
+    const platform = new FakePlatform();
+    const active = new Set<number>();
+    const blocker = {
+      start: vi.fn(() => {
+        active.add(1);
+        return 1;
+      }),
+      stop: vi.fn((id: number) => {
+        active.delete(id);
+      }),
+      isStarted: (id: number) => active.has(id),
+    };
+    let id: number | undefined;
+    const phases: string[] = [];
+    const controller = makeController(platform, (phase) => {
+      phases.push(phase);
+      id = syncDisplaySleepBlocker(phase, id, blocker);
+    });
+    await controller.initialize();
+    vi.spyOn(platform, "authorizeSession").mockImplementation(async () => {
+      expect(controller.getSessionPhase()).toBe("authorizing");
+      expect(active.has(1)).toBe(true);
+    });
+    await controller.startCloudStream("cloud-game");
+    expect(active.has(1)).toBe(true);
+    await controller.reportStreamEvent("session", "connected");
+    await controller.reportStreamEvent("session", "interrupted");
+    expect(active.has(1)).toBe(true);
+    expect(phases).toEqual([
+      "provisioning",
+      "authorizing",
+      "negotiating",
+      "streaming",
+      "recovering",
+    ]);
+    expect(blocker.start).toHaveBeenCalledTimes(1);
+    await controller.stopStream();
+    expect(blocker.stop).toHaveBeenCalledTimes(1);
+    expect(active.size).toBe(0);
+  });
+
   it("adds an unloaded search match for launch and discards results after sign-out", async () => {
     const platform = new FakePlatform();
     const controller = makeController(platform);
