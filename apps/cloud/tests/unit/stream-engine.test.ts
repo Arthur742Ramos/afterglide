@@ -396,10 +396,24 @@ describe("real stream engine input lifecycle", () => {
     expect(onInterrupted).not.toHaveBeenCalled();
   });
 
-  it.each(["waiting", "hidden", "disconnected", "stats-failure"] as const)(
+  it.each([
+    "waiting",
+    "hidden",
+    "disconnected",
+    "stats-failure",
+    "playback-drop",
+    "receiver-drop",
+    "unavailable-playback-counter",
+  ] as const)(
     "keeps both receivers automatic on startup, adapts after healthy video, and resets on %s",
     async (reason) => {
       let at = 0;
+      let playbackDrops = 0;
+      let receiverDrops = 0;
+      const playbackQuality = vi.fn(() => ({
+        droppedVideoFrames: playbackDrops,
+      }));
+      Object.assign(media[0], { getVideoPlaybackQuality: playbackQuality });
       vi.spyOn(performance, "now").mockImplementation(() => at);
       const receivers = ["video", "audio"].map((kind) => ({
         jitterBufferTarget: 0 as number | null,
@@ -419,6 +433,7 @@ describe("real stream engine input lifecycle", () => {
         null,
       ]);
       ready();
+      engine.setInputSuspended(true);
       media[0].dispatchEvent(new Event("playing"));
       peer.stats.set("t", {
         id: "t",
@@ -430,13 +445,15 @@ describe("real stream engine input lifecycle", () => {
         type: "candidate-pair",
         currentRoundTripTime: 0.035,
       });
-      for (let second = 0; second <= 11; second++) {
+      let second = 0;
+      const tick = async () => {
         at = second * 1000;
         peer.stats.set("v", {
           id: "v",
           type: "inbound-rtp",
           kind: "video",
           timestamp: at,
+          framesReceived: second * 60,
           framesDecoded: second * 60,
           framesPerSecond: 60,
           packetsReceived: second * 100,
@@ -444,10 +461,12 @@ describe("real stream engine input lifecycle", () => {
           bytesReceived: second * 10000,
           jitter: 0.002,
           freezeCount: 0,
-          framesDropped: 0,
+          framesDropped: receiverDrops,
         });
         await vi.advanceTimersByTimeAsync(1000);
-      }
+        second++;
+      };
+      for (let i = 0; i <= 11; i++) await tick();
       expect(receivers.map((receiver) => receiver.jitterBufferTarget)).toEqual([
         0, 0,
       ]);
@@ -461,21 +480,57 @@ describe("real stream engine input lifecycle", () => {
       } else if (reason === "disconnected") {
         peer.connectionState = "disconnected";
         peer.dispatchEvent(new Event("connectionstatechange"));
-      } else {
+      } else if (reason === "stats-failure") {
         vi.spyOn(peer, "getStats").mockRejectedValue(
           new Error("Stats unavailable"),
         );
-        await vi.advanceTimersByTimeAsync(1000);
+        await tick();
+      } else {
+        if (reason === "playback-drop") playbackDrops++;
+        else if (reason === "receiver-drop") receiverDrops++;
+        else
+          playbackQuality.mockImplementation(() => {
+            throw new Error("Playback quality unavailable");
+          });
+        await tick();
+        expect(onTelemetry.mock.lastCall?.[0]).toMatchObject({
+          incomingFramesPerSecond: 60,
+          decodedFramesPerSecond: 60,
+          framesDropped:
+            reason === "unavailable-playback-counter"
+              ? undefined
+              : playbackDrops,
+        });
       }
       expect(receivers.map((receiver) => receiver.jitterBufferTarget)).toEqual([
         null,
         null,
       ]);
-      await vi.advanceTimersByTimeAsync(1000);
+      await tick();
       if (reason !== "stats-failure")
         expect(onTelemetry).toHaveBeenLastCalledWith(
           expect.objectContaining({ playoutMode: "automatic" }),
         );
+      if (reason === "playback-drop" || reason === "receiver-drop") {
+        for (let i = 0; i < 5; i++) {
+          if (reason === "playback-drop") playbackDrops++;
+          else receiverDrops++;
+          await tick();
+          expect(
+            receivers.map((receiver) => receiver.jitterBufferTarget),
+          ).toEqual([null, null]);
+        }
+        for (let i = 0; i < 20; i++) {
+          await tick();
+          expect(
+            receivers.map((receiver) => receiver.jitterBufferTarget),
+          ).toEqual([null, null]);
+        }
+        await tick();
+        expect(
+          receivers.map((receiver) => receiver.jitterBufferTarget),
+        ).toEqual([0, 0]);
+      }
     },
   );
   it.each([
