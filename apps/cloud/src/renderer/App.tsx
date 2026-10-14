@@ -1728,6 +1728,13 @@ function StreamView({
     setTelemetry(snapshot.telemetry);
   }, [descriptor.sessionId]);
 
+  const hideCursor =
+    snapshot.fullscreen &&
+    online &&
+    snapshot.session.phase === "streaming" &&
+    !overlay &&
+    !controlsCaptured;
+
   return (
     <main
       ref={root}
@@ -1735,7 +1742,7 @@ function StreamView({
       aria-keyshortcuts={LOCAL_CONTROL_SHORTCUTS.controls.join(" ")}
       className={`stream-view ${overlay ? "overlay-visible" : ""} ${
         controlsCaptured ? "controls-captured" : ""
-      } ${snapshot.settings.reducedMotion ? "reduced-motion" : ""}`}
+      } ${hideCursor ? "cursor-hidden" : ""} ${snapshot.settings.reducedMotion ? "reduced-motion" : ""}`}
     >
       <StreamSurface
         descriptor={descriptor}
