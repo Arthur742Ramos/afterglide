@@ -116,6 +116,9 @@ export class PerformanceReport {
         "Freeze/drop counters are cumulative per media session and reset on reconnect.",
         "Summaries group retained samples by requested resolution and input polling; device timestamps are deduplicated within each group.",
         "Frame-interval summaries are distributions of rolling-window percentiles, not global frame percentiles.",
+        "Input polling measures timer-driven JavaScript polls, not hardware updates or input-to-photon latency. Paused/discovery/event-driven callbacks are excluded; modes and timer baselines reset separately.",
+        "Input windows contain intervals since the last successful telemetry collection. p95UpperMs is a 1ms histogram upper bound; overflow uses the exact window maximum. meanJitterMs is mean absolute interval deviation from targetMs; longGaps counts intervals >32ms.",
+        "Power context is local OS state with observation timestamps. Missing speed-limit notification means unknown, not 100%; thermal severity is not Celsius or watts. Power-efficient decoder is optional browser-reported evidence, not GPU utilization.",
       ],
       recoveries: this.recoveries,
       summaries: summarizeSamples(samples),
@@ -188,6 +191,15 @@ function summarizeSamples(samples: Sample[]) {
       ),
       bitrateMbps: distribution(
         group.map((sample) => sample.telemetry.bitrateMbps),
+      ),
+      inputPollMeanIntervalMs: distribution(
+        group.map((sample) => sample.telemetry.inputPolling?.meanIntervalMs),
+      ),
+      inputPollMeanJitterMs: distribution(
+        group.map((sample) => sample.telemetry.inputPolling?.meanJitterMs),
+      ),
+      inputPollWindowMaxIntervalMs: distribution(
+        group.map((sample) => sample.telemetry.inputPolling?.maxIntervalMs),
       ),
       processCpuPercent: distribution(
         deviceSamples.map((sample) => sample.processCpuPercent),

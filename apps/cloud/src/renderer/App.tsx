@@ -2247,6 +2247,93 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
         />
         <DiagnosticRow
           icon="display"
+          label="Power-efficient decoder (browser)"
+          value={
+            snapshot.telemetry.powerEfficientDecoder === undefined
+              ? "Unavailable"
+              : snapshot.telemetry.powerEfficientDecoder
+                ? "Reported true"
+                : "Reported false"
+          }
+        />
+        {(
+          [
+            [
+              "Requested JS poll interval",
+              snapshot.telemetry.inputPolling?.targetMs,
+            ],
+            [
+              "JS poll mean interval",
+              snapshot.telemetry.inputPolling?.meanIntervalMs,
+            ],
+            [
+              "JS poll p95 upper bound",
+              snapshot.telemetry.inputPolling?.p95UpperMs,
+            ],
+            [
+              "JS poll maximum interval",
+              snapshot.telemetry.inputPolling?.maxIntervalMs,
+            ],
+            [
+              "JS poll mean jitter",
+              snapshot.telemetry.inputPolling?.meanJitterMs,
+            ],
+          ] as const
+        ).map(([label, value]) => (
+          <DiagnosticRow
+            key={label}
+            icon="pulse"
+            label={label}
+            value={
+              value === undefined ? "Unavailable" : `${value.toFixed(2)} ms`
+            }
+          />
+        ))}
+        <DiagnosticRow
+          icon="controller"
+          label="JS poll window"
+          value={
+            snapshot.telemetry.inputPolling
+              ? `${snapshot.telemetry.inputPolling.samples} intervals / ${snapshot.telemetry.inputPolling.windowMs.toFixed(0)} ms observed`
+              : "Unavailable"
+          }
+        />
+        <DiagnosticRow
+          icon="controller"
+          label="JS poll gaps over 32 ms"
+          value={
+            snapshot.telemetry.inputPolling
+              ? String(snapshot.telemetry.inputPolling.longGaps)
+              : "Unavailable"
+          }
+        />
+        <DiagnosticRow
+          icon="power"
+          label="Power source"
+          value={
+            snapshot.powerContext?.onBattery === undefined
+              ? "Unavailable"
+              : snapshot.powerContext.onBattery
+                ? "Battery"
+                : "AC power"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="OS thermal severity"
+          value={snapshot.powerContext?.thermalState ?? "Unavailable"}
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Last CPU speed-limit notification"
+          value={
+            snapshot.powerContext?.speedLimitPercent === undefined
+              ? "Unknown"
+              : `${snapshot.powerContext.speedLimitPercent}%`
+          }
+        />
+        <DiagnosticRow
+          icon="display"
           label="Negotiated video codec"
           value={
             snapshot.telemetry.codec ??
@@ -2289,6 +2376,12 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
           state={snapshot.hardware.secureStorage ? "good" : "attention"}
         />
       </div>
+      <p className="credential-note">
+        JS polling describes observed timer cadence, not controller hardware or
+        input-to-photon latency. Jitter is mean absolute deviation from the
+        requested interval; p95 uses 1 ms histogram bounds. Power context is
+        OS-reported state, not temperature, watts or GPU utilization.
+      </p>
       <p className="credential-note">
         <Icon name="shield" /> {snapshot.hardware.credentialStorage.detail}
       </p>

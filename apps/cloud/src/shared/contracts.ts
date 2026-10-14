@@ -55,6 +55,26 @@ export interface StreamDescriptor {
   mock: boolean;
 }
 
+export interface InputPollingTelemetry {
+  targetMs: 4 | 8;
+  samples: number;
+  windowMs: number;
+  meanIntervalMs: number;
+  p95UpperMs: number;
+  maxIntervalMs: number;
+  meanJitterMs: number;
+  longGaps: number;
+}
+
+export interface PowerContext {
+  onBattery?: boolean;
+  powerObservedAt?: number;
+  thermalState?: "unknown" | "nominal" | "fair" | "serious" | "critical";
+  thermalObservedAt?: number;
+  speedLimitPercent?: number;
+  speedLimitObservedAt?: number;
+}
+
 export interface StreamTelemetry {
   resolution: string;
   framesPerSecond?: number;
@@ -72,6 +92,9 @@ export interface StreamTelemetry {
   codec?: string;
   connection: "local" | "remote" | "unknown";
   videoDecoder?: string;
+  powerEfficientDecoder?: boolean;
+  inputPolling?: InputPollingTelemetry;
+  powerContext?: PowerContext;
   decodeMs?: number;
   jitterBufferMs?: number;
   jitterMs?: number;
@@ -152,6 +175,7 @@ export interface AppSettings {
 }
 
 export interface AppSnapshot {
+  powerContext?: PowerContext;
   revision: number;
   auth: {
     status: AuthStatus;
