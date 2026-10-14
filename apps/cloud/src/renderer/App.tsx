@@ -2477,6 +2477,56 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
         />
         <DiagnosticRow
           icon="wifi"
+          label="Requested cloud region"
+          value={
+            snapshot.regionSelection?.requestedRegion ??
+            "Selected when launching"
+          }
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Region selection"
+          value={
+            snapshot.regionSelection
+              ? snapshot.regionSelection.method === "lowest-probe-latency"
+                ? snapshot.regionSelection.scanComplete
+                  ? "Lowest median HTTPS probe"
+                  : "Lowest measured probe · partial scan"
+                : {
+                    "single-region": "Only one region offered",
+                    "region-limit": "Xbox default · region scan limit",
+                    "probe-timeout": "Xbox default · scan timed out",
+                    "probes-unavailable": "Xbox default · probes unavailable",
+                    measured: "Xbox default",
+                  }[snapshot.regionSelection.reason]
+              : "Automatic at each launch"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Region probe latency (not gameplay ping)"
+          value={
+            snapshot.regionSelection?.medianProbeMs === undefined
+              ? "Not measured"
+              : `${snapshot.regionSelection.medianProbeMs.toFixed(1)} ms · median of 3`
+          }
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Xbox default region"
+          value={snapshot.regionSelection?.xboxDefaultRegion ?? "Not reported"}
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Regions with complete measurements"
+          value={
+            snapshot.regionSelection
+              ? `${snapshot.regionSelection.candidates.filter((candidate) => candidate.status === "measured").length} of ${snapshot.regionSelection.candidates.length}`
+              : "Not measured"
+          }
+        />
+        <DiagnosticRow
+          icon="wifi"
           label="Last route"
           value={
             snapshot.telemetry.updatedAt
@@ -2492,10 +2542,12 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
         />
       </div>
       <p className="credential-note">
-        JS polling describes observed timer cadence, not controller hardware or
-        input-to-photon latency. Jitter is mean absolute deviation from the
-        requested interval; p95 uses 1 ms histogram bounds. Power context is
-        OS-reported state, not temperature, watts or GPU utilization.
+        Region probes compare service response times before launch; Xbox may
+        assign a fallback region. Gameplay ping measures the active stream
+        separately. JS polling describes observed timer cadence, not controller
+        hardware or input-to-photon latency. Jitter is mean absolute deviation
+        from the requested interval; p95 uses 1 ms histogram bounds. Power
+        context is OS-reported state, not temperature, watts or GPU utilization.
       </p>
       <p className="credential-note">
         <Icon name="shield" /> {snapshot.hardware.credentialStorage.detail}

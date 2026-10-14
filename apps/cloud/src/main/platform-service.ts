@@ -1,4 +1,9 @@
-import type { CloudTitle, DeviceCode, StreamSource } from "../shared/contracts";
+import type {
+  CloudTitle,
+  DeviceCode,
+  StreamSource,
+  RegionSelection,
+} from "../shared/contracts";
 import type { OperationContext } from "./operation-context";
 
 export interface StreamTarget {
@@ -7,6 +12,7 @@ export interface StreamTarget {
 }
 
 export interface SessionStart {
+  regionSelection?: RegionSelection;
   sessionId: string;
   sessionPath: string;
 }

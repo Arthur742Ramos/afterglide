@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  RegionSelection,
   HardwareInfo,
   StreamSource,
   StreamTelemetry,
@@ -33,6 +34,7 @@ export class PerformanceReport {
   private totalSamples = 0;
   private startedAt = Date.now();
   private source?: StreamSource;
+  private regionSelections: RegionSelection[] = [];
   private connectionNumber = 0;
   private recoveries: { startedAt: number; durationMs: number }[] = [];
 
@@ -42,8 +44,14 @@ export class PerformanceReport {
     this.totalSamples = 0;
     this.startedAt = Date.now();
     this.source = source;
+    this.regionSelections = [];
     this.recoveries = [];
     this.connectionNumber = 0;
+  }
+
+  recordRegionSelection(selection: RegionSelection): void {
+    this.regionSelections.push(structuredClone(selection));
+    if (this.regionSelections.length > 100) this.regionSelections.shift();
   }
 
   connected(): void {
@@ -95,6 +103,7 @@ export class PerformanceReport {
       startedAt: this.startedAt,
       exportedAt: Date.now(),
       source: this.source,
+      regionSelections: this.regionSelections,
       totalSamples: this.totalSamples,
       retainedSamples: samples.length,
       droppedSamples: this.totalSamples - samples.length,
@@ -104,6 +113,7 @@ export class PerformanceReport {
         gpu: hardware.gpu,
       },
       measurementNotes: [
+        "Region selection compares the median of three fresh unauthenticated HTTPS probes per offered regional service. It includes DNS/TLS/HTTP overhead, not game-stream RTT or packet loss. Requested region may differ from the server Xbox assigns through fallback. Regions need three successful probes to qualify. If the scan budget expires, completed measurements remain eligible and scanComplete is false; no qualifying measurements retains Xbox default. Results are refreshed at each launch and selection history retains at most 100 entries.",
         "Latest 3600 telemetry samples; older samples are evicted.",
         "Missing measurements remain unreported and are excluded from summaries; measured zero values are retained.",
         "Configuration labels are requested settings; resolution, codec and decoder samples are received/reported values.",

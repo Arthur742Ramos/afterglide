@@ -198,6 +198,7 @@ export class AppController {
           status: "idle",
         },
         session: idleSession(),
+        regionSelection: undefined,
         telemetry: { ...emptyTelemetry },
       });
     } finally {
@@ -400,6 +401,7 @@ export class AppController {
       this.recoveryMs = undefined;
     }
     this.deviceMetrics = undefined;
+    this.patch({ regionSelection: undefined });
     let receivedCreation: SessionStart | undefined;
     let creationCleanupStarted = false;
     const cleanupCreation = () => {
@@ -420,7 +422,7 @@ export class AppController {
       this.setSession(
         "provisioning",
         "Launching from the cloud",
-        "Xbox Cloud Gaming is finding capacity for your game.",
+        "Comparing region latency, then asking Xbox to find capacity for your game.",
         34,
         target,
       );
@@ -444,6 +446,9 @@ export class AppController {
         .catch(() => {});
       const started = await operation.wait(() => creation);
       this.assertCurrent(generation);
+      this.patch({ regionSelection: started.regionSelection });
+      if (started.regionSelection)
+        this.performanceReport.recordRegionSelection(started.regionSelection);
       this.activeSession = {
         id: started.sessionId,
         path: started.sessionPath,

@@ -1432,7 +1432,13 @@ async function accessible(page: Page) {
       await (window as unknown as { axe: typeof axeCore }).axe.run(document, {
         runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
       })
-    ).violations.map((v) => ({ id: v.id, nodes: v.nodes.length })),
+    ).violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((node) => ({
+        target: node.target,
+        summary: node.failureSummary,
+      })),
+    })),
   );
   expect(violations).toEqual([]);
 }
@@ -2361,6 +2367,64 @@ test("Smooth mode persists, switches live, and repair diagnostics stay readable"
     ).toBe(true);
     await page.screenshot({
       path: join(root, `artifacts/e2e/cloud-smooth-health-${factor}.png`),
+    });
+  }
+});
+
+test("Health identifies measured region selection and default fallback without calling it gameplay ping", async () => {
+  const page = await launch();
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
+  const baseline = await page.evaluate(() =>
+    window.afterglideCloud.getSnapshot(),
+  );
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  const row = (label: string) =>
+    page.getByText(label, { exact: true }).locator("..");
+  for (const measured of [false, true]) {
+    await app.evaluate(
+      ({ BrowserWindow }, snapshot) =>
+        BrowserWindow.getAllWindows()[0].webContents.send(
+          "afterglide-cloud:snapshot",
+          snapshot,
+        ),
+      {
+        ...baseline,
+        revision: baseline.revision + (measured ? 102 : 101),
+        regionSelection: {
+          requestedRegion: measured ? "Fast region" : "Default region",
+          xboxDefaultRegion: "Default region",
+          method: measured ? "lowest-probe-latency" : "xbox-default",
+          reason: measured ? "measured" : "probes-unavailable",
+          measuredAt: 123,
+          scanComplete: true,
+          medianProbeMs: measured ? 0 : undefined,
+          candidates: [],
+        },
+      },
+    );
+    await expect(row("Requested cloud region")).toContainText(
+      measured ? "Fast region" : "Default region",
+    );
+    await expect(row("Region selection")).toContainText(
+      measured
+        ? "Lowest median HTTPS probe"
+        : "Xbox default · probes unavailable",
+    );
+    await expect(row("Region probe latency (not gameplay ping)")).toContainText(
+      measured ? "0.0 ms · median of 3" : "Not measured",
+    );
+  }
+  for (const factor of [1, 2]) {
+    await zoom(page, factor);
+    await row("Requested cloud region").scrollIntoViewIfNeeded();
+    await accessible(page);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-region-health-${factor}.png`),
     });
   }
 });

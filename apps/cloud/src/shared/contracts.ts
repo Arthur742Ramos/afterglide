@@ -187,7 +187,30 @@ export interface AppSettings {
   playbackMode: "automatic" | "smooth";
 }
 
+export interface RegionSelection {
+  requestedRegion: string;
+  xboxDefaultRegion: string;
+  method: "lowest-probe-latency" | "xbox-default";
+  reason:
+    | "measured"
+    | "probes-unavailable"
+    | "single-region"
+    | "region-limit"
+    | "probe-timeout";
+  measuredAt: number;
+  scanComplete: boolean;
+  medianProbeMs?: number;
+  candidates: Array<{
+    name: string;
+    successfulSamples: number;
+    attemptedSamples: number;
+    medianProbeMs?: number;
+    status: "measured" | "incomplete" | "unsupported" | "not-tested";
+  }>;
+}
+
 export interface AppSnapshot {
+  regionSelection?: RegionSelection;
   powerContext?: PowerContext;
   revision: number;
   auth: {

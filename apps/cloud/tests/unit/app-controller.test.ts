@@ -127,6 +127,41 @@ function makeController(
 }
 
 describe("AppController", () => {
+  it("retains main-process region selection in Health and reports before video arrives", async () => {
+    const platform = new FakePlatform();
+    const selection = {
+      requestedRegion: "Fast",
+      xboxDefaultRegion: "Default",
+      method: "lowest-probe-latency" as const,
+      reason: "measured" as const,
+      measuredAt: 123,
+      scanComplete: true,
+      medianProbeMs: 20,
+      candidates: [],
+    };
+    const started = {
+      sessionId: "session",
+      sessionPath: "v5/sessions/cloud/session",
+      regionSelection: selection,
+    };
+    vi.spyOn(platform, "startSession").mockResolvedValue(started);
+    const controller = makeController(platform);
+    await controller.initialize();
+    await controller.startCloudStream("cloud-game");
+    expect(controller.getSnapshot().regionSelection).toEqual(selection);
+    expect(controller.exportPerformanceReport().regionSelections).toEqual([
+      selection,
+    ]);
+    selection.requestedRegion = "changed";
+    expect(
+      controller.exportPerformanceReport().regionSelections[0]?.requestedRegion,
+    ).toBe("Fast");
+    await controller.stopStream();
+    expect(controller.exportPerformanceReport().regionSelections).toHaveLength(
+      1,
+    );
+  });
+
   it("exports selected Smooth mode and sanitized repair evidence without inventing missing values", async () => {
     const controller = makeController(new FakePlatform());
     await controller.initialize();
