@@ -52,6 +52,13 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   gains. Both receivers use the same requested policy for audio/video sync;
   Chromium retains control of actual delay and packet recovery. A zero target
   is a low-delay hint, not a disabled jitter buffer.
+  The drop guard checks WebRTC receiver drops and the media element's reported
+  playback drops independently. Decoded frames can be discarded before
+  presentation without increasing the receiver's `framesDropped` counter.
+  Playout decisions use the same playback counters exported in telemetry;
+  either counter increasing prevents low-delay entry and restores automatic
+  buffering when already active. A previously available playback counter
+  becoming unavailable also restarts observation rather than assuming no drops.
 - Active stream sessions hold an Electron `prevent-display-sleep` power-save
   blocker across provisioning, negotiation, streaming and recovery, releasing
   it on idle, error, window close or quit so controller-only sessions do not
@@ -123,6 +130,17 @@ to distinguish a delivery interruption from a lower stream rate. If incoming is
 steady but decode falls behind, inspect decode time and real drops. If incoming
 and decode stay steady but display falls behind, inspect presentation and window
 visibility. These are diagnostic patterns, not automatic proof of a cause.
+
+A sustained incoming/decoded change from 60 to 30 FPS on an otherwise healthy
+route means fewer complete frames are reaching the client, not merely slower
+local presentation. The report cannot identify whether the game's frame-rate
+mode, service encoder or another upstream constraint caused it. Check the
+game's performance/60 FPS mode when available; client buffering cannot create
+missing unique frames. A steady 30 FPS stream has a 33.3 ms frame budget, versus
+16.7 ms at 60 FPS. Rolling presentation tails near 50 or 66.7 ms indicate uneven
+delivery even at 30 FPS, not simply the lower source rate. Keep playback drops
+separate from packet loss and skipped callback observations when assessing that
+gap.
 
 The overlay uses an opaque instrument surface without per-metric backdrop blur,
 avoiding repeated filtering of live video beneath the FPS readouts. This removes

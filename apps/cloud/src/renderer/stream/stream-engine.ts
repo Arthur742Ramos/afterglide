@@ -985,11 +985,15 @@ export class XboxStreamEngine {
       reports.forEach((report) =>
         records.set(report.id, report as unknown as Record<string, unknown>),
       );
-      const { telemetry, sample } = extractStreamStats(
+      const { telemetry: statsTelemetry, sample } = extractStreamStats(
         records,
         this.previousStats,
         performance.now(),
       );
+      const telemetry = {
+        ...statsTelemetry,
+        ...this.frameMetrics.snapshot(sample.video, sample.observedAt),
+      };
       if (
         this.videoPlaying &&
         !this.transportDisconnected &&
@@ -1004,7 +1008,6 @@ export class XboxStreamEngine {
         playoutMode: this.playout.target === null ? "automatic" : "low-delay",
         inputQueueBytes: this.channels.input.bufferedAmount,
         inputPolling: this.inputPollingMetrics.snapshot(),
-        ...this.frameMetrics.snapshot(sample.video, sample.observedAt),
         playbackVisible: document.visibilityState === "visible",
         playbackFocused: document.hasFocus(),
         updatedAt: Date.now(),
