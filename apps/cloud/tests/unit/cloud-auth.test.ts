@@ -509,18 +509,15 @@ describe("measured region provisioning", () => {
           { source: "cloud", id: "game" },
           1080,
         );
-        const expected = measured ? offered[0]! : offered[1]!;
+        const expected = offered[1]!;
         expect(result.regionSelection?.requestedRegion).toBe(expected.name);
         expect(requests[0]!.url).toBe(
           `${expected.baseUri}/v5/sessions/cloud/play`,
         );
         expect(
           JSON.parse(String(requests[0]!.init.body)).fallbackRegionNames,
-        ).toEqual(
-          measured
-            ? ["EastUs", "SouthCentralUs"]
-            : ["WestEurope", "SouthCentralUs"],
-        );
+        ).toEqual(["WestEurope", "SouthCentralUs"]);
+        expect(result.regionSelection?.method).toBe("xbox-default");
         await platform.getSessionState(result.sessionPath);
         expect(requests[1]!.url).toBe(
           `${expected.baseUri}/v5/sessions/cloud/s/state`,

@@ -8,6 +8,9 @@ export const PLAYOUT_POLICY = {
   maxHealthyJitterMs: 5,
   maxHealthyLossPercent: 0.5,
   maxHealthyRoundTripMs: 80,
+  smoothStableDurationMs: 15_000,
+  smoothStableJitterMs: 20,
+  smoothDisturbedJitterMs: 30,
 } as const;
 
 interface Baseline {
@@ -28,7 +31,7 @@ interface Baseline {
 export class AdaptivePlayoutPolicy {
   target: number | null = null;
   private mode: "automatic" | "smooth" = "automatic";
-  private smoothLevel = 0;
+  private smoothLevel = 1;
   private disturbedSince?: number;
   private lastIncrease?: number;
 
@@ -44,7 +47,7 @@ export class AdaptivePlayoutPolicy {
   reset(): void {
     this.suspend();
     this.mediaDisturbances = 0;
-    this.smoothLevel = 0;
+    this.smoothLevel = 1;
     this.lastIncrease = undefined;
   }
 
@@ -169,12 +172,22 @@ export class AdaptivePlayoutPolicy {
       this.automatic(false);
       return;
     }
-    const disturbed =
+    // Presentation drops are local display scheduling, not evidence that a
+    // network buffer is too small. Receiver drops/freezes and packet loss are.
+    const mediaDisturbed =
       current.frames === previous.frames ||
-      counters.slice(1).some((key) => current[key] !== previous[key]) ||
-      telemetry.jitterMs! > PLAYOUT_POLICY.maxHealthyJitterMs ||
+      current.freezes !== previous.freezes ||
+      current.dropped !== previous.dropped;
+    const disturbed =
+      mediaDisturbed ||
+      telemetry.jitterMs! >= PLAYOUT_POLICY.smoothDisturbedJitterMs ||
       telemetry.packetLossPercent! > PLAYOUT_POLICY.maxHealthyLossPercent;
-    // High RTT alone does not call for extra buffering.
+    const stable =
+      !mediaDisturbed &&
+      telemetry.jitterMs! <= PLAYOUT_POLICY.smoothStableJitterMs &&
+      telemetry.packetLossPercent! <= PLAYOUT_POLICY.maxHealthyLossPercent;
+    // High RTT alone does not call for extra buffering. The neutral jitter
+    // band prevents oscillation and cannot count toward sustained stability.
     if (disturbed) {
       this.healthySince = undefined;
       this.disturbedSince ??= current.observedAt;
@@ -183,19 +196,25 @@ export class AdaptivePlayoutPolicy {
         (this.lastIncrease === undefined ||
           current.observedAt - this.lastIncrease >= 5_000)
       ) {
-        this.smoothLevel = Math.min(2, this.smoothLevel + 1);
+        this.smoothLevel = Math.min(3, this.smoothLevel + 1);
         this.lastIncrease = current.observedAt;
         this.disturbedSince = current.observedAt;
       }
-    } else {
+    } else if (stable) {
       this.disturbedSince = undefined;
       this.healthySince ??= current.observedAt;
-      if (current.observedAt - this.healthySince >= 30_000) {
+      if (
+        current.observedAt - this.healthySince >=
+        PLAYOUT_POLICY.smoothStableDurationMs
+      ) {
         this.smoothLevel = Math.max(0, this.smoothLevel - 1);
         this.healthySince = current.observedAt;
       }
+    } else {
+      this.disturbedSince = undefined;
+      this.healthySince = undefined;
     }
-    this.target = [33, 67, 100][this.smoothLevel]!;
+    this.target = [16, 33, 67, 100][this.smoothLevel]!;
   }
 }
 

@@ -2497,6 +2497,8 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
                     "region-limit": "Xbox default · region scan limit",
                     "probe-timeout": "Xbox default · scan timed out",
                     "probes-unavailable": "Xbox default · probes unavailable",
+                    "media-route-unverified":
+                      "Xbox default · service probes are diagnostic",
                     measured: "Xbox default",
                   }[snapshot.regionSelection.reason]
               : "Automatic at each launch"
@@ -2542,12 +2544,13 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
         />
       </div>
       <p className="credential-note">
-        Region probes compare service response times before launch; Xbox may
-        assign a fallback region. Gameplay ping measures the active stream
-        separately. JS polling describes observed timer cadence, not controller
-        hardware or input-to-photon latency. Jitter is mean absolute deviation
-        from the requested interval; p95 uses 1 ms histogram bounds. Power
-        context is OS-reported state, not temperature, watts or GPU utilization.
+        Region probes are diagnostic; Xbox’s default is retained because service
+        timing does not establish gameplay latency. Xbox may assign a fallback
+        region. Gameplay ping measures the active stream separately. JS polling
+        describes observed timer cadence, not controller hardware or
+        input-to-photon latency. Jitter is mean absolute deviation from the
+        requested interval; p95 uses 1 ms histogram bounds. Power context is
+        OS-reported state, not temperature, watts or GPU utilization.
       </p>
       <p className="credential-note">
         <Icon name="shield" /> {snapshot.hardware.credentialStorage.detail}

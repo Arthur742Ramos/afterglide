@@ -113,7 +113,7 @@ export class PerformanceReport {
         gpu: hardware.gpu,
       },
       measurementNotes: [
-        "Region selection compares the median of three fresh unauthenticated HTTPS probes per offered regional service. It includes DNS/TLS/HTTP overhead, not game-stream RTT or packet loss. Requested region may differ from the server Xbox assigns through fallback. Regions need three successful probes to qualify. If the scan budget expires, completed measurements remain eligible and scanComplete is false; no qualifying measurements retains Xbox default. Results are refreshed at each launch and selection history retains at most 100 entries.",
+        "Region selection retains Xbox default (or first offered region). Three fresh unauthenticated HTTPS probes per service are diagnostic only: DNS/TLS/HTTP timing has not established media-path latency and never overrides the default. medianProbeMs belongs to the requested default, not the fastest probe. Partial scans are marked scanComplete false. Xbox can still assign a fallback hosting region. Actual stream RTT is recorded separately. Selection history retains at most 100 entries.",
         "Latest 3600 telemetry samples; older samples are evicted.",
         "Missing measurements remain unreported and are excluded from summaries; measured zero values are retained.",
         "Configuration labels are requested settings; resolution, codec and decoder samples are received/reported values.",
@@ -122,7 +122,7 @@ export class PerformanceReport {
         "Incoming and decoded FPS use advancing receiver counters and stats timestamps. Displayed FPS uses framesRendered or compositor submission counters, not physical display photons.",
         "presentationCallbacksSkipped counts missed observations, not dropped display frames. Cadence excludes gaps spanning skipped callbacks. Hidden playback has no displayed FPS; visibility and focus are retained.",
         "Retransmission, NACK, PLI, FIR and receiver-drop counts are cumulative for the current receiver and can reset. Missing is unknown; retransmitted packets are a subset of received packets, not additional packet loss.",
-        "playoutTargetMs is the requested hint; playoutTargetAccepted confirms API readback only. jitterBufferMs is measured delay, jitterBufferTargetMs the receiver target, and jitterBufferMinimumMs its network minimum. Smooth requests 33-100 ms and adds latency.",
+        "playoutTargetMs is the requested hint; playoutTargetAccepted confirms API readback only. jitterBufferMs is measured delay, jitterBufferTargetMs the receiver target, and jitterBufferMinimumMs its network minimum. Smooth requests 16-100 ms and adds latency.",
         "jitterMs measures RTP packet jitter; jitterBufferMs measures interval receiver buffering. playoutMode is the application's request, not achieved delay.",
         "Decoder identity is reported by Chromium, not proof of hardware decoding.",
         "CPU is the sum of Electron process percentCPUUsage readings.",

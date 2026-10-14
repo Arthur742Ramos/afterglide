@@ -212,15 +212,18 @@ describe("Smooth playout", () => {
       );
       expect(policy.target).toBe(100);
     }
-    for (let second = 41; second <= 70; second++) {
+    for (let second = 41; second <= 55; second++) {
       policy.update(video(second), healthy, second * 1000);
       expect(policy.target).toBe(100);
     }
-    policy.update(video(71), healthy, 71000);
+    policy.update(video(56), healthy, 56000);
     expect(policy.target).toBe(67);
-    for (let second = 72; second <= 101; second++)
+    for (let second = 57; second <= 71; second++)
       policy.update(video(second), healthy, second * 1000);
     expect(policy.target).toBe(33);
+    for (let second = 72; second <= 86; second++)
+      policy.update(video(second), healthy, second * 1000);
+    expect(policy.target).toBe(16);
     policy.setMode("automatic");
     expect(policy.target).toBeNull();
     for (let second = 102; second <= 113; second++)
@@ -270,7 +273,65 @@ describe("Smooth playout", () => {
         { ...healthy, roundTripMs: 180, jitterMs: second === 5 ? 20 : 2 },
         second * 1000,
       );
-    expect(policy.target).toBe(33);
+    expect(policy.target).toBe(16);
+  });
+  it("backs down on the observed 30 FPS, 15 ms jitter route despite local presentation drops", () => {
+    const policy = new AdaptivePlayoutPolicy();
+    policy.setMode("smooth");
+    for (let second = 0; second <= 10; second++)
+      policy.update(
+        video(second),
+        { ...healthy, packetLossPercent: 5 },
+        second * 1000,
+      );
+    expect(policy.target).toBe(100);
+    // Same receiver, advancing 30 FPS, stable transport, one presentation drop/s.
+    for (let second = 11; second <= 57; second++)
+      policy.update(
+        { ...video(second), framesDecoded: 600 + (second - 10) * 30 },
+        {
+          jitterMs: 15,
+          packetLossPercent: 0,
+          roundTripMs: 152,
+          framesDropped: second,
+        },
+        second * 1000,
+      );
+    expect(policy.target).toBe(16);
+  });
+  it("holds in the neutral jitter band and requires a fresh continuous stable window", () => {
+    const policy = new AdaptivePlayoutPolicy();
+    policy.setMode("smooth");
+    for (let second = 0; second <= 10; second++)
+      policy.update(video(second), { ...healthy, jitterMs: 40 }, second * 1000);
+    expect(policy.target).toBe(100);
+    for (let second = 11; second <= 50; second++)
+      policy.update(video(second), { ...healthy, jitterMs: 25 }, second * 1000);
+    expect(policy.target).toBe(100);
+    for (let second = 51; second <= 65; second++)
+      policy.update(video(second), healthy, second * 1000);
+    expect(policy.target).toBe(100);
+    policy.update(video(66), healthy, 66000);
+    expect(policy.target).toBe(67);
+  });
+  it("still responds to receiver drops and does not use missing observations to drain the buffer", () => {
+    const policy = new AdaptivePlayoutPolicy();
+    policy.setMode("smooth");
+    for (let second = 0; second <= 10; second++)
+      policy.update(
+        { ...video(second), framesDropped: second },
+        healthy,
+        second * 1000,
+      );
+    expect(policy.target).toBe(100);
+    policy.update(undefined, healthy, 11_000);
+    policy.update(video(100), healthy, 100_000);
+    expect(policy.target).toBeNull();
+    policy.update(video(101), healthy, 101_000);
+    expect(policy.target).toBe(100);
+    for (let second = 102; second <= 116; second++)
+      policy.update(video(second), healthy, second * 1000);
+    expect(policy.target).toBe(67);
   });
   it("distinguishes accepted, unsupported, ignored and throwing setters", () => {
     expect(

@@ -47,7 +47,7 @@ describe("automatic region selection", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  it("selects the lowest median of three samples, not one lucky ping, and refreshes every launch", async () => {
+  it("retains Xbox default despite a much faster service and refreshes diagnostic medians every launch", async () => {
     const samples: Record<string, number[]> = {
       slow: [1, 100, 100],
       default: [50, 50, 50],
@@ -57,19 +57,24 @@ describe("automatic region selection", () => {
       samples[url.hostname.split(".")[0]!]!.shift(),
     );
     const result = await selectCloudRegion(regions, undefined, probe);
-    expect(result.region?.name).toBe("fast");
+    expect(result.region?.name).toBe("default");
     expect(result.diagnostics).toMatchObject({
-      method: "lowest-probe-latency",
-      medianProbeMs: 25,
-      requestedRegion: "fast",
+      method: "xbox-default",
+      reason: "media-route-unverified",
+      medianProbeMs: 50,
+      requestedRegion: "default",
       xboxDefaultRegion: "default",
     });
     expect(probe).toHaveBeenCalledTimes(9);
     const changed = await selectCloudRegion(regions, undefined, async (url) =>
       url.hostname.startsWith("slow.") ? 0 : 50,
     );
-    expect(changed.region?.name).toBe("slow");
-    expect(changed.diagnostics.medianProbeMs).toBe(0);
+    expect(changed.region?.name).toBe("default");
+    expect(changed.diagnostics.medianProbeMs).toBe(50);
+    expect(
+      changed.diagnostics.candidates.find((row) => row.name === "slow")
+        ?.medianProbeMs,
+    ).toBe(0);
   });
   it("prefers the default for exact ties, deduplicates origins and rejects incomplete results", async () => {
     const calls: Record<string, number> = {};
@@ -153,17 +158,19 @@ describe("automatic region selection", () => {
     expect(signals.every((signal) => signal.aborted)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });
-  it("uses complete measurements within the budget and clearly marks a partial scan", async () => {
+  it("retains default even when only a non-default measurement completes within the budget", async () => {
     vi.useFakeTimers();
     const pending = selectCloudRegion(regions, undefined, async (url) =>
       url.hostname.startsWith("fast.") ? 20 : new Promise(() => {}),
     );
     await vi.advanceTimersByTimeAsync(REGION_POLICY.totalTimeoutMs);
-    expect((await pending).diagnostics).toMatchObject({
-      requestedRegion: "fast",
-      method: "lowest-probe-latency",
+    const result = await pending;
+    expect(result.diagnostics.medianProbeMs).toBeUndefined();
+    expect(result.diagnostics).toMatchObject({
+      requestedRegion: "default",
+      method: "xbox-default",
+      reason: "probe-timeout",
       scanComplete: false,
-      medianProbeMs: 20,
     });
     expect(vi.getTimerCount()).toBe(0);
   });

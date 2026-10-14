@@ -422,7 +422,7 @@ export class AppController {
       this.setSession(
         "provisioning",
         "Launching from the cloud",
-        "Comparing region latency, then asking Xbox to find capacity for your game.",
+        "Checking region diagnostics, then requesting capacity in Xbox’s default region.",
         34,
         target,
       );

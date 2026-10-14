@@ -196,7 +196,8 @@ export interface RegionSelection {
     | "probes-unavailable"
     | "single-region"
     | "region-limit"
-    | "probe-timeout";
+    | "probe-timeout"
+    | "media-route-unverified";
   measuredAt: number;
   scanComplete: boolean;
   medianProbeMs?: number;

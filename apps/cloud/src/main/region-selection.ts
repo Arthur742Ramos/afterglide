@@ -171,11 +171,6 @@ export async function selectCloudRegion(
     );
     const median = (samples: number[]) =>
       [...samples].sort((a, b) => a - b)[1]!;
-    complete.sort(
-      (a, b) =>
-        median(a.samples) - median(b.samples) ||
-        Number(b.region === fallback) - Number(a.region === fallback),
-    );
     diagnostics.candidates = results.map((result) => ({
       name: label(result.region),
       successfulSamples: result.samples.length,
@@ -193,15 +188,20 @@ export async function selectCloudRegion(
             : "incomplete",
     }));
     diagnostics.scanComplete = !operation.signal.aborted;
-    const winner = complete[0];
-    if (operation.signal.aborted) diagnostics.reason = "probe-timeout";
-    if (winner) {
-      diagnostics.requestedRegion = label(winner.region);
-      diagnostics.method = "lowest-probe-latency";
-      diagnostics.reason = "measured";
-      diagnostics.medianProbeMs = median(winner.samples);
-    }
-    return { region: winner?.region ?? fallback, diagnostics };
+    // HTTPS service timing includes DNS/TLS/HTTP and has not predicted media
+    // RTT in live comparisons. Keep it as diagnostics, never as authority to
+    // move a user away from Xbox's default (even after a complete scan).
+    const selectedMeasurement = complete.find(
+      (result) => result.region === fallback,
+    );
+    diagnostics.reason = operation.signal.aborted
+      ? "probe-timeout"
+      : complete.length
+        ? "media-route-unverified"
+        : "probes-unavailable";
+    if (selectedMeasurement)
+      diagnostics.medianProbeMs = median(selectedMeasurement.samples);
+    return { region: fallback, diagnostics };
   } finally {
     operation.dispose();
   }

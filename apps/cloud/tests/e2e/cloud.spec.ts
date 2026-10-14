@@ -2391,10 +2391,10 @@ test("Health identifies measured region selection and default fallback without c
         ...baseline,
         revision: baseline.revision + (measured ? 102 : 101),
         regionSelection: {
-          requestedRegion: measured ? "Fast region" : "Default region",
+          requestedRegion: "Default region",
           xboxDefaultRegion: "Default region",
-          method: measured ? "lowest-probe-latency" : "xbox-default",
-          reason: measured ? "measured" : "probes-unavailable",
+          method: "xbox-default",
+          reason: measured ? "media-route-unverified" : "probes-unavailable",
           measuredAt: 123,
           scanComplete: true,
           medianProbeMs: measured ? 0 : undefined,
@@ -2402,12 +2402,10 @@ test("Health identifies measured region selection and default fallback without c
         },
       },
     );
-    await expect(row("Requested cloud region")).toContainText(
-      measured ? "Fast region" : "Default region",
-    );
+    await expect(row("Requested cloud region")).toContainText("Default region");
     await expect(row("Region selection")).toContainText(
       measured
-        ? "Lowest median HTTPS probe"
+        ? "Xbox default · service probes are diagnostic"
         : "Xbox default · probes unavailable",
     );
     await expect(row("Region probe latency (not gameplay ping)")).toContainText(
