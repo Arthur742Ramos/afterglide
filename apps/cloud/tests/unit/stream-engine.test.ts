@@ -262,6 +262,25 @@ describe("real stream engine input lifecycle", () => {
     expect(
       onTelemetry.mock.lastCall?.[0].inputPolling?.samples,
     ).toBeGreaterThan(200);
+    peer.channels.input.bufferedAmount = 8;
+    engine.setControllerSettings({
+      preferredControllerId: "",
+      controllerDefaults: { ...defaultControllerTuning, rumble: "off" },
+      controllerProfiles: [],
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    // A poll coincident with the previous stats boundary may belong to this window.
+    expect(
+      onTelemetry.mock.lastCall?.[0].inputPolling?.samples ?? 0,
+    ).toBeLessThanOrEqual(1);
+    peer.channels.input.bufferedAmount = 0;
+    for (let i = 0; i < 50; i++)
+      peer.channels.input.dispatchEvent(new Event("bufferedamountlow"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(
+      onTelemetry.mock.lastCall?.[0].inputPolling?.samples,
+    ).toBeLessThanOrEqual(250);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling?.maxIntervalMs).toBe(4);
     engine.setInputSuspended(true);
     await vi.advanceTimersByTimeAsync(1000);
     expect(onTelemetry.mock.lastCall?.[0].inputPolling).toBeUndefined();

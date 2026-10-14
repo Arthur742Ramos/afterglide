@@ -383,16 +383,7 @@ export class XboxStreamEngine {
     );
     this.inputTimer = window.setInterval(() => {
       // Only timer-driven polls count; keyboard/drain/hotplug callbacks do not.
-      if (
-        !this.destroyed &&
-        !this.terminal &&
-        !this.inputSuspended &&
-        !this.transportDisconnected &&
-        document.hasFocus() &&
-        document.visibilityState === "visible"
-      )
-        this.inputPollingMetrics.observe(performance.now());
-      this.inputLoop();
+      this.inputLoop(true);
     }, interval);
   };
 
@@ -669,7 +660,7 @@ export class XboxStreamEngine {
     );
   }
 
-  private inputLoop = (): void => {
+  private inputLoop = (fromTimer = false): void => {
     if (this.destroyed) return;
     if (this.neutralPending && this.inputActive) {
       if (!this.sendInputFrame(emptyXboxInputFrame())) return;
@@ -686,11 +677,12 @@ export class XboxStreamEngine {
     ) {
       this.sendCurrentInput(
         performance.now() - this.lastInputAt >= NETWORK_POLICY.inputHeartbeatMs,
+        fromTimer,
       );
     }
   };
 
-  private sendCurrentInput(heartbeatDue = false): void {
+  private sendCurrentInput(heartbeatDue = false, fromTimer = false): void {
     if (
       !this.inputActive ||
       this.inputSuspended ||
@@ -702,6 +694,7 @@ export class XboxStreamEngine {
       document.visibilityState !== "visible"
     )
       return;
+    if (fromTimer) this.inputPollingMetrics.observe(performance.now());
     const gamepad = this.resolveGamepad();
     this.updateControlsShortcut(gamepad);
     if (!this.sampledInput) {

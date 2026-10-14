@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   _electron as electron,
@@ -62,6 +62,17 @@ test.afterEach(async () => {
 
 test("Health distinguishes optional decoder, polling and power readings at desktop and 200 percent zoom", async () => {
   const page = await launch();
+  if (process.platform === "win32" || process.platform === "darwin") {
+    await app.evaluate(({ powerMonitor }) => {
+      powerMonitor.emit("on-ac");
+      powerMonitor.emit("speed-limit-change", { limit: 0 });
+    });
+    expect(
+      await page.evaluate(
+        async () => (await window.afterglideCloud.getSnapshot()).powerContext,
+      ),
+    ).toMatchObject({ onBattery: false, speedLimitPercent: 0 });
+  }
   const baseline = await page.evaluate(() =>
     window.afterglideCloud.getSnapshot(),
   );
@@ -142,11 +153,19 @@ test("Health distinguishes optional decoder, polling and power readings at deskt
         exact: true,
       }),
     );
-    await row("Power-efficient decoder (browser)").scrollIntoViewIfNeeded();
-    await page.screenshot({
-      path: join(root, `artifacts/e2e/cloud-telemetry-health-${factor}.png`),
-      fullPage: true,
-    });
+    await row("Power-efficient decoder (browser)").evaluate((element) =>
+      element.scrollIntoView({ block: "start", behavior: "instant" }),
+    );
+    // Native capture preserves the whole Electron viewport at browser zoom.
+    const capture = await app.evaluate(async ({ BrowserWindow }) =>
+      (await BrowserWindow.getAllWindows()[0].webContents.capturePage())
+        .toPNG()
+        .toString("base64"),
+    );
+    writeFileSync(
+      join(root, `artifacts/e2e/cloud-telemetry-health-${factor}.png`),
+      Buffer.from(capture, "base64"),
+    );
   }
 });
 
