@@ -18,7 +18,10 @@ export interface DeviceMetrics {
 interface Sample {
   connectionNumber: number;
   telemetry: StreamTelemetry;
-  settings: Pick<AppSettings, "resolution" | "inputPolling" | "videoFit">;
+  settings: Pick<
+    AppSettings,
+    "resolution" | "inputPolling" | "videoFit" | "playbackMode"
+  >;
   device?: DeviceMetrics;
 }
 
@@ -59,6 +62,7 @@ export class PerformanceReport {
         resolution: settings.resolution,
         inputPolling: settings.inputPolling,
         videoFit: settings.videoFit,
+        playbackMode: settings.playbackMode,
       },
       device,
     });
@@ -107,6 +111,8 @@ export class PerformanceReport {
         "Ping is RTT; presented-frame cadence is not button-to-photon latency.",
         "Incoming and decoded FPS use advancing receiver counters and stats timestamps. Displayed FPS uses framesRendered or compositor submission counters, not physical display photons.",
         "presentationCallbacksSkipped counts missed observations, not dropped display frames. Cadence excludes gaps spanning skipped callbacks. Hidden playback has no displayed FPS; visibility and focus are retained.",
+        "Retransmission, NACK, PLI, FIR and receiver-drop counts are cumulative for the current receiver and can reset. Missing is unknown; retransmitted packets are a subset of received packets, not additional packet loss.",
+        "playoutTargetMs is the requested hint; playoutTargetAccepted confirms API readback only. jitterBufferMs is measured delay, jitterBufferTargetMs the receiver target, and jitterBufferMinimumMs its network minimum. Smooth requests 33-100 ms and adds latency.",
         "jitterMs measures RTP packet jitter; jitterBufferMs measures interval receiver buffering. playoutMode is the application's request, not achieved delay.",
         "Decoder identity is reported by Chromium, not proof of hardware decoding.",
         "CPU is the sum of Electron process percentCPUUsage readings.",
@@ -147,7 +153,7 @@ function distribution(values: (number | undefined)[]) {
 function summarizeSamples(samples: Sample[]) {
   const groups = new Map<string, Sample[]>();
   for (const sample of samples) {
-    const key = `${sample.settings.resolution}p/${sample.settings.inputPolling}`;
+    const key = `${sample.settings.resolution}p/${sample.settings.inputPolling}/${sample.settings.playbackMode}`;
     const group = groups.get(key) ?? [];
     group.push(sample);
     groups.set(key, group);

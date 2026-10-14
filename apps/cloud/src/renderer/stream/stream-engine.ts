@@ -32,7 +32,7 @@ import { ControllerChordInput } from "./controller-chord";
 
 export type PlaybackSettings = Pick<
   AppSettings,
-  "volume" | "muted" | "videoFit" | "inputPolling"
+  "volume" | "muted" | "videoFit" | "inputPolling" | "playbackMode"
 >;
 
 const defaultPlaybackSettings: PlaybackSettings = {
@@ -40,6 +40,7 @@ const defaultPlaybackSettings: PlaybackSettings = {
   muted: false,
   videoFit: "fit",
   inputPolling: "responsive",
+  playbackMode: "automatic",
 };
 
 export interface ControllerStatus {
@@ -317,11 +318,15 @@ export class XboxStreamEngine {
       this.playbackSettings?.volume === settings.volume &&
       this.playbackSettings.muted === settings.muted &&
       this.playbackSettings.videoFit === settings.videoFit &&
-      this.playbackSettings.inputPolling === settings.inputPolling
+      this.playbackSettings.inputPolling === settings.inputPolling &&
+      this.playbackSettings.playbackMode === settings.playbackMode
     )
       return;
     const pollingChanged =
       this.playbackSettings?.inputPolling !== settings.inputPolling;
+    this.playout.setMode(settings.playbackMode);
+    for (const receiver of this.mediaReceivers)
+      applyPlayoutTarget(receiver, this.playout.target);
     this.playbackSettings = { ...settings };
     this.audio.volume = settings.volume;
     this.audio.muted = settings.muted;
@@ -1001,11 +1006,21 @@ export class XboxStreamEngine {
       )
         this.playout.update(sample.video, telemetry, sample.observedAt);
       else this.playout.suspend();
-      for (const receiver of this.mediaReceivers)
-        applyPlayoutTarget(receiver, this.playout.target);
+      let videoTargetAccepted: boolean | undefined;
+      for (const receiver of this.mediaReceivers) {
+        const accepted = applyPlayoutTarget(receiver, this.playout.target);
+        if (receiver.track.kind === "video") videoTargetAccepted = accepted;
+      }
       this.options.onTelemetry({
         ...telemetry,
-        playoutMode: this.playout.target === null ? "automatic" : "low-delay",
+        playoutMode:
+          this.playout.target === null
+            ? "automatic"
+            : this.playout.target === 0
+              ? "low-delay"
+              : "smooth",
+        playoutTargetMs: this.playout.target ?? undefined,
+        playoutTargetAccepted: videoTargetAccepted,
         inputQueueBytes: this.channels.input.bufferedAmount,
         inputPolling: this.inputPollingMetrics.snapshot(),
         playbackVisible: document.visibilityState === "visible",

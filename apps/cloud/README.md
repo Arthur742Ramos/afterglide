@@ -64,6 +64,16 @@ See the [DualSense/Xbox compatibility matrix and hands-on gates](docs/CONTROLLER
 
 Xbox negotiates quality. There are no forced bitrate, resolution or latency promises, and no alternate-device impersonation for a quality preset. The overlay reports received resolution, FPS, RTT, loss, bitrate, decoder and frame pacing where available. RTT is a network measure, not input-to-photon latency.
 
+### Smooth mode and repair diagnostics
+
+Choose **Settings → Stream smoothness → Smooth**, or switch in Quick settings during play. The choice persists and applies without reconnecting. Automatic remains the default. Smooth is experimental: it requests a 33 ms receiver buffer, raises the hint to 67 or 100 ms after sustained jitter, loss, stalls or drops, and steps down after 30 healthy seconds. Unknown measurements and suspended playback return control to the browser. Extra buffering can increase input delay; it cannot restore frames never supplied by the server.
+
+F3 shows measured **BUFFER**, requested **REQUEST**, and retransmitted video packets per second (**RTX**). Health and exported reports also retain cumulative retransmitted bytes/packets, NACK/PLI/FIR feedback counts, receiver frame drops, receiver target/minimum buffer delays, and whether the browser accepted the hint. Acceptance is not achieved delay. Missing counters remain “Not reported”; totals may reset when a receiver is replaced. Reports group Automatic and Smooth samples separately.
+
+For comparison, play the same scene on the same connection in each mode, then export from Health before quitting. Compare freezes, displayed FPS, frame intervals and actual buffering as well as the feel of controller response. Automated tests validate policy and reporting behavior, not improved live gameplay.
+
+Cloud sessions use Xbox's default offered region (otherwise the first offered region), with alternatives supplied for fallback. The client does not probe or rank regions by latency or packet loss, and this policy does not guarantee the best route.
+
 See the [performance measurement procedure](docs/PERFORMANCE-CAMPAIGN.md), [operation budgets and cancellation limits](docs/OPERATION-LIMITS.md) and [native/live-stream qualification gates](docs/NATIVE-QUALIFICATION.md) for the evidence required before performance or distribution claims.
 
 ## Verify and package

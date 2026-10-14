@@ -126,3 +126,14 @@ describe("SettingsStore", () => {
     });
   });
 });
+
+it("migrates to Automatic and persists Smooth while rejecting invalid modes", () => {
+  directory = mkdtempSync(join(tmpdir(), "afterglide-settings-"));
+  const path = join(directory, "preferences.json");
+  const store = new SettingsStore(path);
+  expect(store.settings.playbackMode).toBe("automatic");
+  store.updateSettings({ playbackMode: "smooth" });
+  expect(new SettingsStore(path).settings.playbackMode).toBe("smooth");
+  store.updateSettings({ playbackMode: "invalid" } as never);
+  expect(store.settings.playbackMode).toBe("smooth");
+});

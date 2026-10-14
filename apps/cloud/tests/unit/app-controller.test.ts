@@ -127,6 +127,34 @@ function makeController(
 }
 
 describe("AppController", () => {
+  it("exports selected Smooth mode and sanitized repair evidence without inventing missing values", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    await controller.updateSettings({ playbackMode: "smooth" });
+    await controller.startCloudStream("cloud-game");
+    await controller.reportStreamEvent("session", "connected");
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      retransmittedPacketsReceived: 0,
+      retransmittedPacketsPerSecond: 12,
+      nackCount: -1,
+      pliCount: Number.NaN,
+      playoutMode: "smooth",
+      playoutTargetMs: 67,
+      playoutTargetAccepted: false,
+    });
+    const report = controller.exportPerformanceReport();
+    expect(report.samples[0].settings.playbackMode).toBe("smooth");
+    expect(report.samples[0].telemetry).toMatchObject({
+      retransmittedPacketsReceived: 0,
+      retransmittedPacketsPerSecond: 12,
+      nackCount: undefined,
+      pliCount: undefined,
+      playoutMode: "smooth",
+      playoutTargetMs: 67,
+      playoutTargetAccepted: false,
+    });
+  });
   it("retains typed cadence and false decoder evidence, takes power only from main and rejects malformed cadence", async () => {
     const controller = makeController(new FakePlatform());
     await controller.initialize();

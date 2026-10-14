@@ -153,6 +153,31 @@ export function QuickSettings({
       </div>
       <div className="quick-setting-row">
         <div>
+          <strong>Stream smoothness</strong>
+          <p>
+            Smooth adds buffering and may increase input delay. Experimental.
+          </p>
+        </div>
+        <div
+          className="quick-setting-actions"
+          role="group"
+          aria-label="Stream smoothness"
+        >
+          {(["automatic", "smooth"] as const).map((mode) => (
+            <button
+              key={mode}
+              data-focusable
+              aria-pressed={settings.playbackMode === mode}
+              aria-disabled={saving}
+              onClick={() => void update({ playbackMode: mode })}
+            >
+              {mode === "smooth" ? "Smooth" : "Automatic"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="quick-setting-row">
+        <div>
           <strong>Input polling</strong>
           <p>Requested controller timer interval.</p>
         </div>

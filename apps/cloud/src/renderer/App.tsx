@@ -1897,6 +1897,30 @@ function StreamView({
             }
           />
           <Metric
+            label="BUFFER"
+            value={
+              telemetry.jitterBufferMs === undefined
+                ? "NOT REPORTED"
+                : `${telemetry.jitterBufferMs.toFixed(0)} MS`
+            }
+          />
+          <Metric
+            label="REQUEST"
+            value={
+              telemetry.playoutTargetMs === undefined
+                ? "AUTO"
+                : `${telemetry.playoutTargetMs} MS${telemetry.playoutTargetAccepted === false ? " · UNSUPPORTED" : ""}`
+            }
+          />
+          <Metric
+            label="RTX"
+            value={
+              telemetry.retransmittedPacketsPerSecond === undefined
+                ? "NOT REPORTED"
+                : `${telemetry.retransmittedPacketsPerSecond.toFixed(0)} PKT/S`
+            }
+          />
+          <Metric
             label="QUALITY"
             value={telemetry.resolution.replace(" × ", "×")}
           />
@@ -2352,6 +2376,97 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
           }
         />
         <DiagnosticRow
+          icon="display"
+          label="Selected playback mode"
+          value={
+            snapshot.settings.playbackMode === "smooth"
+              ? "Smooth (experimental)"
+              : "Automatic"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Requested buffer hint"
+          value={
+            snapshot.telemetry.updatedAt
+              ? snapshot.telemetry.playoutTargetMs === undefined
+                ? "Browser automatic"
+                : `${snapshot.telemetry.playoutTargetMs} ms`
+              : "Measured during play"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Buffer hint accepted (not achieved delay)"
+          value={
+            snapshot.telemetry.playoutTargetAccepted === undefined
+              ? "Not reported"
+              : snapshot.telemetry.playoutTargetAccepted
+                ? "Yes"
+                : "No"
+          }
+        />
+        {(
+          [
+            [
+              "Receiver target buffer",
+              snapshot.telemetry.jitterBufferTargetMs,
+              "ms",
+            ],
+            [
+              "Network minimum buffer",
+              snapshot.telemetry.jitterBufferMinimumMs,
+              "ms",
+            ],
+            [
+              "Retransmitted video packets",
+              snapshot.telemetry.retransmittedPacketsReceived,
+              "packets (total)",
+            ],
+            [
+              "Video retransmission rate",
+              snapshot.telemetry.retransmittedPacketsPerSecond,
+              "packets/s",
+            ],
+            [
+              "Retransmitted video bytes",
+              snapshot.telemetry.retransmittedBytesReceived,
+              "bytes (total)",
+            ],
+            [
+              "Retransmission requests (NACK)",
+              snapshot.telemetry.nackCount,
+              "feedback messages (total)",
+            ],
+            [
+              "Picture loss requests (PLI)",
+              snapshot.telemetry.pliCount,
+              "messages (total)",
+            ],
+            [
+              "Full frame requests (FIR)",
+              snapshot.telemetry.firCount,
+              "messages (total)",
+            ],
+            [
+              "Receiver frame drops",
+              snapshot.telemetry.receiverFramesDropped,
+              "frames (total)",
+            ],
+          ] as const
+        ).map(([label, value, unit]) => (
+          <DiagnosticRow
+            key={label}
+            icon="pulse"
+            label={label}
+            value={
+              value === undefined
+                ? "Not reported"
+                : `${Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`
+            }
+          />
+        ))}
+        <DiagnosticRow
           icon="wifi"
           label="Input send queue"
           value={
@@ -2582,6 +2697,31 @@ function SettingsPage({
             initialFocus
             onChange={(value) => update({ showPerformance: value })}
           />
+        </SettingRow>
+        <SettingRow
+          icon="display"
+          title="Stream smoothness"
+          detail="Smooth adds buffering to reduce stutter and may increase input delay. Experimental; you can switch during play."
+        >
+          <div
+            className="segmented"
+            role="group"
+            aria-label="Stream smoothness"
+          >
+            {(["automatic", "smooth"] as const).map((mode) => (
+              <button
+                key={mode}
+                data-focusable
+                aria-pressed={snapshot.settings.playbackMode === mode}
+                className={
+                  snapshot.settings.playbackMode === mode ? "active" : ""
+                }
+                onClick={() => update({ playbackMode: mode })}
+              >
+                {mode === "smooth" ? "Smooth" : "Automatic"}
+              </button>
+            ))}
+          </div>
         </SettingRow>
         <SettingRow
           icon="controller"

@@ -28,6 +28,15 @@ type MeasuredTelemetry = Pick<
   | "jitterBufferMs"
   | "jitterMs"
   | "networkQuality"
+  | "retransmittedPacketsReceived"
+  | "retransmittedBytesReceived"
+  | "nackCount"
+  | "pliCount"
+  | "firCount"
+  | "receiverFramesDropped"
+  | "retransmittedPacketsPerSecond"
+  | "jitterBufferTargetMs"
+  | "jitterBufferMinimumMs"
 >;
 
 /** Extract only reported values. Counter intervals require the same video source. */
@@ -61,6 +70,18 @@ export function extractStreamStats(
     video.id === previous.video.id
       ? previous.video
       : undefined;
+  const statsSeconds =
+    video &&
+    oldVideo &&
+    measurement(video.timestamp) !== undefined &&
+    measurement(oldVideo.timestamp) !== undefined
+      ? (Number(video.timestamp) - Number(oldVideo.timestamp)) / 1000
+      : undefined;
+  const retransmitted = intervalDelta(
+    video,
+    oldVideo,
+    "retransmittedPacketsReceived",
+  );
   const received = intervalDelta(video, oldVideo, "packetsReceived");
   const lost = intervalDelta(video, oldVideo, "packetsLost");
   const bytes = intervalDelta(video, oldVideo, "bytesReceived");
@@ -119,6 +140,39 @@ export function extractStreamStats(
             video,
             oldVideo,
             "jitterBufferDelay",
+            "jitterBufferEmittedCount",
+          )
+        : undefined,
+      retransmittedPacketsReceived: measurement(
+        video?.retransmittedPacketsReceived,
+      ),
+      retransmittedBytesReceived: measurement(
+        video?.retransmittedBytesReceived,
+      ),
+      nackCount: measurement(video?.nackCount),
+      pliCount: measurement(video?.pliCount),
+      firCount: measurement(video?.firCount),
+      receiverFramesDropped: measurement(video?.framesDropped),
+      retransmittedPacketsPerSecond:
+        statsSeconds !== undefined &&
+        statsSeconds > 0 &&
+        statsSeconds <= 2.5 &&
+        retransmitted !== undefined
+          ? retransmitted / statsSeconds
+          : undefined,
+      jitterBufferTargetMs: video
+        ? intervalMeanMs(
+            video,
+            oldVideo,
+            "jitterBufferTargetDelay",
+            "jitterBufferEmittedCount",
+          )
+        : undefined,
+      jitterBufferMinimumMs: video
+        ? intervalMeanMs(
+            video,
+            oldVideo,
+            "jitterBufferMinimumDelay",
             "jitterBufferEmittedCount",
           )
         : undefined,

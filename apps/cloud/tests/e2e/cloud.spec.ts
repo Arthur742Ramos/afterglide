@@ -2279,3 +2279,88 @@ test("late bootstrap reply and obsolete account events cannot replace a newer ca
     page.getByRole("heading", { name: "Newer catalog fixture", exact: true }),
   ).toHaveCount(0);
 });
+
+test("Smooth mode persists, switches live, and repair diagnostics stay readable", async () => {
+  let page = await launch();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const modes = () =>
+    page.getByRole("group", { name: "Stream smoothness", exact: true });
+  await expect(
+    modes().getByRole("button", { name: "Automatic", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await modes().getByRole("button", { name: "Smooth", exact: true }).click();
+  await expect(
+    modes().getByRole("button", { name: "Smooth", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await app.close();
+  page = await launch("happy", true, false, directory);
+  await play(page);
+  await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+    "data-playback-mode",
+    "smooth",
+  );
+  const sessionId = await page.evaluate(
+    async () => (await window.afterglideCloud.getSnapshot()).session.sessionId,
+  );
+  await page.evaluate(() =>
+    window.afterglideCloudTest!.injectGamepad("controls"),
+  );
+  for (const factor of [1, 2]) {
+    await zoom(page, factor);
+    await modes()
+      .getByRole("button", { name: "Automatic", exact: true })
+      .click();
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-playback-mode",
+      "automatic",
+    );
+    await modes().getByRole("button", { name: "Smooth", exact: true }).click();
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-playback-mode",
+      "smooth",
+    );
+    await accessible(page);
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-smooth-controls-${factor}.png`),
+    });
+  }
+  expect(
+    await page.evaluate(
+      async () =>
+        (await window.afterglideCloud.getSnapshot()).session.sessionId,
+    ),
+  ).toBe(sessionId);
+  await zoom(page, 1);
+  await page.keyboard.press("F10");
+  await page.keyboard.press("F3");
+  await expect(
+    page
+      .getByLabel("Stream performance")
+      .locator(".metric")
+      .filter({ hasText: "RTX" }),
+  ).toContainText("0 PKT/S");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  await expect(
+    page.getByText("Video retransmission rate", { exact: true }).locator(".."),
+  ).toContainText("0 packets/s");
+  await expect(
+    page.getByText("Full frame requests (FIR)", { exact: true }).locator(".."),
+  ).toContainText("Not reported");
+  for (const factor of [1, 2]) {
+    await zoom(page, factor);
+    await page
+      .getByText("Retransmitted video packets", { exact: true })
+      .scrollIntoViewIfNeeded();
+    await accessible(page);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-smooth-health-${factor}.png`),
+    });
+  }
+});

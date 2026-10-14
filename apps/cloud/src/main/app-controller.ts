@@ -756,10 +756,52 @@ export class AppController {
       powerContext: this.snapshot.powerContext,
       decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
       jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
+      retransmittedPacketsReceived: optionalMeasurement(
+        telemetry.retransmittedPacketsReceived,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      retransmittedBytesReceived: optionalMeasurement(
+        telemetry.retransmittedBytesReceived,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      nackCount: optionalMeasurement(
+        telemetry.nackCount,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      pliCount: optionalMeasurement(
+        telemetry.pliCount,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      firCount: optionalMeasurement(
+        telemetry.firCount,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      receiverFramesDropped: optionalMeasurement(
+        telemetry.receiverFramesDropped,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      retransmittedPacketsPerSecond: optionalMeasurement(
+        telemetry.retransmittedPacketsPerSecond,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      jitterBufferTargetMs: optionalMeasurement(
+        telemetry.jitterBufferTargetMs,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      jitterBufferMinimumMs: optionalMeasurement(
+        telemetry.jitterBufferMinimumMs,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      playoutTargetMs: optionalMeasurement(telemetry.playoutTargetMs, 4_000),
+      playoutTargetAccepted:
+        typeof telemetry.playoutTargetAccepted === "boolean"
+          ? telemetry.playoutTargetAccepted
+          : undefined,
       jitterMs: optionalMeasurement(telemetry.jitterMs, 10_000),
       playoutMode:
         telemetry.playoutMode === "automatic" ||
-        telemetry.playoutMode === "low-delay"
+        telemetry.playoutMode === "low-delay" ||
+        telemetry.playoutMode === "smooth"
           ? telemetry.playoutMode
           : undefined,
       inputQueueBytes: optionalMeasurement(

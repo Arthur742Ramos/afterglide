@@ -98,7 +98,19 @@ export interface StreamTelemetry {
   decodeMs?: number;
   jitterBufferMs?: number;
   jitterMs?: number;
-  playoutMode?: "automatic" | "low-delay";
+  playoutMode?: "automatic" | "low-delay" | "smooth";
+  playoutTargetMs?: number;
+  playoutTargetAccepted?: boolean;
+  retransmittedPacketsReceived?: number;
+  retransmittedBytesReceived?: number;
+  nackCount?: number;
+  pliCount?: number;
+  firCount?: number;
+  receiverFramesDropped?: number;
+  retransmittedPacketsPerSecond?: number;
+  jitterBufferTargetMs?: number;
+  jitterBufferMinimumMs?: number;
+
   inputQueueBytes?: number;
   frameIntervalP95Ms?: number;
   frameIntervalP99Ms?: number;
@@ -172,6 +184,7 @@ export interface AppSettings {
   muted: boolean;
   videoFit: "fit" | "fill";
   inputPolling: "responsive" | "efficient";
+  playbackMode: "automatic" | "smooth";
 }
 
 export interface AppSnapshot {
@@ -286,6 +299,7 @@ export const defaultSettings: AppSettings = {
   muted: false,
   videoFit: "fit",
   inputPolling: "responsive",
+  playbackMode: "automatic",
 };
 
 export const emptyTelemetry: StreamTelemetry = {

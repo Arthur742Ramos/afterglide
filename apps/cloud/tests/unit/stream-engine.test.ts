@@ -288,6 +288,7 @@ describe("real stream engine input lifecycle", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(onTelemetry.mock.lastCall?.[0].inputPolling?.maxIntervalMs).toBe(4);
     engine.setPlaybackSettings({
+      playbackMode: "automatic",
       volume: 1,
       muted: false,
       videoFit: "fit",
@@ -392,6 +393,33 @@ describe("real stream engine input lifecycle", () => {
     }
     await tick();
     expect(targets()).toEqual([0, 0]);
+    engine.setPlaybackSettings({
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+      playbackMode: "smooth",
+    });
+    expect(targets()).toEqual([null, null]);
+    await tick();
+    await tick();
+    expect(targets()).toEqual([33, 33]);
+    expect(onTelemetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        playoutMode: "smooth",
+        playoutTargetMs: 33,
+        playoutTargetAccepted: true,
+      }),
+    );
+    expect(peer.closeCalls).toBe(0);
+    engine.setPlaybackSettings({
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+      playbackMode: "automatic",
+    });
+    expect(targets()).toEqual([null, null]);
     expect(onError).not.toHaveBeenCalled();
     expect(onInterrupted).not.toHaveBeenCalled();
   });
@@ -1311,6 +1339,7 @@ describe("real stream engine input lifecycle", () => {
       (media[0] as unknown as HTMLVideoElement).disableRemotePlayback,
     ).toBe(true);
     engine.setPlaybackSettings({
+      playbackMode: "automatic",
       volume: 0.35,
       muted: true,
       videoFit: "fill",
@@ -1325,6 +1354,7 @@ describe("real stream engine input lifecycle", () => {
     vi.advanceTimersByTime(4);
     expect(frames().map(a)).toEqual([true]);
     engine.setPlaybackSettings({
+      playbackMode: "automatic",
       volume: 1,
       muted: false,
       videoFit: "fit",
@@ -1379,6 +1409,7 @@ describe("real stream engine input lifecycle", () => {
       button = 1;
       vi.advanceTimersByTime(2);
       engine.setPlaybackSettings({
+        playbackMode: "automatic",
         volume,
         muted: false,
         videoFit: "fit",
