@@ -92,6 +92,7 @@ export class XboxStreamEngine {
   private videoPlaying = false;
   private inputActive = false;
   private inputSuspended = false;
+  private transportDisconnected = false;
   private sequence = 0;
   private lastInputAt = 0;
   private inputTimer = 0;
@@ -99,6 +100,7 @@ export class XboxStreamEngine {
   private handshakeAcknowledged = false;
   private telemetryTimer = 0;
   private keepaliveTimer = 0;
+  private keepaliveInFlight = false;
   private connectionDeadlineTimer = 0;
   private disconnectedTimer = 0;
   private keepaliveFailures = 0;
@@ -264,17 +266,24 @@ export class XboxStreamEngine {
 
       if (this.destroyed || this.terminal) return;
       this.keepaliveTimer = window.setInterval(() => {
+        if (this.destroyed || this.terminal || this.keepaliveInFlight) return;
+        this.keepaliveInFlight = true;
         void window.afterglideCloud
           .keepalive(this.options.sessionId)
           .then(() => {
+            if (this.destroyed || this.terminal) return;
             this.keepaliveFailures = 0;
           })
           .catch(() => {
+            if (this.destroyed || this.terminal) return;
             this.keepaliveFailures += 1;
             if (
               this.keepaliveFailures >= NETWORK_POLICY.keepaliveFailureThreshold
             )
               this.notifyInterrupted();
+          })
+          .finally(() => {
+            this.keepaliveInFlight = false;
           });
       }, NETWORK_POLICY.keepaliveIntervalMs);
       this.telemetryTimer = window.setInterval(
@@ -339,6 +348,7 @@ export class XboxStreamEngine {
     const active =
       !this.terminal &&
       !this.inputSuspended &&
+      !this.transportDisconnected &&
       document.hasFocus() &&
       document.visibilityState === "visible";
     // Paused/hidden streams only retry neutral. Wake promptly on focus/visibility.
@@ -430,19 +440,29 @@ export class XboxStreamEngine {
     if (this.peer.connectionState === "connected") {
       clearTimeout(this.disconnectedTimer);
       this.disconnectedTimer = 0;
+      if (this.transportDisconnected) {
+        this.transportDisconnected = false;
+        this.primeControllerRelease();
+        this.updateInputPolling();
+      }
       // Transport connectivity alone does not prove video is decoding.
       // Keep the startup deadline until video and input are both usable.
       return;
     }
     if (this.connected && this.peer.connectionState === "disconnected") {
+      this.transportDisconnected = true;
+      this.resetPlayout();
+      this.releaseInput();
       clearTimeout(this.disconnectedTimer);
       this.disconnectedTimer = window.setTimeout(() => {
         if (!this.destroyed && this.peer.connectionState === "disconnected")
           this.notifyInterrupted();
       }, NETWORK_POLICY.disconnectedGraceMs);
     }
-    if (this.connected && this.peer.connectionState === "failed")
+    if (this.connected && this.peer.connectionState === "failed") {
+      this.resetPlayout();
       this.notifyInterrupted();
+    }
     if (!this.connected && this.peer.connectionState === "failed")
       this.notifyError("A usable route to the Xbox was not found.");
   }
@@ -630,6 +650,7 @@ export class XboxStreamEngine {
     if (
       this.inputActive &&
       !this.inputSuspended &&
+      !this.transportDisconnected &&
       document.hasFocus() &&
       document.visibilityState === "visible"
     ) {
@@ -643,6 +664,7 @@ export class XboxStreamEngine {
     if (
       !this.inputActive ||
       this.inputSuspended ||
+      this.transportDisconnected ||
       this.terminal ||
       this.destroyed ||
       this.neutralPending ||
@@ -730,6 +752,7 @@ export class XboxStreamEngine {
     if (
       this.inputActive &&
       !this.inputSuspended &&
+      !this.transportDisconnected &&
       !this.destroyed &&
       !this.terminal &&
       document.hasFocus() &&
@@ -762,6 +785,7 @@ export class XboxStreamEngine {
     if (
       !this.options.keyboardControls ||
       this.inputSuspended ||
+      this.transportDisconnected ||
       !isKeyboardControlCode(event.code) ||
       !document.hasFocus()
     )
@@ -781,7 +805,7 @@ export class XboxStreamEngine {
       return;
     this.pressedKeys.delete(event.code);
     this.updateInputPolling();
-    if (this.inputSuspended) return;
+    if (this.inputSuspended || this.transportDisconnected) return;
     this.sendCurrentInput();
     event.preventDefault();
   };
@@ -791,6 +815,7 @@ export class XboxStreamEngine {
       this.destroyed ||
       this.terminal ||
       this.inputSuspended ||
+      this.transportDisconnected ||
       !this.inputActive ||
       !document.hasFocus() ||
       document.visibilityState !== "visible"
@@ -942,7 +967,11 @@ export class XboxStreamEngine {
         this.previousStats,
         performance.now(),
       );
-      if (this.videoPlaying && document.visibilityState === "visible")
+      if (
+        this.videoPlaying &&
+        !this.transportDisconnected &&
+        document.visibilityState === "visible"
+      )
         this.playout.update(sample.video, telemetry, sample.observedAt);
       else this.playout.reset();
       for (const receiver of this.mediaReceivers)

@@ -15,6 +15,7 @@ interface Baseline {
   observedAt: number;
   frames: number;
   freezes?: number;
+  dropped?: number;
 }
 
 /**
@@ -58,6 +59,7 @@ export class AdaptivePlayoutPolicy {
       frames,
       observedAt,
       freezes: nonnegative(video.freezeCount),
+      dropped: nonnegative(video.framesDropped),
     };
     const previous = this.baseline;
     this.baseline = current;
@@ -71,6 +73,9 @@ export class AdaptivePlayoutPolicy {
       ((current.freezes === undefined && previous.freezes === undefined) ||
         (current.freezes !== undefined &&
           current.freezes === previous.freezes)) &&
+      ((current.dropped === undefined && previous.dropped === undefined) ||
+        (current.dropped !== undefined &&
+          current.dropped === previous.dropped)) &&
       within(telemetry.jitterMs, PLAYOUT_POLICY.maxHealthyJitterMs) &&
       within(
         telemetry.packetLossPercent,
