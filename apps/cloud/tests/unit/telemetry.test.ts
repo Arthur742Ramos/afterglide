@@ -17,6 +17,17 @@ const counters = {
 };
 
 describe("truthful stream telemetry", () => {
+  it("converts reported packet jitter from seconds independently of buffer delay", () => {
+    expect(
+      extractStreamStats(records({ jitter: 0.012 }), undefined, 1000).telemetry
+        .jitterMs,
+    ).toBe(12);
+    for (const jitter of [undefined, -1, "0.012", Number.NaN])
+      expect(
+        extractStreamStats(records({ jitter }), undefined, 1000).telemetry
+          .jitterMs,
+      ).toBeUndefined();
+  });
   it("does not invent missing frame rate, codec, decoder or network evidence", () => {
     const { telemetry } = extractStreamStats(
       records({}, null),

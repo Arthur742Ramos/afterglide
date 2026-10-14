@@ -22,6 +22,8 @@ describe("performance evidence", () => {
         roundTripMs: 0,
         packetLossPercent: 0,
         framesPerSecond: 60,
+        jitterMs: 0,
+        playoutMode: "automatic",
       },
       defaultSettings,
     );
@@ -37,6 +39,9 @@ describe("performance evidence", () => {
     });
     expect(exported.summaries[0].packetLossPercent?.count).toBe(1);
     expect(exported.summaries[0].framesPerSecond?.median).toBe(60);
+    expect(exported.summaries[0].jitterMs?.count).toBe(1);
+    expect(exported.summaries[0].jitterMs?.median).toBe(0);
+    expect(exported.samples[1].telemetry.playoutMode).toBe("automatic");
   });
 
   it("retains a bounded chronological window without account or controller identifiers", () => {

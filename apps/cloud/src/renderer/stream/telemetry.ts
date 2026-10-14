@@ -22,6 +22,7 @@ type MeasuredTelemetry = Pick<
   | "videoDecoder"
   | "decodeMs"
   | "jitterBufferMs"
+  | "jitterMs"
   | "networkQuality"
 >;
 
@@ -88,6 +89,10 @@ export function extractStreamStats(
       codec,
       connection,
       videoDecoder: reportedText(video?.decoderImplementation),
+      jitterMs:
+        measurement(video?.jitter) === undefined
+          ? undefined
+          : Number(video?.jitter) * 1000,
       decodeMs: video
         ? intervalMeanMs(video, oldVideo, "totalDecodeTime", "framesDecoded")
         : undefined,
