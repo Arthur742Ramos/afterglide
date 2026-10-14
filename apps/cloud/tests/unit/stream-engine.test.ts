@@ -246,7 +246,7 @@ function actuator() {
 }
 
 describe("real stream engine input lifecycle", () => {
-  it.each(["waiting", "hidden", "stats-failure"] as const)(
+  it.each(["waiting", "hidden", "disconnected", "stats-failure"] as const)(
     "keeps both receivers automatic on startup, adapts after healthy video, and resets on %s",
     async (reason) => {
       let at = 0;
@@ -294,6 +294,7 @@ describe("real stream engine input lifecycle", () => {
           bytesReceived: second * 10000,
           jitter: 0.002,
           freezeCount: 0,
+          framesDropped: 0,
         });
         await vi.advanceTimersByTimeAsync(1000);
       }
@@ -307,6 +308,9 @@ describe("real stream engine input lifecycle", () => {
       else if (reason === "hidden") {
         doc.visibilityState = "hidden";
         doc.dispatchEvent(new Event("visibilitychange"));
+      } else if (reason === "disconnected") {
+        peer.connectionState = "disconnected";
+        peer.dispatchEvent(new Event("connectionstatechange"));
       } else {
         vi.spyOn(peer, "getStats").mockRejectedValue(
           new Error("Stats unavailable"),
@@ -794,6 +798,39 @@ describe("real stream engine input lifecycle", () => {
     expect(onError).toHaveBeenCalledWith(
       expect.stringContaining("video connection timed out"),
     );
+  });
+  it("survives a transient transport disconnect within the grace window without expiring input", () => {
+    ready();
+    media[0].dispatchEvent(new Event("playing"));
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(frames().map(a)).toEqual([true]);
+
+    peer.channels.input.bufferedAmount = 38;
+    peer.connectionState = "disconnected";
+    peer.dispatchEvent(new Event("connectionstatechange"));
+    button = 0;
+    vi.advanceTimersByTime(500);
+    button = 1;
+    vi.advanceTimersByTime(1000);
+    expect(onError).not.toHaveBeenCalled();
+    expect(onInterrupted).not.toHaveBeenCalled();
+
+    peer.channels.input.bufferedAmount = 0;
+    peer.connectionState = "connected";
+    peer.dispatchEvent(new Event("connectionstatechange"));
+    peer.channels.input.dispatchEvent(new Event("bufferedamountlow"));
+    vi.advanceTimersByTime(8);
+    expect(frames().at(-1)).toBeDefined();
+    expect(a(frames().at(-1)!)).toBe(false);
+    button = 0;
+    vi.advanceTimersByTime(4);
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+    vi.advanceTimersByTime(3000);
+    expect(onInterrupted).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
   });
   it("deduplicates transport failure and server disconnect for a session", () => {
     ready();

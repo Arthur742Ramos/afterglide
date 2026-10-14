@@ -563,7 +563,13 @@ export class LivePlatformService implements PlatformService {
         `/v5/sessions/${target.source}/play`,
         {
           method: "POST",
-          body: JSON.stringify(buildSessionPayload(target, resolution)),
+          body: JSON.stringify(
+            buildSessionPayload(
+              target,
+              resolution,
+              token.offeringSettings.regions,
+            ),
+          ),
           headers: { "X-MS-Device-Info": deviceInfo(resolution) },
         },
         false,
@@ -993,9 +999,29 @@ function chooseRegion(token: StreamTokenData) {
   );
 }
 
+function fallbackRegions(
+  regions: StreamTokenData["offeringSettings"]["regions"],
+): string[] {
+  const primary =
+    regions.find((candidate) => candidate.isDefault) ?? regions[0];
+  const seen = new Set<string>();
+  const primaryName = primary?.name?.trim();
+  if (primaryName) seen.add(primaryName);
+  const names: string[] = [];
+  for (const region of regions) {
+    if (region === primary || region.baseUri === primary?.baseUri) continue;
+    const name = region.name?.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
 export function buildSessionPayload(
   target: StreamTarget,
   resolution: 720 | 1080,
+  regions: StreamTokenData["offeringSettings"]["regions"] = [],
 ) {
   return {
     clientSessionId: "",
@@ -1013,7 +1039,7 @@ export function buildSessionPayload(
       osName: process.platform === "darwin" ? "macos" : "windows",
     },
     serverId: "",
-    fallbackRegionNames: [],
+    fallbackRegionNames: fallbackRegions(regions),
   };
 }
 

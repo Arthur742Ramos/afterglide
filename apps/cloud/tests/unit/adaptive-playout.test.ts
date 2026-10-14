@@ -10,6 +10,7 @@ const video = (second: number) => ({
   timestamp: second * 1000,
   framesDecoded: second * 60,
   freezeCount: 0,
+  framesDropped: 0,
 });
 
 function settled() {
@@ -59,6 +60,7 @@ describe("adaptive video playout", () => {
     { ...video(12), framesDecoded: 660 },
     { ...video(12), framesDecoded: 0 },
     { ...video(12), freezeCount: 1 },
+    { ...video(12), framesDropped: 1 },
     { ...video(12), timestamp: 11_000 },
     { ...video(12), id: "replacement" },
     { ...video(12), framesDecoded: undefined },

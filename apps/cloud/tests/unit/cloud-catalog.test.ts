@@ -5,10 +5,33 @@ import {
 } from "../../src/main/live-platform-service";
 
 describe("cloud catalog mapping", () => {
-  it("uses only cloud title IDs and never changes device class for a quality setting", () => {
-    const a = buildSessionPayload({ source: "cloud", id: "game" }, 720);
+  it("uses only cloud title IDs, populates fallback regions, and never changes device class for a quality setting", () => {
+    const a = buildSessionPayload({ source: "cloud", id: "game" }, 720, [
+      {
+        baseUri: "https://west.xboxlive.com",
+        isDefault: false,
+        name: "WestUS",
+      },
+      { baseUri: "https://east.xboxlive.com", isDefault: true, name: "EastUS" },
+      {
+        baseUri: "https://east.xboxlive.com/",
+        isDefault: false,
+        name: "EastUS",
+      },
+      {
+        baseUri: "https://central.xboxlive.com",
+        isDefault: false,
+        name: "CentralUS",
+      },
+      { baseUri: "https://dup.xboxlive.com", isDefault: false, name: "WestUS" },
+    ]);
     const b = buildSessionPayload({ source: "cloud", id: "game" }, 1080);
-    expect(a).toMatchObject({ titleId: "game", serverId: "" });
+    expect(a).toMatchObject({
+      titleId: "game",
+      serverId: "",
+      fallbackRegionNames: ["WestUS", "CentralUS"],
+    });
+    expect(b.fallbackRegionNames).toEqual([]);
     expect(a.settings.osName).toBe(b.settings.osName);
     expect(a.settings.osName).not.toBe("android");
   });

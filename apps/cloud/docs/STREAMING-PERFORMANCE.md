@@ -38,13 +38,23 @@ network, receiver buffer, decoder, compositor, display and controller all contri
 - Cloud receivers initially retain automatic browser buffering. A zero target
   is requested only after ten continuous seconds of advancing video with
   reported jitter <=5 ms, interval loss <=0.5% and RTT <=80 ms. Waiting, hidden
-  playback, a freeze, stalled decoding, stale/replaced/reset counters, missing
-  measurements, a stats failure or unhealthy network measurements immediately
-  restore the browser default. Interrupted sampling (>2.5 seconds) restarts
-  that healthy window. These thresholds are conservative client policy, not
-  measured performance gains. Both receivers use the same requested policy
-  for audio/video sync; Chromium retains control of actual delay and packet
-  recovery. A zero target is a low-delay hint, not a disabled jitter buffer.
+  playback, a freeze, dropped frames, stalled decoding, stale/replaced/reset
+  counters, missing measurements, a stats failure, a disconnected transport
+  route or unhealthy network measurements immediately restore the browser
+  default. Interrupted sampling (>2.5 seconds) restarts that healthy window.
+  These thresholds are conservative client policy, not measured performance
+  gains. Both receivers use the same requested policy for audio/video sync;
+  Chromium retains control of actual delay and packet recovery. A zero target
+  is a low-delay hint, not a disabled jitter buffer.
+- During a WebRTC `disconnected` transport grace window, the stream engine
+  immediately restores automatic playout buffering, clears queued input edges,
+  and suspends fresh transition buffering until the route returns to
+  `connected` (arming the physical release gate on recovery) or the grace
+  window expires and triggers session recovery. Keepalive ticks also serialize
+  so a slow network cannot stack concurrent requests.
+- Cloud session provisioning includes non-primary region names from the token's
+  offering settings in `fallbackRegionNames` so Xbox services can fail over when
+  the default region is congested.
 - Health reports the stream's actual decoder identifier when Chromium supplies
   it, interval decode time per frame, interval video-buffer delay, and send-queue
   bytes. Exports also retain packet jitter in `jitterMs` and the requested
