@@ -3,6 +3,7 @@ import type { MediaCounters } from "./media-metrics";
 
 export const PLAYOUT_POLICY = {
   healthyDurationMs: 10_000,
+  maxBackoffExponent: 3,
   maxSampleGapMs: 2_500,
   maxHealthyJitterMs: 5,
   maxHealthyLossPercent: 0.5,
@@ -27,11 +28,13 @@ export class AdaptivePlayoutPolicy {
   target: 0 | null = null;
   private baseline?: Baseline;
   private healthySince?: number;
+  private mediaDisturbances = 0;
 
   reset(): void {
     this.target = null;
     this.baseline = undefined;
     this.healthySince = undefined;
+    this.mediaDisturbances = 0;
   }
 
   update(
@@ -63,19 +66,21 @@ export class AdaptivePlayoutPolicy {
     };
     const previous = this.baseline;
     this.baseline = current;
-    const healthy =
+    const mediaHealthy =
       previous !== undefined &&
       previous.id === current.id &&
       current.timestamp > previous.timestamp &&
-      observedAt > previous.observedAt &&
-      observedAt - previous.observedAt <= PLAYOUT_POLICY.maxSampleGapMs &&
       current.frames > previous.frames &&
       ((current.freezes === undefined && previous.freezes === undefined) ||
         (current.freezes !== undefined &&
           current.freezes === previous.freezes)) &&
       ((current.dropped === undefined && previous.dropped === undefined) ||
         (current.dropped !== undefined &&
-          current.dropped === previous.dropped)) &&
+          current.dropped === previous.dropped));
+    const healthy =
+      mediaHealthy &&
+      observedAt > previous.observedAt &&
+      observedAt - previous.observedAt <= PLAYOUT_POLICY.maxSampleGapMs &&
       within(telemetry.jitterMs, PLAYOUT_POLICY.maxHealthyJitterMs) &&
       within(
         telemetry.packetLossPercent,
@@ -83,13 +88,20 @@ export class AdaptivePlayoutPolicy {
       ) &&
       within(telemetry.roundTripMs, PLAYOUT_POLICY.maxHealthyRoundTripMs);
     if (!healthy) {
+      if (this.target === 0 && !mediaHealthy) {
+        this.mediaDisturbances = Math.min(
+          PLAYOUT_POLICY.maxBackoffExponent,
+          this.mediaDisturbances + 1,
+        );
+      }
       this.target = null;
       this.healthySince = undefined;
       return;
     }
     this.healthySince ??= observedAt;
-    if (observedAt - this.healthySince >= PLAYOUT_POLICY.healthyDurationMs)
-      this.target = 0;
+    const requiredHealthyMs =
+      PLAYOUT_POLICY.healthyDurationMs * 2 ** this.mediaDisturbances;
+    if (observedAt - this.healthySince >= requiredHealthyMs) this.target = 0;
   }
 }
 

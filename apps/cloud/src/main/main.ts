@@ -7,6 +7,7 @@ import {
   session,
   dialog,
   powerMonitor,
+  powerSaveBlocker,
   Menu,
   screen,
 } from "electron";
@@ -34,6 +35,7 @@ import {
   desktopMenuTemplate,
   restoreWindowPlacement,
   shouldQuitAfterLastWindow,
+  syncDisplaySleepBlocker,
 } from "./desktop-policy";
 import { readWindowState, saveWindowState } from "./window-state";
 
@@ -68,6 +70,19 @@ let quitting = false;
 let shutdownComplete = false;
 let gpuInfoReady = false;
 let refreshingHardware = false;
+let displaySleepBlockerId: number | undefined;
+
+function syncPowerSave(): void {
+  const phase =
+    quitting || !mainWindow || mainWindow.isDestroyed() || !controller
+      ? "idle"
+      : controller.getSnapshot().session.phase;
+  displaySleepBlockerId = syncDisplaySleepBlocker(
+    phase,
+    displaySleepBlockerId,
+    powerSaveBlocker,
+  );
+}
 
 // Feature status before GPU initialization can incorrectly report software-only.
 app.on("gpu-info-update", () => {
@@ -188,6 +203,7 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   if (quitting) return;
   quitting = true;
+  syncPowerSave();
   if (controller.getSnapshot().auth.status === "waiting")
     void controller.cancelSignIn();
   const finish = () => {
@@ -217,6 +233,7 @@ function openMainWindow(): void {
   window.on("leave-full-screen", () => controller?.setFullscreenState(false));
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = undefined;
+    syncPowerSave();
     if (process.platform === "darwin" && !quitting && !isTest) {
       if (controller?.getSnapshot().auth.status === "waiting")
         void controller.cancelSignIn();
@@ -325,7 +342,13 @@ function registerIpc(appController: AppController): void {
   handle(IPC.getSnapshot, () => appController.getSnapshot());
   handle(IPC.beginSignIn, () => appController.beginSignIn());
   handle(IPC.cancelSignIn, () => appController.cancelSignIn());
-  handle(IPC.signOut, () => appController.signOut());
+  handle(IPC.signOut, async () => {
+    try {
+      await appController.signOut();
+    } finally {
+      syncPowerSave();
+    }
+  });
   handle(IPC.refreshCloudTitles, () => appController.refreshCloudTitles());
   handle(IPC.searchCloudTitles, (query: string) =>
     appController.searchCloudTitles(query),
@@ -334,10 +357,20 @@ function registerIpc(appController: AppController): void {
   handle(IPC.selectCloudTitle, (titleId: string) =>
     appController.selectCloudTitle(titleId),
   );
-  handle(IPC.startCloudStream, (titleId: string) =>
-    appController.startCloudStream(titleId),
-  );
-  handle(IPC.retryStream, () => appController.retryStream());
+  handle(IPC.startCloudStream, async (titleId: string) => {
+    try {
+      return await appController.startCloudStream(titleId);
+    } finally {
+      syncPowerSave();
+    }
+  });
+  handle(IPC.retryStream, async () => {
+    try {
+      return await appController.retryStream();
+    } finally {
+      syncPowerSave();
+    }
+  });
   handle(IPC.sendSdp, (sessionId: string, offer: RTCSessionDescriptionInit) =>
     appController.sendSdp(sessionId, offer),
   );
@@ -349,13 +382,25 @@ function registerIpc(appController: AppController): void {
   );
   handle(
     IPC.reportStreamEvent,
-    (
+    async (
       sessionId: string,
       event: "connected" | "interrupted" | "failed",
       detail?: string,
-    ) => appController.reportStreamEvent(sessionId, event, detail),
+    ) => {
+      try {
+        await appController.reportStreamEvent(sessionId, event, detail);
+      } finally {
+        syncPowerSave();
+      }
+    },
   );
-  handle(IPC.stopStream, () => appController.stopStream());
+  handle(IPC.stopStream, async () => {
+    try {
+      await appController.stopStream();
+    } finally {
+      syncPowerSave();
+    }
+  });
   ipcMain.on(IPC.updateTelemetry, (event, telemetry: StreamTelemetry) => {
     const url = event.senderFrame?.url ?? event.sender.getURL();
     if (!isTrustedRendererUrl(url)) {

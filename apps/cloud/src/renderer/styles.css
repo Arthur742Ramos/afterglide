@@ -1555,8 +1555,7 @@ kbd.wide {
   margin: auto;
   padding: 9px 14px;
   border: 1px solid oklch(1 0 0 / 0.16);
-  background: oklch(0.08 0.01 258 / 0.65);
-  backdrop-filter: blur(10px);
+  background: oklch(0.08 0.01 258 / 0.94);
   color: oklch(0.9 0.02 258);
   font-size: 12px;
 }

@@ -3,6 +3,7 @@ import {
   desktopMenuTemplate,
   restoreWindowPlacement,
   shouldQuitAfterLastWindow,
+  syncDisplaySleepBlocker,
 } from "../../src/main/desktop-policy";
 
 const primary = { x: 0, y: 0, width: 1366, height: 728 };
@@ -74,5 +75,48 @@ describe("desktop placement and native policy", () => {
     expect(search.accelerator).toBe("CmdOrCtrl+F");
     search.click?.({} as never, undefined, {} as never);
     expect(commands).toEqual(["search"]);
+  });
+  it("prevents display sleep across active stream phases and releases on idle or error", () => {
+    const active = new Set<number>();
+    let nextId = 0;
+    const starts: string[] = [];
+    const stops: number[] = [];
+    const blocker = {
+      start(type: "prevent-display-sleep") {
+        starts.push(type);
+        const id = ++nextId;
+        active.add(id);
+        return id;
+      },
+      stop(id: number) {
+        stops.push(id);
+        active.delete(id);
+      },
+      isStarted(id: number) {
+        return active.has(id);
+      },
+    };
+    let id = syncDisplaySleepBlocker("idle", undefined, blocker);
+    expect(id).toBeUndefined();
+    for (const phase of [
+      "provisioning",
+      "authorizing",
+      "negotiating",
+      "streaming",
+      "recovering",
+    ] as const) {
+      id = syncDisplaySleepBlocker(phase, id, blocker);
+      expect(id).toBe(1);
+    }
+    expect(starts).toEqual(["prevent-display-sleep"]);
+    expect(stops).toEqual([]);
+    id = syncDisplaySleepBlocker("error", id, blocker);
+    expect(id).toBeUndefined();
+    expect(stops).toEqual([1]);
+    id = syncDisplaySleepBlocker("streaming", id, blocker);
+    expect(id).toBe(2);
+    id = syncDisplaySleepBlocker("idle", id, blocker);
+    expect(id).toBeUndefined();
+    expect(stops).toEqual([1, 2]);
   });
 });

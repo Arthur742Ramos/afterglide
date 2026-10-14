@@ -1,11 +1,38 @@
 import type { MenuItemConstructorOptions } from "electron";
-import type { DesktopCommand } from "../shared/contracts";
+import type { AppSnapshot, DesktopCommand } from "../shared/contracts";
 
 export interface DesktopRectangle {
   x: number;
   y: number;
   width: number;
   height: number;
+}
+
+export interface DisplaySleepBlocker {
+  start(type: "prevent-display-sleep"): number;
+  stop(id: number): void;
+  isStarted(id: number): boolean;
+}
+
+export function syncDisplaySleepBlocker(
+  phase: AppSnapshot["session"]["phase"],
+  blockerId: number | undefined,
+  blocker: DisplaySleepBlocker,
+): number | undefined {
+  const active =
+    phase === "provisioning" ||
+    phase === "authorizing" ||
+    phase === "negotiating" ||
+    phase === "streaming" ||
+    phase === "recovering";
+  if (active) {
+    if (blockerId !== undefined && blocker.isStarted(blockerId))
+      return blockerId;
+    return blocker.start("prevent-display-sleep");
+  }
+  if (blockerId !== undefined && blocker.isStarted(blockerId))
+    blocker.stop(blockerId);
+  return undefined;
 }
 
 export function restoreWindowPlacement(
