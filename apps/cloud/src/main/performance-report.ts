@@ -105,6 +105,8 @@ export class PerformanceReport {
         "Configuration labels are requested settings; resolution, codec and decoder samples are received/reported values.",
         "Test-environment samples are simulated, not hardware evidence.",
         "Ping is RTT; presented-frame cadence is not button-to-photon latency.",
+        "Incoming and decoded FPS use advancing receiver counters and stats timestamps. Displayed FPS uses framesRendered or compositor submission counters, not physical display photons.",
+        "presentationCallbacksSkipped counts missed observations, not dropped display frames. Cadence excludes gaps spanning skipped callbacks. Hidden playback has no displayed FPS; visibility and focus are retained.",
         "jitterMs measures RTP packet jitter; jitterBufferMs measures interval receiver buffering. playoutMode is the application's request, not achieved delay.",
         "Decoder identity is reported by Chromium, not proof of hardware decoding.",
         "CPU is the sum of Electron process percentCPUUsage readings.",
@@ -165,6 +167,15 @@ function summarizeSamples(samples: Sample[]) {
       jitterMs: distribution(group.map((sample) => sample.telemetry.jitterMs)),
       framesPerSecond: distribution(
         group.map((sample) => sample.telemetry.framesPerSecond),
+      ),
+      incomingFramesPerSecond: distribution(
+        group.map((sample) => sample.telemetry.incomingFramesPerSecond),
+      ),
+      decodedFramesPerSecond: distribution(
+        group.map((sample) => sample.telemetry.decodedFramesPerSecond),
+      ),
+      displayedFramesPerSecond: distribution(
+        group.map((sample) => sample.telemetry.displayedFramesPerSecond),
       ),
       rollingFrameIntervalP95Ms: distribution(
         group.map((sample) => sample.telemetry.frameIntervalP95Ms),

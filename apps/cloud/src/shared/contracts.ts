@@ -58,6 +58,14 @@ export interface StreamDescriptor {
 export interface StreamTelemetry {
   resolution: string;
   framesPerSecond?: number;
+  incomingFramesPerSecond?: number;
+  decodedFramesPerSecond?: number;
+  displayedFramesPerSecond?: number;
+  displayedFpsSource?: "webrtc" | "video-callback";
+  presentationCallbacksSkipped?: number;
+  presentationIntervalSamples?: number;
+  playbackVisible?: boolean;
+  playbackFocused?: boolean;
   roundTripMs?: number;
   packetLossPercent?: number;
   bitrateMbps?: number;

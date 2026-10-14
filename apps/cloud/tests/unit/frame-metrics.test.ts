@@ -19,12 +19,78 @@ function setup(windowSize = 600) {
   return {
     tracker,
     video,
-    present: (time: number) =>
-      callback(time, { presentationTime: time } as VideoFrameCallbackMetadata),
+    present: (time: number, presentedFrames?: number) =>
+      callback(time, {
+        presentationTime: time,
+        presentedFrames,
+      } as VideoFrameCallbackMetadata),
   };
 }
 
 describe("browser presentation and real media counters", () => {
+  it("measures compositor frame submissions even when callbacks miss observations", () => {
+    const { tracker, present } = setup();
+    present(0, 1);
+    expect(
+      tracker.snapshot(undefined, 0).displayedFramesPerSecond,
+    ).toBeUndefined();
+    for (let i = 1; i <= 30; i++) present((i * 1000) / 30, 1 + i * 2);
+    expect(tracker.snapshot(undefined, 1000)).toMatchObject({
+      displayedFramesPerSecond: 60,
+      displayedFpsSource: "video-callback",
+      presentationCallbacksSkipped: 30,
+      frameIntervalP95Ms: undefined,
+    });
+    present(1016.7, 62);
+    expect(tracker.snapshot(undefined, 1016.7).frameIntervalP95Ms).toBeCloseTo(
+      16.7,
+    );
+  });
+
+  it("prefers real rendered-frame counters and excludes hidden/resume intervals", () => {
+    const { tracker } = setup();
+    const report = (timestamp: number, framesRendered: number, id = "v") => ({
+      id,
+      timestamp,
+      framesRendered,
+    });
+    expect(
+      tracker.snapshot(report(0, 0), 0).displayedFramesPerSecond,
+    ).toBeUndefined();
+    expect(tracker.snapshot(report(1000, 30), 1000)).toMatchObject({
+      displayedFramesPerSecond: 30,
+      displayedFpsSource: "webrtc",
+    });
+    tracker.setVisible(false);
+    expect(
+      tracker.snapshot(report(2000, 60), 2000).displayedFramesPerSecond,
+    ).toBeUndefined();
+    tracker.setVisible(true);
+    expect(
+      tracker.snapshot(report(3000, 90), 3000).displayedFramesPerSecond,
+    ).toBeUndefined();
+    expect(
+      tracker.snapshot(report(4000, 120), 4000).displayedFramesPerSecond,
+    ).toBe(30);
+    expect(
+      tracker.snapshot(report(4000, 120), 5000).displayedFramesPerSecond,
+    ).toBeUndefined();
+    expect(
+      tracker.snapshot(report(6000, 10, "replacement"), 6000)
+        .displayedFramesPerSecond,
+    ).toBeUndefined();
+  });
+
+  it("keeps genuine stalled presentation at zero and counter resets unavailable", () => {
+    const { tracker, present } = setup();
+    present(0, 1);
+    tracker.snapshot(undefined, 0);
+    expect(tracker.snapshot(undefined, 1000).displayedFramesPerSecond).toBe(0);
+    present(1100, 0);
+    expect(
+      tracker.snapshot(undefined, 1100).displayedFramesPerSecond,
+    ).toBeUndefined();
+  });
   it("uses deterministic nearest-rank p95/p99 in a bounded rolling window", () => {
     const { tracker, present } = setup(100);
     let time = 0;

@@ -53,11 +53,16 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   remain unavailable, never fabricated zeroes.
 - Ping comes from the selected transport candidate pair. Unrelated succeeded ICE
   probes no longer overwrite the live route's measurement.
-- Frame cadence uses nearest-rank p95/p99 over the last 600 visible presentation
-  intervals from `requestVideoFrameCallback`. It measures browser presentation,
-  not display photons. A long presentation gap affects cadence, but does not
-  invent a freeze count. Drop/freeze counts use real browser counters and remain
-  unavailable when unsupported; hidden/spanning freeze intervals are excluded.
+- Frame cadence uses nearest-rank p95/p99 over up to 600 visible, observed
+  consecutive-frame presentation intervals from `requestVideoFrameCallback`.
+  When its `presentedFrames` counter advances by more than one, the callback
+  missed observations: that gap is excluded instead of being labeled a slow
+  displayed frame. `presentationCallbacksSkipped` records those missed
+  observations, separately from actual drop counters. `presentationIntervalSamples`
+  discloses how many intervals support the rolling percentiles. This measures
+  browser presentation, not display photons. Real long consecutive-frame gaps
+  remain in cadence; freeze counts still require actual browser counters.
+  Hidden/spanning freeze intervals are excluded.
 - Runtime playback and controller settings compare values, not snapshot object
   identity. A new telemetry snapshot does not release held buttons, restart
   polling, or renegotiate the stream.
@@ -67,6 +72,38 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   snapshot for every sample.
 
 ## Comparison protocol
+
+### Incoming, decoded and displayed FPS
+
+F3 and Health show three separate rates; JSON exports retain them and their
+summary distributions. Incoming uses complete video `framesReceived`, decoded
+uses `framesDecoded`, and both divide counter deltas by advancing WebRTC stats
+timestamps on the same receiver. Replaced/reset/stale/missing counters yield
+unavailable data; a valid interval with no new frames yields measured zero.
+The older `framesPerSecond` field remains Chromium's last-second decode reading
+for compatibility.
+
+Displayed uses `framesRendered` when available, otherwise the compositor
+submission count in video callback `presentedFrames` over the sampling interval.
+It counts frames even when a callback misses an observation. The export's
+`displayedFpsSource` distinguishes `webrtc` from `video-callback`. This is browser
+render/submission FPS, not physical display photons or original game-engine FPS.
+Hidden playback is unavailable rather than a fabricated zero; the first sample
+after returning establishes a fresh baseline. `playbackVisible` and
+`playbackFocused` help interpret background/occlusion effects on a run.
+
+If incoming FPS falls with decoded/displayed FPS, compare loss/jitter and bitrate
+to distinguish a delivery interruption from a lower stream rate. If incoming is
+steady but decode falls behind, inspect decode time and real drops. If incoming
+and decode stay steady but display falls behind, inspect presentation and window
+visibility. These are diagnostic patterns, not automatic proof of a cause.
+
+The overlay uses an opaque instrument surface without per-metric backdrop blur,
+avoiding repeated filtering of live video beneath the FPS readouts. This removes
+that compositor work; improved real-game frame pacing still needs an A/B run.
+Hardware capability reads wait for GPU information and refresh on GPU status
+changes, avoiding an early software-only snapshot. A supported hardware feature
+does not prove this particular stream used hardware decoding.
 
 The native Chromium offer regression uses the production Cloud stream engine
 in an isolated Electron profile. It checks that supported repair codecs reach

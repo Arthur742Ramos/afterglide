@@ -60,6 +60,72 @@ test.afterEach(async () => {
   expect(errors).toEqual([]);
 });
 
+test("the FPS pipeline is readable in the overlay and Health at desktop and large zoom", async () => {
+  const page = await launch();
+  await play(page);
+  await page.keyboard.press("F3");
+  const strip = page.getByLabel("Stream performance");
+  for (const label of ["INCOMING", "DECODED", "DISPLAYED"])
+    await expect(
+      strip.locator(".metric").filter({ hasText: label }),
+    ).toContainText("60 FPS");
+  for (const zoom of [1, 2]) {
+    await app.evaluate(
+      ({ BrowserWindow }, value) =>
+        BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(value),
+      zoom,
+    );
+    await expect
+      .poll(() =>
+        strip.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return (
+            rect.left >= 0 &&
+            rect.right <= innerWidth &&
+            element.scrollWidth <= element.clientWidth
+          );
+        }),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-fps-overlay-${zoom}.png`),
+    });
+  }
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1),
+  );
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  for (const label of ["Incoming FPS", "Decoded FPS", "Displayed FPS"])
+    await expect(
+      page.getByText(label, { exact: true }).locator(".."),
+    ).toContainText("60.0 fps");
+  for (const zoom of [1, 2]) {
+    await app.evaluate(
+      ({ BrowserWindow }, value) =>
+        BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(value),
+      zoom,
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
+    if (zoom === 2)
+      await page
+        .getByText("Incoming FPS", { exact: true })
+        .evaluate((element) =>
+          element
+            .closest(".diagnostic-row")
+            ?.scrollIntoView({ block: "start" }),
+        );
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-fps-health-${zoom}.png`),
+    });
+  }
+});
+
 async function play(page: Page) {
   await page.getByRole("button", { name: /Play again/ }).click();
   await expect(page.getByTestId("mock-stream")).toBeVisible();

@@ -951,7 +951,9 @@ export class XboxStreamEngine {
         ...telemetry,
         playoutMode: this.playout.target === null ? "automatic" : "low-delay",
         inputQueueBytes: this.channels.input.bufferedAmount,
-        ...this.frameMetrics.snapshot(sample.video),
+        ...this.frameMetrics.snapshot(sample.video, sample.observedAt),
+        playbackVisible: document.visibilityState === "visible",
+        playbackFocused: document.hasFocus(),
         updatedAt: Date.now(),
       });
       this.previousStats = sample;

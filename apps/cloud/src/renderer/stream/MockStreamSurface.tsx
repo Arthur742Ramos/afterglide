@@ -23,6 +23,13 @@ export function MockStreamSurface({
       onTelemetry({
         resolution: "1920 × 1080",
         framesPerSecond: 60,
+        incomingFramesPerSecond: 60,
+        decodedFramesPerSecond: 60,
+        displayedFramesPerSecond: 60,
+        displayedFpsSource: "video-callback",
+        presentationCallbacksSkipped: 0,
+        playbackVisible: true,
+        playbackFocused: true,
         roundTripMs: 23,
         packetLossPercent: 0.08,
         bitrateMbps: 14.7,
