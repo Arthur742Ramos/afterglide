@@ -1,4 +1,5 @@
 import type { StreamTelemetry } from "../../shared/contracts";
+import { intervalFrameRate } from "./frame-rates";
 import {
   intervalMeanMs,
   selectedCandidatePair,
@@ -14,6 +15,8 @@ type MeasuredTelemetry = Pick<
   StreamTelemetry,
   | "resolution"
   | "framesPerSecond"
+  | "incomingFramesPerSecond"
+  | "decodedFramesPerSecond"
   | "roundTripMs"
   | "packetLossPercent"
   | "bitrateMbps"
@@ -83,6 +86,16 @@ export function extractStreamStats(
     telemetry: {
       resolution: width && height ? `${width} x ${height}` : "Not reported",
       framesPerSecond,
+      incomingFramesPerSecond: intervalFrameRate(
+        video,
+        oldVideo,
+        "framesReceived",
+      ),
+      decodedFramesPerSecond: intervalFrameRate(
+        video,
+        oldVideo,
+        "framesDecoded",
+      ),
       roundTripMs,
       packetLossPercent,
       bitrateMbps,

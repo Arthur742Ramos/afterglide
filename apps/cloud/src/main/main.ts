@@ -66,6 +66,28 @@ let controller: AppController | undefined;
 let preferences: SettingsStore | undefined;
 let quitting = false;
 let shutdownComplete = false;
+let gpuInfoReady = false;
+let refreshingHardware = false;
+
+// Feature status before GPU initialization can incorrectly report software-only.
+app.on("gpu-info-update", () => {
+  gpuInfoReady = true;
+  if (
+    !controller ||
+    quitting ||
+    refreshingHardware ||
+    controller.getSnapshot().hardware.videoDecode ===
+      String(app.getGPUFeatureStatus().video_decode ?? "unknown")
+  )
+    return;
+  refreshingHardware = true;
+  void readHardwareInfo()
+    .then((hardware) => controller?.updateHardware(hardware))
+    .catch(() => {})
+    .finally(() => {
+      refreshingHardware = false;
+    });
+});
 
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
@@ -411,14 +433,6 @@ function isTrustedRendererUrl(url: string): boolean {
 }
 
 async function readHardwareInfo(): Promise<HardwareInfo> {
-  const featureStatus = app.getGPUFeatureStatus();
-  const decode = String(featureStatus.video_decode ?? "unknown");
-  const acceleration =
-    decode === "enabled"
-      ? "enabled"
-      : decode.includes("disabled")
-        ? "disabled"
-        : "limited";
   let gpu = "Detected by Chromium";
   try {
     const info = (await app.getGPUInfo("basic")) as {
@@ -430,6 +444,17 @@ async function readHardwareInfo(): Promise<HardwareInfo> {
   } catch {
     // The feature status still provides useful evidence on unsupported drivers.
   }
+  const decode = gpuInfoReady
+    ? String(app.getGPUFeatureStatus().video_decode ?? "unknown")
+    : "unknown";
+  const acceleration =
+    decode === "unknown"
+      ? "unknown"
+      : decode === "enabled"
+        ? "enabled"
+        : decode.includes("disabled")
+          ? "disabled"
+          : "limited";
   const credentialStorage = getCredentialStorageInfo();
   return {
     acceleration,

@@ -22,6 +22,11 @@ describe("performance evidence", () => {
         roundTripMs: 0,
         packetLossPercent: 0,
         framesPerSecond: 60,
+        incomingFramesPerSecond: 60,
+        decodedFramesPerSecond: 30,
+        displayedFramesPerSecond: 20,
+        displayedFpsSource: "webrtc",
+        playbackVisible: true,
         jitterMs: 0,
         playoutMode: "automatic",
       },
@@ -42,6 +47,10 @@ describe("performance evidence", () => {
     expect(exported.summaries[0].jitterMs?.count).toBe(1);
     expect(exported.summaries[0].jitterMs?.median).toBe(0);
     expect(exported.samples[1].telemetry.playoutMode).toBe("automatic");
+    expect(exported.summaries[0].incomingFramesPerSecond?.median).toBe(60);
+    expect(exported.summaries[0].decodedFramesPerSecond?.median).toBe(30);
+    expect(exported.summaries[0].displayedFramesPerSecond?.median).toBe(20);
+    expect(exported.samples[1].telemetry.displayedFpsSource).toBe("webrtc");
   });
 
   it("retains a bounded chronological window without account or controller identifiers", () => {

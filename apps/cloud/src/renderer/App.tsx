@@ -1842,14 +1842,23 @@ function StreamView({
       )}
       {performanceVisible && (
         <div className="performance-strip" aria-label="Stream performance">
-          <Metric
-            label="VIDEO"
-            value={
-              telemetry.framesPerSecond === undefined
-                ? "NOT REPORTED"
-                : `${Math.round(telemetry.framesPerSecond)} FPS`
-            }
-          />
+          {(
+            [
+              ["INCOMING", telemetry.incomingFramesPerSecond],
+              ["DECODED", telemetry.decodedFramesPerSecond],
+              ["DISPLAYED", telemetry.displayedFramesPerSecond],
+            ] as const
+          ).map(([label, value]) => (
+            <Metric
+              key={label}
+              label={label}
+              value={
+                value === undefined
+                  ? "NOT REPORTED"
+                  : `${Math.round(value)} FPS`
+              }
+            />
+          ))}
           <Metric
             label="PING"
             value={
@@ -2107,17 +2116,26 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
           label="Received resolution"
           value={snapshot.telemetry.resolution}
         />
-        <DiagnosticRow
-          icon="pulse"
-          label="Received frame rate"
-          value={
-            snapshot.telemetry.framesPerSecond === undefined
-              ? snapshot.telemetry.updatedAt
-                ? "Not reported"
-                : "Measured during play"
-              : `${snapshot.telemetry.framesPerSecond.toFixed(1)} fps`
-          }
-        />
+        {(
+          [
+            ["Incoming FPS", snapshot.telemetry.incomingFramesPerSecond],
+            ["Decoded FPS", snapshot.telemetry.decodedFramesPerSecond],
+            ["Displayed FPS", snapshot.telemetry.displayedFramesPerSecond],
+          ] as const
+        ).map(([label, value]) => (
+          <DiagnosticRow
+            key={label}
+            icon="pulse"
+            label={label}
+            value={
+              value === undefined
+                ? snapshot.telemetry.updatedAt
+                  ? "Not reported"
+                  : "Measured during play"
+                : `${value.toFixed(1)} fps`
+            }
+          />
+        ))}
         <DiagnosticRow
           icon="wifi"
           label="Packet loss"

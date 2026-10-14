@@ -92,6 +92,11 @@ export class AppController {
     this.patch({ fullscreen });
   }
 
+  updateHardware(hardware: HardwareInfo): void {
+    if (JSON.stringify(hardware) !== JSON.stringify(this.snapshot.hardware))
+      this.patch({ hardware });
+  }
+
   async initialize(): Promise<void> {
     const generation = this.authGeneration;
     this.patch({ auth: { status: "restoring" } });
@@ -682,6 +687,39 @@ export class AppController {
     const sanitized: StreamTelemetry = {
       resolution: String(telemetry.resolution).slice(0, 32),
       framesPerSecond: optionalMeasurement(telemetry.framesPerSecond, 240),
+      incomingFramesPerSecond: optionalMeasurement(
+        telemetry.incomingFramesPerSecond,
+        240,
+      ),
+      decodedFramesPerSecond: optionalMeasurement(
+        telemetry.decodedFramesPerSecond,
+        240,
+      ),
+      displayedFramesPerSecond: optionalMeasurement(
+        telemetry.displayedFramesPerSecond,
+        240,
+      ),
+      displayedFpsSource:
+        telemetry.displayedFpsSource === "webrtc" ||
+        telemetry.displayedFpsSource === "video-callback"
+          ? telemetry.displayedFpsSource
+          : undefined,
+      presentationCallbacksSkipped: optionalMeasurement(
+        telemetry.presentationCallbacksSkipped,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      presentationIntervalSamples: optionalMeasurement(
+        telemetry.presentationIntervalSamples,
+        600,
+      ),
+      playbackVisible:
+        typeof telemetry.playbackVisible === "boolean"
+          ? telemetry.playbackVisible
+          : undefined,
+      playbackFocused:
+        typeof telemetry.playbackFocused === "boolean"
+          ? telemetry.playbackFocused
+          : undefined,
       roundTripMs: optionalMeasurement(telemetry.roundTripMs, 10_000),
       packetLossPercent: optionalMeasurement(telemetry.packetLossPercent, 100),
       bitrateMbps: optionalMeasurement(telemetry.bitrateMbps, 500),

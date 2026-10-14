@@ -1720,8 +1720,10 @@ kbd.wide {
 .performance-strip {
   position: absolute;
   left: 34px;
+  right: 34px;
   bottom: 72px;
   display: flex;
+  flex-wrap: wrap;
   opacity: 1;
   visibility: visible;
   transform: none;
@@ -1737,8 +1739,8 @@ kbd.wide {
   display: grid;
   gap: 3px;
   border-right: 1px solid oklch(1 0 0 / 0.12);
-  background: oklch(0.08 0.01 258 / 0.72);
-  backdrop-filter: blur(10px);
+  /* Keep the FPS readout legible without filtering the live video per metric. */
+  background: oklch(0.08 0.01 258 / 0.96);
 }
 .metric:first-child {
   border: 1px solid var(--success);
