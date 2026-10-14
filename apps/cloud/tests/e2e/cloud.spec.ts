@@ -61,7 +61,7 @@ test.afterEach(async () => {
 });
 
 test("display-sleep protection starts during pending provisioning and releases on cancel", async () => {
-  const page = await launch("slow-cloud-launch");
+  const page = await launch("pending-cloud-launch");
   await app.evaluate(({ powerSaveBlocker }) => {
     const ids: number[] = [];
     const start = powerSaveBlocker.start.bind(powerSaveBlocker);

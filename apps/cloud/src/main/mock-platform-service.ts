@@ -136,6 +136,9 @@ export class MockPlatformService implements PlatformService {
   }
 
   async startSession(target: StreamTarget): Promise<SessionStart> {
+    // Cancellation is owned by the controller's operation, independent of creation.
+    if (this.scenario === "pending-cloud-launch")
+      return new Promise<SessionStart>(() => {});
     await delay(this.scenario === "slow-cloud-launch" ? 1500 : 220);
     const shouldFail =
       this.scenario === "connect-error" ||
