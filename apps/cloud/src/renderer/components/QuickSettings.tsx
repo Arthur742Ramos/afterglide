@@ -25,6 +25,31 @@ export function QuickSettings({
       setSaving(false);
     }
   };
+  const preferredId = settings.preferredControllerId;
+  const activeTuning =
+    (preferredId
+      ? settings.controllerProfiles.find(
+          (profile) => profile.id === preferredId,
+        )
+      : undefined) ?? settings.controllerDefaults;
+  const updateRumble = (
+    rumble: AppSettings["controllerDefaults"]["rumble"],
+  ) => {
+    if (!preferredId) {
+      void update({
+        controllerDefaults: {
+          ...settings.controllerDefaults,
+          rumble,
+        },
+      });
+      return;
+    }
+    const profiles = settings.controllerProfiles.filter(
+      (profile) => profile.id !== preferredId,
+    );
+    profiles.push({ id: preferredId, ...activeTuning, rumble });
+    void update({ controllerProfiles: profiles });
+  };
   return (
     <section
       className="quick-settings"
@@ -124,6 +149,63 @@ export function QuickSettings({
           >
             Fill
           </button>
+        </div>
+      </div>
+      <div className="quick-setting-row">
+        <div>
+          <strong>Input polling</strong>
+          <p>Requested controller timer interval.</p>
+        </div>
+        <div
+          className="quick-setting-actions"
+          role="group"
+          aria-label="Input polling"
+        >
+          <button
+            data-focusable
+            aria-pressed={settings.inputPolling === "responsive"}
+            aria-disabled={saving}
+            onClick={() => void update({ inputPolling: "responsive" })}
+          >
+            4 ms
+          </button>
+          <button
+            data-focusable
+            aria-pressed={settings.inputPolling === "efficient"}
+            aria-disabled={saving}
+            onClick={() => void update({ inputPolling: "efficient" })}
+          >
+            8 ms
+          </button>
+        </div>
+      </div>
+      <div className="quick-setting-row">
+        <div>
+          <strong>Vibration</strong>
+          <p>Controller rumble intensity.</p>
+        </div>
+        <div
+          className="quick-setting-actions"
+          role="group"
+          aria-label="Vibration"
+        >
+          {(
+            [
+              ["off", "Off"],
+              ["low", "Low"],
+              ["full", "Full"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              data-focusable
+              aria-pressed={activeTuning.rumble === value}
+              aria-disabled={saving}
+              onClick={() => updateRumble(value)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
       {error && (

@@ -279,16 +279,19 @@ describe("physical controller navigation edges", () => {
     expect(input.actions(gamepad([0]), 80)).toEqual(["accept"]);
   });
 
-  it.each([0, 1])(
-    "requires release for held button %i on mount and reset",
-    (button) => {
+  it.each([
+    [0, "accept"],
+    [1, "back"],
+    [4, "shoulder-left"],
+    [5, "shoulder-right"],
+  ] as const)(
+    "requires release for held button %i (%s) on mount and reset",
+    (button, action) => {
       const input = new ControllerNavigationInput();
       expect(input.actions(gamepad([button]), 0)).toEqual([]);
       expect(input.actions(gamepad([button]), 1000)).toEqual([]);
       input.actions(gamepad(), 1016);
-      expect(input.actions(gamepad([button]), 1032)).toEqual([
-        button === 0 ? "accept" : "back",
-      ]);
+      expect(input.actions(gamepad([button]), 1032)).toEqual([action]);
       input.reset(); // blur/refocus or a newly mounted navigation scope
       expect(input.actions(gamepad([button]), 1048)).toEqual([]);
     },

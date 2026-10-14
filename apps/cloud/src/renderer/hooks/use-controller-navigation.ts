@@ -99,6 +99,14 @@ export function useControllerNavigation(
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
         return;
       }
+      if (action === "shoulder-left" || action === "shoulder-right") {
+        window.dispatchEvent(
+          new CustomEvent("afterglide-shoulder", {
+            detail: action === "shoulder-left" ? "previous" : "next",
+          }),
+        );
+        return;
+      }
       const key = actionKeys[action] ?? action;
       if (!arrowKeys.includes(key)) return;
       const items = focusables();

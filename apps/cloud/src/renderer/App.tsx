@@ -963,6 +963,22 @@ function CloudPage({
       recentOnly: value,
       visibleCount: CLOUD_PAGE_SIZE,
     }));
+  useEffect(() => {
+    const onShoulder = (event: Event) => {
+      const direction = (event as CustomEvent<string>).detail;
+      onBrowse((current) =>
+        current.recentOnly === (direction === "next")
+          ? current
+          : {
+              ...current,
+              recentOnly: direction === "next",
+              visibleCount: CLOUD_PAGE_SIZE,
+            },
+      );
+    };
+    window.addEventListener("afterglide-shoulder", onShoulder);
+    return () => window.removeEventListener("afterglide-shoulder", onShoulder);
+  }, [onBrowse]);
   const [searchAttempt, setSearchAttempt] = useState(0);
   const section = useRef<HTMLElement>(null);
   const returnFocus = useRef(focusSearch ? "search" : focusTarget.current);

@@ -161,6 +161,8 @@ export class XboxStreamEngine {
     this.video.autoplay = true;
     this.video.muted = true;
     this.video.playsInline = true;
+    this.video.disablePictureInPicture = true;
+    this.video.disableRemotePlayback = true;
     this.video.setAttribute("aria-label", "Xbox remote-play video");
     this.audio = document.createElement("audio");
     this.audio.autoplay = true;

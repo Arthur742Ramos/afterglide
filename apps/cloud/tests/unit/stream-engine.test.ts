@@ -1099,6 +1099,12 @@ describe("real stream engine input lifecycle", () => {
   it("applies playback preferences immediately without restarting transport", () => {
     ready();
     expect(media[0].style.objectFit).toBe("contain");
+    expect(
+      (media[0] as unknown as HTMLVideoElement).disablePictureInPicture,
+    ).toBe(true);
+    expect(
+      (media[0] as unknown as HTMLVideoElement).disableRemotePlayback,
+    ).toBe(true);
     engine.setPlaybackSettings({
       volume: 0.35,
       muted: true,

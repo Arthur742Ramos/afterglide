@@ -120,9 +120,16 @@ export class ControllerNavigationInput {
     }
     if (gamepad.buttons[1]?.pressed) active.add("back");
     if (gamepad.buttons[0]?.pressed) active.add("accept");
-    // Confirmation/back held on mount, refocus or hotplug must be released.
+    if (gamepad.buttons[4]?.pressed) active.add("shoulder-left");
+    if (gamepad.buttons[5]?.pressed) active.add("shoulder-right");
+    // Confirmation/back/shoulder held on mount, refocus or hotplug must be released.
     if (changed) {
-      for (const action of ["accept", "back"]) {
+      for (const action of [
+        "accept",
+        "back",
+        "shoulder-left",
+        "shoulder-right",
+      ]) {
         if (active.has(action)) this.previous.add(action);
       }
     }

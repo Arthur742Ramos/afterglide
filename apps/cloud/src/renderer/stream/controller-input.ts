@@ -77,10 +77,14 @@ export function connectedGamepads(
 
 export function gamepadHasActivity(gamepad: GamepadLike): boolean {
   if (!controllerSupportsStandardMapping(gamepad)) return false;
-  return (
-    gamepad.buttons.some((button) => button.pressed || button.value > 0.18) ||
-    gamepad.axes.some((axis) => Math.abs(axis) > 0.18)
-  );
+  for (let i = 0; i < gamepad.buttons.length; i++) {
+    const button = gamepad.buttons[i];
+    if (button && (button.pressed || button.value > 0.18)) return true;
+  }
+  for (let i = 0; i < gamepad.axes.length; i++) {
+    if (Math.abs(gamepad.axes[i] ?? 0) > 0.18) return true;
+  }
+  return false;
 }
 
 export function selectController(
@@ -88,23 +92,36 @@ export function selectController(
   preferredId: string,
   currentIndex?: number,
 ): GamepadLike | undefined {
-  const connected = connectedGamepads(gamepads).filter(
-    controllerSupportsStandardMapping,
-  );
   if (preferredId) {
-    const matching = connected.filter((gamepad) => gamepad.id === preferredId);
-    return (
-      matching.find((gamepad) => gamepad.index === currentIndex) ??
-      matching.find(gamepadHasActivity) ??
-      matching[0]
-    );
+    let firstMatching: GamepadLike | undefined;
+    let activeMatching: GamepadLike | undefined;
+    for (let i = 0; i < gamepads.length; i++) {
+      const gamepad = gamepads[i];
+      if (
+        !controllerSupportsStandardMapping(gamepad) ||
+        gamepad.id !== preferredId
+      )
+        continue;
+      if (gamepad.index === currentIndex) return gamepad;
+      firstMatching ??= gamepad;
+      if (!activeMatching && gamepadHasActivity(gamepad))
+        activeMatching = gamepad;
+    }
+    return activeMatching ?? firstMatching;
   }
-  const current = connected.find((gamepad) => gamepad.index === currentIndex);
-  const active = connected.find(
-    (gamepad) => gamepad.index !== currentIndex && gamepadHasActivity(gamepad),
-  );
-  if (active && (!current || !gamepadHasActivity(current))) return active;
-  return current ?? connected.find(gamepadHasActivity) ?? connected[0];
+  let firstConnected: GamepadLike | undefined;
+  let current: GamepadLike | undefined;
+  let activeOther: GamepadLike | undefined;
+  for (let i = 0; i < gamepads.length; i++) {
+    const gamepad = gamepads[i];
+    if (!controllerSupportsStandardMapping(gamepad)) continue;
+    firstConnected ??= gamepad;
+    if (gamepad.index === currentIndex) current = gamepad;
+    else if (!activeOther && gamepadHasActivity(gamepad)) activeOther = gamepad;
+  }
+  if (activeOther && (!current || !gamepadHasActivity(current)))
+    return activeOther;
+  return current ?? activeOther ?? firstConnected;
 }
 
 export function controllerInputFrame(
@@ -149,12 +166,16 @@ export class ControllerInputReleaseGate {
 
   prime(gamepad: GamepadLike | undefined, tuning: ControllerTuning): void {
     if (!this.pending || !controllerSupportsStandardMapping(gamepad)) return;
-    gamepad.buttons.forEach((button, index) => {
-      if (button.pressed || button.value > 0.05) this.buttons.add(index);
-    });
-    gamepad.axes.slice(0, 4).forEach((axis, index) => {
-      if (Math.abs(axis) > tuning.stickDeadzone) this.axes.add(index);
-    });
+    for (let index = 0; index < gamepad.buttons.length; index++) {
+      const button = gamepad.buttons[index];
+      if (button && (button.pressed || button.value > 0.05))
+        this.buttons.add(index);
+    }
+    const axisLimit = Math.min(4, gamepad.axes.length);
+    for (let index = 0; index < axisLimit; index++) {
+      if (Math.abs(gamepad.axes[index] ?? 0) > tuning.stickDeadzone)
+        this.axes.add(index);
+    }
     this.pending = false;
   }
 
