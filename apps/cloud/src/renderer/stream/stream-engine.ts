@@ -1,4 +1,5 @@
-import { requestInteractivePlayout } from "./media-metrics";
+import { AdaptivePlayoutPolicy, applyPlayoutTarget } from "./adaptive-playout";
+import { preferredVideoCodecs } from "./video-codecs";
 import { extractStreamStats, type StreamStatsSample } from "./telemetry";
 import type {
   AppSettings,
@@ -77,6 +78,8 @@ export class XboxStreamEngine {
   private readonly video: HTMLVideoElement;
   private readonly audio: HTMLAudioElement;
   private readonly frameMetrics: FrameMetricsTracker;
+  private readonly playout = new AdaptivePlayoutPolicy();
+  private readonly mediaReceivers = new Set<RTCRtpReceiver>();
   private readonly inputBuffer = new InputTransitionBuffer();
   private readonly sampledFrame = emptyXboxInputFrame();
   private playbackSettings?: PlaybackSettings;
@@ -196,6 +199,7 @@ export class XboxStreamEngine {
     for (const event of ["waiting", "pause", "ended"]) {
       this.video.addEventListener(event, () => {
         this.videoPlaying = false;
+        this.resetPlayout();
       });
     }
 
@@ -403,11 +407,19 @@ export class XboxStreamEngine {
     this.peer.close();
     this.video.srcObject = null;
     this.audio.srcObject = null;
+    this.mediaReceivers.clear();
     this.options.container.replaceChildren();
   }
 
+  private resetPlayout(): void {
+    this.playout.reset();
+    for (const receiver of this.mediaReceivers)
+      applyPlayoutTarget(receiver, null);
+  }
+
   private attachTrack(event: RTCTrackEvent): void {
-    requestInteractivePlayout(event.receiver);
+    this.mediaReceivers.add(event.receiver);
+    applyPlayoutTarget(event.receiver, this.playout.target);
     const stream = event.streams[0] ?? new MediaStream([event.track]);
     if (event.track.kind === "video") this.video.srcObject = stream;
     if (event.track.kind === "audio") this.audio.srcObject = stream;
@@ -738,6 +750,7 @@ export class XboxStreamEngine {
 
   private onVisibilityChange = (): void => {
     if (document.visibilityState !== "visible") {
+      this.resetPlayout();
       this.controlsShortcut.reset();
       this.releaseInput();
     } else this.primeControllerRelease();
@@ -929,8 +942,14 @@ export class XboxStreamEngine {
         this.previousStats,
         performance.now(),
       );
+      if (this.videoPlaying && document.visibilityState === "visible")
+        this.playout.update(sample.video, telemetry, sample.observedAt);
+      else this.playout.reset();
+      for (const receiver of this.mediaReceivers)
+        applyPlayoutTarget(receiver, this.playout.target);
       this.options.onTelemetry({
         ...telemetry,
+        playoutMode: this.playout.target === null ? "automatic" : "low-delay",
         inputQueueBytes: this.channels.input.bufferedAmount,
         ...this.frameMetrics.snapshot(sample.video),
         updatedAt: Date.now(),
@@ -938,6 +957,7 @@ export class XboxStreamEngine {
       this.previousStats = sample;
     } catch {
       // A stats failure during shutdown must not interrupt play or reject unhandled.
+      if (!this.destroyed && !this.terminal) this.resetPlayout();
     } finally {
       this.telemetryCollecting = false;
     }
@@ -1016,29 +1036,6 @@ export function streamErrorMessage(error: unknown): string {
     /^Error invoking remote method '[^']+':\s*(?:AfterglideError|Error):\s*/,
     "",
   );
-}
-
-function preferredVideoCodecs(): RTCRtpCodec[] {
-  const codecs = RTCRtpReceiver.getCapabilities("video")?.codecs ?? [];
-  const h264Main = codecs.filter(
-    (codec) =>
-      codec.mimeType.toLowerCase().includes("h264") &&
-      codec.sdpFmtpLine?.includes("profile-level-id=4d"),
-  );
-  const h264Constrained = codecs.filter(
-    (codec) =>
-      codec.mimeType.toLowerCase().includes("h264") &&
-      codec.sdpFmtpLine?.includes("profile-level-id=42e"),
-  );
-  const h264Baseline = codecs.filter(
-    (codec) =>
-      codec.mimeType.toLowerCase().includes("h264") &&
-      codec.sdpFmtpLine?.includes("profile-level-id=420"),
-  );
-  const fallbacks = codecs.filter((codec) =>
-    /(?:ulpfec|flexfec|vp8|vp9)/i.test(codec.mimeType),
-  );
-  return [...h264Main, ...h264Constrained, ...h264Baseline, ...fallbacks];
 }
 
 function candidatePayload(candidate: RTCIceCandidate): IceCandidatePayload {

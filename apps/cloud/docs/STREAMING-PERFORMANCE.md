@@ -30,11 +30,27 @@ network, receiver buffer, decoder, compositor, display and controller all contri
 - Focus loss and overlay entry send neutral input. If congested, the release is
   retried on queue drain and timer ticks, including while input is suspended.
 - The input handshake waits for both channels, avoiding a startup ordering race.
-- Supported receivers request a zero additional jitter-buffer target. This is a
-  hint: Chromium retains control of jitter adaptation and audio/video sync.
+- Video codec preferences reorder the browser's complete capability list while
+  preserving RTX retransmission, RED redundancy, FEC and other codec fallbacks.
+  Previously the H264 preference filter removed RTX and RED from the offer.
+  Keeping them available allows packet repair when the Xbox answer negotiates
+  them; it does not force the service to support or select them.
+- Cloud receivers initially retain automatic browser buffering. A zero target
+  is requested only after ten continuous seconds of advancing video with
+  reported jitter <=5 ms, interval loss <=0.5% and RTT <=80 ms. Waiting, hidden
+  playback, a freeze, stalled decoding, stale/replaced/reset counters, missing
+  measurements, a stats failure or unhealthy network measurements immediately
+  restore the browser default. Interrupted sampling (>2.5 seconds) restarts
+  that healthy window. These thresholds are conservative client policy, not
+  measured performance gains. Both receivers use the same requested policy
+  for audio/video sync; Chromium retains control of actual delay and packet
+  recovery. A zero target is a low-delay hint, not a disabled jitter buffer.
 - Health reports the stream's actual decoder identifier when Chromium supplies
   it, interval decode time per frame, interval video-buffer delay, and send-queue
-  bytes. Missing measurements remain unavailable, never fabricated zeroes.
+  bytes. Exports also retain packet jitter in `jitterMs` and the requested
+  `playoutMode` (`automatic` or `low-delay`). Packet jitter, receiver buffer
+  delay and requested policy are separate measurements. Missing measurements
+  remain unavailable, never fabricated zeroes.
 - Ping comes from the selected transport candidate pair. Unrelated succeeded ICE
   probes no longer overwrite the live route's measurement.
 - Frame cadence uses nearest-rank p95/p99 over the last 600 visible presentation
@@ -51,6 +67,15 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   snapshot for every sample.
 
 ## Comparison protocol
+
+The native Chromium offer regression uses the production Cloud stream engine
+in an isolated Electron profile. It checks that supported repair codecs reach
+the real SDP offer and that H264 remains preferred. Deterministic tests cover
+loss/jitter bursts, delayed or unavailable stats, frozen/replaced receivers,
+waiting playback, recovery hysteresis and unsupported buffer-control setters.
+These establish negotiation and policy behavior, not smoother Xbox gameplay
+on an impaired network. The same-title A/B procedure below remains necessary
+to measure changes in freeze count/duration, p95 frame delivery and latency.
 
 Compare the same Xbox title, save position, server region, resolution, frame-rate
 mode, controller, display refresh rate, power mode and wired network. Record exact

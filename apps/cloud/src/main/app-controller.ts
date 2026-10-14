@@ -699,6 +699,12 @@ export class AppController {
           : undefined,
       decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
       jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
+      jitterMs: optionalMeasurement(telemetry.jitterMs, 10_000),
+      playoutMode:
+        telemetry.playoutMode === "automatic" ||
+        telemetry.playoutMode === "low-delay"
+          ? telemetry.playoutMode
+          : undefined,
       inputQueueBytes: optionalMeasurement(
         telemetry.inputQueueBytes,
         16_777_216,

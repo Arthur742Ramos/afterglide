@@ -105,6 +105,7 @@ export class PerformanceReport {
         "Configuration labels are requested settings; resolution, codec and decoder samples are received/reported values.",
         "Test-environment samples are simulated, not hardware evidence.",
         "Ping is RTT; presented-frame cadence is not button-to-photon latency.",
+        "jitterMs measures RTP packet jitter; jitterBufferMs measures interval receiver buffering. playoutMode is the application's request, not achieved delay.",
         "Decoder identity is reported by Chromium, not proof of hardware decoding.",
         "CPU is the sum of Electron process percentCPUUsage readings.",
         "Device measurements are sampled every 5 seconds; observedAt identifies repeated readings.",
@@ -161,6 +162,7 @@ function summarizeSamples(samples: Sample[]) {
       jitterBufferMs: distribution(
         group.map((sample) => sample.telemetry.jitterBufferMs),
       ),
+      jitterMs: distribution(group.map((sample) => sample.telemetry.jitterMs)),
       framesPerSecond: distribution(
         group.map((sample) => sample.telemetry.framesPerSecond),
       ),

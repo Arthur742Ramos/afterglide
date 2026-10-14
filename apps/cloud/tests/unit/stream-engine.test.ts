@@ -30,6 +30,7 @@ class Channel extends EventTarget {
 }
 class Peer extends EventTarget {
   closeCalls = 0;
+  receivers: RTCRtpReceiver[] = [];
   channels: Record<string, Channel> = {};
   channelOptions: Record<string, RTCDataChannelInit> = {};
   stats = new Map<string, Record<string, unknown>>();
@@ -48,7 +49,7 @@ class Peer extends EventTarget {
   async setLocalDescription() {}
   async setRemoteDescription() {}
   getReceivers() {
-    return [];
+    return this.receivers;
   }
   async getStats() {
     return this.stats;
@@ -195,6 +196,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   engine.destroy();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -244,6 +246,84 @@ function actuator() {
 }
 
 describe("real stream engine input lifecycle", () => {
+  it.each(["waiting", "hidden", "stats-failure"] as const)(
+    "keeps both receivers automatic on startup, adapts after healthy video, and resets on %s",
+    async (reason) => {
+      let at = 0;
+      vi.spyOn(performance, "now").mockImplementation(() => at);
+      const receivers = ["video", "audio"].map((kind) => ({
+        jitterBufferTarget: 0 as number | null,
+        track: { kind, stop() {} },
+      })) as unknown as RTCRtpReceiver[];
+      peer.receivers = receivers;
+      for (const receiver of receivers)
+        peer.dispatchEvent(
+          Object.assign(new Event("track"), {
+            receiver,
+            track: receiver.track,
+            streams: [{}],
+          }),
+        );
+      expect(receivers.map((receiver) => receiver.jitterBufferTarget)).toEqual([
+        null,
+        null,
+      ]);
+      ready();
+      media[0].dispatchEvent(new Event("playing"));
+      peer.stats.set("t", {
+        id: "t",
+        type: "transport",
+        selectedCandidatePairId: "p",
+      });
+      peer.stats.set("p", {
+        id: "p",
+        type: "candidate-pair",
+        currentRoundTripTime: 0.035,
+      });
+      for (let second = 0; second <= 11; second++) {
+        at = second * 1000;
+        peer.stats.set("v", {
+          id: "v",
+          type: "inbound-rtp",
+          kind: "video",
+          timestamp: at,
+          framesDecoded: second * 60,
+          framesPerSecond: 60,
+          packetsReceived: second * 100,
+          packetsLost: 0,
+          bytesReceived: second * 10000,
+          jitter: 0.002,
+          freezeCount: 0,
+        });
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      expect(receivers.map((receiver) => receiver.jitterBufferTarget)).toEqual([
+        0, 0,
+      ]);
+      expect(onTelemetry).toHaveBeenLastCalledWith(
+        expect.objectContaining({ jitterMs: 2, playoutMode: "low-delay" }),
+      );
+      if (reason === "waiting") media[0].dispatchEvent(new Event("waiting"));
+      else if (reason === "hidden") {
+        doc.visibilityState = "hidden";
+        doc.dispatchEvent(new Event("visibilitychange"));
+      } else {
+        vi.spyOn(peer, "getStats").mockRejectedValue(
+          new Error("Stats unavailable"),
+        );
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      expect(receivers.map((receiver) => receiver.jitterBufferTarget)).toEqual([
+        null,
+        null,
+      ]);
+      await vi.advanceTimersByTimeAsync(1000);
+      if (reason !== "stats-failure")
+        expect(onTelemetry).toHaveBeenLastCalledWith(
+          expect.objectContaining({ playoutMode: "automatic" }),
+        );
+    },
+  );
   it.each([
     "Xbox Wireless Controller",
     "DualSense Wireless Controller (Vendor: 054c Product: 0ce6)",

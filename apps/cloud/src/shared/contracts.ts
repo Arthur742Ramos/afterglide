@@ -66,6 +66,8 @@ export interface StreamTelemetry {
   videoDecoder?: string;
   decodeMs?: number;
   jitterBufferMs?: number;
+  jitterMs?: number;
+  playoutMode?: "automatic" | "low-delay";
   inputQueueBytes?: number;
   frameIntervalP95Ms?: number;
   frameIntervalP99Ms?: number;
