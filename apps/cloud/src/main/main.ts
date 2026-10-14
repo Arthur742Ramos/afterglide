@@ -31,6 +31,7 @@ import {
 } from "./secure-token-store";
 import { SettingsStore } from "./settings-store";
 import { readDeviceMetrics } from "./device-metrics";
+import { observePowerContext } from "./power-context";
 import {
   desktopMenuTemplate,
   restoreWindowPlacement,
@@ -153,6 +154,12 @@ app.whenReady().then(async () => {
     ),
   );
   openMainWindow();
+  const stopPowerContext = observePowerContext(
+    powerMonitor,
+    process.platform,
+    (context) => controller?.updatePowerContext(context),
+  );
+  app.once("will-quit", stopPowerContext);
   await controller.initialize();
   powerMonitor.on("resume", () => controller?.handleSystemResume());
   let sampling = false;

@@ -60,6 +60,96 @@ test.afterEach(async () => {
   expect(errors).toEqual([]);
 });
 
+test("Health distinguishes optional decoder, polling and power readings at desktop and 200 percent zoom", async () => {
+  const page = await launch();
+  const baseline = await page.evaluate(() =>
+    window.afterglideCloud.getSnapshot(),
+  );
+  const row = (label: string) =>
+    page.getByText(label, { exact: true }).locator("..");
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  for (const value of [undefined, false, true] as const) {
+    await app.evaluate(
+      ({ BrowserWindow }, snapshot) => {
+        BrowserWindow.getAllWindows()[0].webContents.send(
+          "afterglide-cloud:snapshot",
+          snapshot,
+        );
+      },
+      {
+        ...baseline,
+        revision:
+          baseline.revision + (value === undefined ? 100 : value ? 102 : 101),
+        powerContext:
+          value === undefined
+            ? {}
+            : {
+                onBattery: false,
+                thermalState: "unknown",
+                speedLimitPercent: 0,
+              },
+        telemetry: {
+          ...baseline.telemetry,
+          powerEfficientDecoder: value,
+          inputPolling:
+            value === undefined
+              ? undefined
+              : {
+                  targetMs: 4,
+                  samples: 250,
+                  windowMs: 1000,
+                  meanIntervalMs: 4,
+                  p95UpperMs: 4,
+                  maxIntervalMs: 4,
+                  meanJitterMs: 0,
+                  longGaps: 0,
+                },
+        },
+      },
+    );
+    await expect(row("Power-efficient decoder (browser)")).toContainText(
+      value === undefined
+        ? "Unavailable"
+        : value
+          ? "Reported true"
+          : "Reported false",
+    );
+    await expect(row("JS poll mean jitter")).toContainText(
+      value === undefined ? "Unavailable" : "0.00 ms",
+    );
+    await expect(row("JS poll gaps over 32 ms")).toContainText(
+      value === undefined ? "Unavailable" : "0",
+    );
+    await expect(row("Power source")).toContainText(
+      value === undefined ? "Unavailable" : "AC power",
+    );
+    await expect(row("Last CPU speed-limit notification")).toContainText(
+      value === undefined ? "Unknown" : "0%",
+    );
+  }
+  for (const factor of [1, 2]) {
+    await zoom(page, factor);
+    await accessible(page);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await reachable(
+      page,
+      page.getByRole("button", {
+        name: "Export performance report",
+        exact: true,
+      }),
+    );
+    await row("Power-efficient decoder (browser)").scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-telemetry-health-${factor}.png`),
+      fullPage: true,
+    });
+  }
+});
+
 test("display-sleep protection starts during pending provisioning and releases on cancel", async () => {
   const page = await launch("pending-cloud-launch");
   await app.evaluate(({ powerSaveBlocker }) => {

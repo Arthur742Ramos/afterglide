@@ -23,6 +23,7 @@ type MeasuredTelemetry = Pick<
   | "codec"
   | "connection"
   | "videoDecoder"
+  | "powerEfficientDecoder"
   | "decodeMs"
   | "jitterBufferMs"
   | "jitterMs"
@@ -102,6 +103,10 @@ export function extractStreamStats(
       codec,
       connection,
       videoDecoder: reportedText(video?.decoderImplementation),
+      powerEfficientDecoder:
+        typeof video?.powerEfficientDecoder === "boolean"
+          ? video.powerEfficientDecoder
+          : undefined,
       jitterMs:
         measurement(video?.jitter) === undefined
           ? undefined

@@ -7,6 +7,8 @@ import type {
   IceCandidatePayload,
   StreamDescriptor,
   StreamTelemetry,
+  InputPollingTelemetry,
+  PowerContext,
 } from "../shared/contracts";
 import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
 import { sanitizeSettingsUpdate } from "../shared/controller-settings";
@@ -682,6 +684,10 @@ export class AppController {
     };
   }
 
+  updatePowerContext(context: PowerContext): void {
+    this.patch({ powerContext: { ...context } });
+  }
+
   exportPerformanceReport() {
     return this.performanceReport.export(
       this.version,
@@ -742,6 +748,12 @@ export class AppController {
         telemetry.videoDecoder.trim()
           ? telemetry.videoDecoder.slice(0, 80)
           : undefined,
+      powerEfficientDecoder:
+        typeof telemetry.powerEfficientDecoder === "boolean"
+          ? telemetry.powerEfficientDecoder
+          : undefined,
+      inputPolling: sanitizeInputPolling(telemetry.inputPolling),
+      powerContext: this.snapshot.powerContext,
       decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
       jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
       jitterMs: optionalMeasurement(telemetry.jitterMs, 10_000),
@@ -965,6 +977,45 @@ function optionalMeasurement(
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.min(value, maximum)
     : undefined;
+}
+
+function sanitizeInputPolling(
+  value: InputPollingTelemetry | undefined,
+): InputPollingTelemetry | undefined {
+  if (!value || (value.targetMs !== 4 && value.targetMs !== 8))
+    return undefined;
+  const result: InputPollingTelemetry = {
+    targetMs: value.targetMs,
+  } as InputPollingTelemetry;
+  for (const key of [
+    "samples",
+    "windowMs",
+    "meanIntervalMs",
+    "p95UpperMs",
+    "maxIntervalMs",
+    "meanJitterMs",
+    "longGaps",
+  ] as const) {
+    const number = value[key];
+    if (
+      typeof number !== "number" ||
+      !Number.isFinite(number) ||
+      number < 0 ||
+      number > Number.MAX_SAFE_INTEGER
+    )
+      return undefined;
+    result[key] = number;
+  }
+  if (
+    !Number.isSafeInteger(result.samples) ||
+    result.samples < 1 ||
+    !Number.isSafeInteger(result.longGaps) ||
+    result.longGaps > result.samples ||
+    result.windowMs <= 0 ||
+    result.meanIntervalMs <= 0
+  )
+    return undefined;
+  return result;
 }
 
 function mergeCloudTitles(

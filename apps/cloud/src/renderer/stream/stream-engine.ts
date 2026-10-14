@@ -27,6 +27,7 @@ import {
 } from "./controller-input";
 import { InputTransitionBuffer, type InputBufferFailure } from "./input-buffer";
 import { FrameMetricsTracker } from "./frame-metrics";
+import { InputPollingMetrics } from "./input-polling-metrics";
 import { ControllerChordInput } from "./controller-chord";
 
 export type PlaybackSettings = Pick<
@@ -81,6 +82,7 @@ export class XboxStreamEngine {
   private readonly playout = new AdaptivePlayoutPolicy();
   private readonly mediaReceivers = new Set<RTCRtpReceiver>();
   private readonly inputBuffer = new InputTransitionBuffer();
+  private readonly inputPollingMetrics = new InputPollingMetrics();
   private readonly sampledFrame = emptyXboxInputFrame();
   private playbackSettings?: PlaybackSettings;
   private readonly localCandidates: IceCandidatePayload[] = [];
@@ -347,8 +349,14 @@ export class XboxStreamEngine {
   private updateInputPolling = (): void => {
     clearInterval(this.inputTimer);
     this.inputTimer = 0;
-    if (this.destroyed || (!this.inputActive && !this.neutralPending)) return;
-    if (this.terminal && !this.neutralPending) return;
+    if (
+      this.destroyed ||
+      (!this.inputActive && !this.neutralPending) ||
+      (this.terminal && !this.neutralPending)
+    ) {
+      this.inputPollingMetrics.reset();
+      return;
+    }
     const active =
       !this.terminal &&
       !this.inputSuspended &&
@@ -356,19 +364,36 @@ export class XboxStreamEngine {
       document.hasFocus() &&
       document.visibilityState === "visible";
     // Paused/hidden streams only retry neutral. Wake promptly on focus/visibility.
-    if (!active && !this.neutralPending) return;
+    if (!active && !this.neutralPending) {
+      this.inputPollingMetrics.reset();
+      return;
+    }
     const idle =
       this.sampledInput &&
       this.activeGamepadIndex === undefined &&
       this.pressedKeys.size === 0;
-    this.inputTimer = window.setInterval(
-      this.inputLoop,
+    const interval =
       active && !idle
         ? this.playbackSettings?.inputPolling === "efficient"
           ? 8
           : 4
-        : 50,
+        : 50;
+    this.inputPollingMetrics.restart(
+      interval === 4 || interval === 8 ? interval : undefined,
     );
+    this.inputTimer = window.setInterval(() => {
+      // Only timer-driven polls count; keyboard/drain/hotplug callbacks do not.
+      if (
+        !this.destroyed &&
+        !this.terminal &&
+        !this.inputSuspended &&
+        !this.transportDisconnected &&
+        document.hasFocus() &&
+        document.visibilityState === "visible"
+      )
+        this.inputPollingMetrics.observe(performance.now());
+      this.inputLoop();
+    }, interval);
   };
 
   private onBlur = (): void => {
@@ -400,6 +425,7 @@ export class XboxStreamEngine {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.inputPollingMetrics.reset();
     clearInterval(this.inputTimer);
     clearInterval(this.telemetryTimer);
     clearInterval(this.keepaliveTimer);
@@ -984,6 +1010,7 @@ export class XboxStreamEngine {
         ...telemetry,
         playoutMode: this.playout.target === null ? "automatic" : "low-delay",
         inputQueueBytes: this.channels.input.bufferedAmount,
+        inputPolling: this.inputPollingMetrics.snapshot(),
         ...this.frameMetrics.snapshot(sample.video, sample.observedAt),
         playbackVisible: document.visibilityState === "visible",
         playbackFocused: document.hasFocus(),

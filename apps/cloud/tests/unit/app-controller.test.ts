@@ -127,6 +127,62 @@ function makeController(
 }
 
 describe("AppController", () => {
+  it("retains typed cadence and false decoder evidence, takes power only from main and rejects malformed cadence", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    await controller.startCloudStream("cloud-game");
+    await controller.reportStreamEvent("session", "connected");
+    controller.updatePowerContext({
+      onBattery: false,
+      powerObservedAt: 123,
+      speedLimitPercent: 0,
+      speedLimitObservedAt: 124,
+    });
+    const inputPolling = {
+      targetMs: 4 as const,
+      samples: 250,
+      windowMs: 1000,
+      meanIntervalMs: 4,
+      p95UpperMs: 4,
+      maxIntervalMs: 4,
+      meanJitterMs: 0,
+      longGaps: 0,
+    };
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      inputPolling: {
+        ...inputPolling,
+        rawButtons: "private",
+      } as typeof inputPolling,
+      powerEfficientDecoder: false,
+      powerContext: { onBattery: true },
+    });
+    const first = controller.exportPerformanceReport();
+    expect(first.samples[0].telemetry).toMatchObject({
+      inputPolling,
+      powerEfficientDecoder: false,
+      powerContext: { onBattery: false, speedLimitPercent: 0 },
+    });
+    expect(JSON.stringify(first)).not.toContain("rawButtons");
+    expect(first.summaries[0].inputPollMeanJitterMs?.median).toBe(0);
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      inputPolling: { ...inputPolling, samples: 0 },
+      powerEfficientDecoder: "false" as unknown as boolean,
+    });
+    const second = controller.exportPerformanceReport();
+    expect(second.samples[1].telemetry.inputPolling).toBeUndefined();
+    expect(second.samples[1].telemetry.powerEfficientDecoder).toBeUndefined();
+    expect(second.summaries[0].inputPollMeanIntervalMs?.count).toBe(1);
+    controller.updatePowerContext({});
+    controller.updateTelemetry({ ...emptyTelemetry });
+    expect(controller.getSnapshot().powerContext).toEqual({});
+    expect(
+      controller.exportPerformanceReport().samples[2].telemetry.powerContext,
+    ).toEqual({});
+    await controller.stopStream();
+  });
+
   it.each(["cancel", "failure"] as const)(
     "holds display-sleep protection before creation settles, then releases on %s",
     async (outcome) => {

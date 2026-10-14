@@ -246,6 +246,57 @@ function actuator() {
 }
 
 describe("real stream engine input lifecycle", () => {
+  it("reports periodic cadence only while active and resets on capture, mode, hidden and removal", async () => {
+    const started = Date.now();
+    vi.spyOn(performance, "now").mockImplementation(() => Date.now() - started);
+    ready();
+    media[0].dispatchEvent(new Event("playing"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling).toMatchObject({
+      targetMs: 4,
+      meanIntervalMs: 4,
+      meanJitterMs: 0,
+      longGaps: 0,
+      maxIntervalMs: 4,
+    });
+    expect(
+      onTelemetry.mock.lastCall?.[0].inputPolling?.samples,
+    ).toBeGreaterThan(200);
+    engine.setInputSuspended(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling).toBeUndefined();
+    engine.setInputSuspended(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling?.maxIntervalMs).toBe(4);
+    engine.setPlaybackSettings({
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "efficient",
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling).toMatchObject({
+      targetMs: 8,
+      meanIntervalMs: 8,
+    });
+    doc.visibilityState = "hidden";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling).toBeUndefined();
+    doc.visibilityState = "visible";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling?.maxIntervalMs).toBe(8);
+    padConnected = false;
+    win.dispatchEvent(new Event("gamepaddisconnected"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].inputPolling).toBeUndefined();
+    engine.destroy();
+    const calls = onTelemetry.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry).toHaveBeenCalledTimes(calls);
+  });
+
   it("retains stall backoff across waiting ticks, failed stats and hidden playback", async () => {
     let at = 0;
     vi.spyOn(performance, "now").mockImplementation(() => at);

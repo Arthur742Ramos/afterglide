@@ -245,3 +245,32 @@ cloud play before advertising seamless recovery.
   define the jitter-buffer target as a browser hint.
 - [W3C WebRTC statistics](https://www.w3.org/TR/webrtc-stats/)
   define cumulative decode/buffer counters and selected transport routes.
+
+## Local input and OS context
+
+Health and JSON reports include observed timer-driven JavaScript input polling
+when game input is active. Each successful telemetry collection closes a bounded
+histogram window. `targetMs` is requested cadence; `samples` counts intervals;
+`windowMs` sums observed intervals and excludes intentional timer restarts.
+`meanIntervalMs` and `maxIntervalMs` are measured intervals; `meanJitterMs` is
+mean absolute deviation from target, and `longGaps` counts intervals over 32 ms.
+`p95UpperMs` is an upper bound from 1 ms histogram bins, using the exact maximum
+for overflow. These are neither physical controller update rates nor
+input-to-photon latency. Paused, hidden, disconnected, discovery and event-driven
+keyboard/drain callbacks do not contribute. New engines and mode changes reset
+history; timer restarts establish a fresh baseline without treating the pause as
+a stall. Missing samples remain unavailable, including keyboard-only idle gaps.
+
+`powerContext` records supported Electron power-monitor state: AC/battery on
+Windows/macOS, thermal severity on macOS, and the last CPU speed-limit change
+notification on Windows/macOS. Each supported reading carries its observation
+time. Until a speed notification arrives it is unknown; resume invalidates the
+old speed notification and refreshes queryable power/thermal state. Thermal
+severity is not temperature and power source is not consumption in watts.
+Listeners stop on quit. This uses no extra polling loop, native dependency,
+privileged command, raw button history or automatic upload.
+
+`powerEfficientDecoder` preserves a browser-reported boolean only when supplied
+by existing WebRTC stats. False remains false; missing stays omitted/unavailable.
+No hardware permission is requested to obtain it. It is optional decoder evidence,
+not GPU utilization or independent verification of hardware acceleration.
