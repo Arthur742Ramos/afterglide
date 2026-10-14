@@ -74,6 +74,27 @@ describe("adaptive video playout", () => {
     },
   );
 
+  it("backs off low-delay re-entry after media glitches and clears backoff on reset", () => {
+    const policy = settled();
+    policy.update({ ...video(12), framesDropped: 1 }, healthy, 12_000);
+    expect(policy.target).toBeNull();
+    for (let second = 13; second <= 32; second++) {
+      policy.update(
+        { ...video(second), framesDropped: 1 },
+        healthy,
+        second * 1000,
+      );
+      expect(policy.target).toBeNull();
+    }
+    policy.update({ ...video(33), framesDropped: 1 }, healthy, 33_000);
+    expect(policy.target).toBe(0);
+    policy.reset();
+    for (let second = 0; second <= 10; second++)
+      policy.update(video(second), healthy, second * 1000);
+    policy.update(video(11), healthy, 11_000);
+    expect(policy.target).toBe(0);
+  });
+
   it("does not count missing or delayed observations as sustained healthy playback", () => {
     const policy = settled();
     policy.update(video(16), healthy, 16_000);

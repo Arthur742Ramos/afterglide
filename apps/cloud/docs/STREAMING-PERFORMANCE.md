@@ -42,10 +42,20 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   counters, missing measurements, a stats failure, a disconnected transport
   route or unhealthy network measurements immediately restore the browser
   default. Interrupted sampling (>2.5 seconds) restarts that healthy window.
+  A media freeze, dropped frame or decode stall while low-delay playout is
+  active doubles the required healthy window (up to 80 seconds) before
+  re-requesting a zero target, avoiding repeated 10-second playout oscillation.
   These thresholds are conservative client policy, not measured performance
   gains. Both receivers use the same requested policy for audio/video sync;
   Chromium retains control of actual delay and packet recovery. A zero target
   is a low-delay hint, not a disabled jitter buffer.
+- Active stream sessions hold an Electron `prevent-display-sleep` power-save
+  blocker across provisioning, negotiation, streaming and recovery, releasing
+  it on idle, error, window close or quit so controller-only sessions do not
+  trigger OS display sleep or background timer throttling.
+- Stream overlay reveal throttles pointer-activity timer resets while already
+  visible, and `.stream-console` uses an opaque surface instead of a live-video
+  backdrop blur.
 - During a WebRTC `disconnected` transport grace window, the stream engine
   immediately restores automatic playout buffering, clears queued input edges,
   and suspends fresh transition buffering until the route returns to

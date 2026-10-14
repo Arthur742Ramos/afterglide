@@ -1435,12 +1435,14 @@ function StreamView({
   const root = useRef<HTMLElement>(null);
   const header = useRef<HTMLElement>(null);
   const timer = useRef<number | undefined>(undefined);
+  const lastScheduleAt = useRef(0);
   const focusFrame = useRef<number | undefined>(undefined);
   const controllerNoticeTimer = useRef<number | undefined>(undefined);
   const scheduleHide = useCallback(() => {
     clearTimeout(timer.current);
     if (snapshot.session.phase !== "streaming" || controlsCapturedRef.current)
       return;
+    lastScheduleAt.current = performance.now();
     timer.current = window.setTimeout(() => {
       if (controlsCapturedRef.current) return;
       if (root.current?.contains(document.activeElement)) {
@@ -1451,12 +1453,22 @@ function StreamView({
     }, 4_000);
   }, [snapshot.session.phase]);
   const reveal = useCallback(() => {
-    overlayRef.current = true;
-    setOverlay(true);
-    scheduleHide();
+    if (controlsCapturedRef.current && overlayRef.current) return;
+    if (!overlayRef.current) {
+      overlayRef.current = true;
+      setOverlay(true);
+      scheduleHide();
+      return;
+    }
+    if (
+      timer.current === undefined ||
+      performance.now() - lastScheduleAt.current >= 250
+    )
+      scheduleHide();
   }, [scheduleHide]);
   const hide = useCallback(() => {
     clearTimeout(timer.current);
+    timer.current = undefined;
     cancelAnimationFrame(focusFrame.current ?? 0);
     focusFrame.current = undefined;
     overlayRef.current = false;
@@ -1466,6 +1478,7 @@ function StreamView({
   }, []);
   const captureControls = useCallback((focusFirst = false) => {
     clearTimeout(timer.current);
+    timer.current = undefined;
     controlsCapturedRef.current = true;
     setControlsCaptured(true);
     overlayRef.current = true;
