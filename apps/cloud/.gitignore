@@ -4,7 +4,6 @@ release/
 test-results/
 playwright-report/
 artifacts/
-/target/
 .env
 .env.*
 *.p12
