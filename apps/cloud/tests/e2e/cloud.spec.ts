@@ -1288,6 +1288,117 @@ test("fullscreen state stays synchronized and controller can exit outside a stre
   await expect(exit).toHaveCount(0);
 });
 
+for (const reducedMotion of [false, true]) {
+  test(`fullscreen idle cursor follows overlay and controls (reduced motion ${reducedMotion})`, async () => {
+    const page = await launch();
+    await expect(
+      page.getByRole("button", { name: /Play again/ }),
+    ).toBeFocused();
+    if (reducedMotion)
+      await page.evaluate(() =>
+        window.afterglideCloud.updateSettings({ reducedMotion: true }),
+      );
+    await page.clock.install();
+    await play(page);
+    const view = page.locator(".stream-view");
+    const surface = page.getByTestId("mock-stream");
+    const session = await page.evaluate(
+      async () =>
+        (await window.afterglideCloud.getSnapshot()).session.sessionId,
+    );
+    expect(session).toBeTruthy();
+    // Hidden tests simulate the native event; they never fullscreen the desktop.
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].emit("enter-full-screen"),
+    );
+    await page.mouse.move(500, 350);
+    await expect(view).toHaveClass(/overlay-visible/);
+    await page.clock.fastForward(4_100);
+    await expect(view).not.toHaveClass(/overlay-visible/);
+    await expect(view).toHaveCSS("cursor", "none");
+    await expect(surface).toHaveCSS("cursor", "none");
+    await expect(page.locator(".mock-sky")).toHaveCSS("cursor", "none");
+    await expect(surface).toHaveAttribute("data-input-suspended", "false");
+    await page.mouse.move(510, 360);
+    await expect(view).toHaveClass(/overlay-visible/);
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    const stats = page.getByRole("button", { name: "Show performance stats" });
+    await stats.focus();
+    await expect(view).toHaveClass(/controls-captured/);
+    await page.clock.fastForward(4_100);
+    await expect(stats).toBeFocused();
+    await expect(stats).toHaveCSS("cursor", "pointer");
+    await expect(view).toHaveClass(/overlay-visible/);
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await page.keyboard.press("Escape");
+    await expect(view).not.toHaveClass(/controls-captured/);
+    await expect(surface).toHaveCSS("cursor", "none");
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].emit("leave-full-screen"),
+    );
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await page.clock.fastForward(4_100);
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].emit("enter-full-screen"),
+    );
+    await expect(surface).toHaveCSS("cursor", "none");
+    await page.mouse.move(520, 370);
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await page.clock.fastForward(4_100);
+    await expect(surface).toHaveCSS("cursor", "none");
+    await page.evaluate(() =>
+      window.afterglideCloudTest!.injectGamepad("controls"),
+    );
+    await expect(view).toHaveClass(/controls-captured/);
+    await page.clock.fastForward(4_100);
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await page.keyboard.press("Escape");
+    await expect(surface).toHaveCSS("cursor", "none");
+    expect(
+      await page.evaluate(
+        async () =>
+          (await window.afterglideCloud.getSnapshot()).session.sessionId,
+      ),
+    ).toBe(session);
+    await nativeCommand("desktop-controls");
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+    await expect(view).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Play again/ })).toHaveCSS(
+      "cursor",
+      "pointer",
+    );
+  });
+}
+
+test("windowed idle keeps the cursor and fullscreen recovery restores it", async () => {
+  const page = await launch();
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeFocused();
+  await page.clock.install();
+  await play(page);
+  const view = page.locator(".stream-view");
+  const surface = page.getByTestId("mock-stream");
+  await page.mouse.move(500, 350);
+  await page.clock.fastForward(4_100);
+  await expect(view).not.toHaveClass(/overlay-visible/);
+  await expect(surface).not.toHaveCSS("cursor", "none");
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].emit("enter-full-screen"),
+  );
+  await expect(surface).toHaveCSS("cursor", "none");
+  await simulateOffline(page);
+  await expect(surface).not.toHaveCSS("cursor", "none");
+  await expect(surface).toHaveAttribute("data-input-suspended", "true");
+  await page.evaluate(() => window.afterglideCloudTest!.simulateNetworkDrop());
+  await expect(page.getByRole("heading", { name: /offline/ })).toBeVisible();
+  await expect(view).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "End session" })).toHaveCSS(
+    "cursor",
+    "pointer",
+  );
+});
+
 test("native window placement survives restart without changing credentials", async () => {
   const page = await launch();
   await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();

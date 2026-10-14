@@ -1381,6 +1381,10 @@ kbd.wide {
   width: 100%;
   height: 100%;
 }
+.stream-view.cursor-hidden,
+.stream-view.cursor-hidden * {
+  cursor: none;
+}
 .stream-video {
   object-fit: contain;
   background: #000;

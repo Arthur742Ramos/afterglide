@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 
-test("native Mac fullscreen enters, exits and preserves window placement", async () => {
+test("native Mac fullscreen hides the idle stream cursor, exits and preserves window placement", async () => {
   test.skip(
     process.platform !== "darwin" ||
       process.env.AFTERGLIDE_CLOUD_NATIVE_MAC !== "1",
@@ -74,6 +74,22 @@ test("native Mac fullscreen enters, exits and preserves window placement", async
         BrowserWindow.getAllWindows()[0].isFullScreen(),
       ),
     ).toBe(true);
+    await page.getByRole("button", { name: /Play again/ }).click();
+    const surface = page.getByTestId("mock-stream");
+    await expect(surface).toBeVisible();
+    await surface.hover({ position: { x: 200, y: 200 } });
+    await expect(page.locator(".stream-view")).not.toHaveClass(
+      /overlay-visible/,
+      { timeout: 7_000 },
+    );
+    await expect(surface).toHaveCSS("cursor", "none");
+    await surface.hover({ position: { x: 210, y: 210 } });
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await page.keyboard.press("Tab");
+    await expect(page.locator(".stream-view")).toHaveClass(/controls-captured/);
+    await expect(surface).not.toHaveCSS("cursor", "none");
+    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+    await expect(page.locator(".stream-view")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(
       page.getByRole("button", { name: "Exit fullscreen", exact: true }),
