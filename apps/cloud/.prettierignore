@@ -1,8 +1,6 @@
 dist
 release
 node_modules
-target
 artifacts
 playwright-report
 test-results
-Cargo.lock

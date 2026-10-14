@@ -4,9 +4,9 @@ Describe the concrete trigger and the behavior after this change.
 
 ## Validation
 
-- [ ] `cargo fmt --all --check`
-- [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- [ ] `cargo test --workspace --all-features`
+- [ ] `npm run format:check`
+- [ ] `npm run typecheck`
+- [ ] `npm test`
 - [ ] Normal user flow checked without mouse input, when UI changes
 - [ ] Steam Deck hardware and test conditions recorded, when performance changes
 
