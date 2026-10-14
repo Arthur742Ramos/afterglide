@@ -45,6 +45,9 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   A media freeze, dropped frame or decode stall while low-delay playout is
   active doubles the required healthy window (up to 80 seconds) before
   re-requesting a zero target, avoiding repeated 10-second playout oscillation.
+  A visible playback `waiting` event also counts once when leaving low delay.
+  Repeated waits, unavailable stats and visibility changes restart observation
+  without erasing earlier backoff; a fresh stream engine starts with no history.
   These thresholds are conservative client policy, not measured performance
   gains. Both receivers use the same requested policy for audio/video sync;
   Chromium retains control of actual delay and packet recovery. A zero target
@@ -52,7 +55,10 @@ network, receiver buffer, decoder, compositor, display and controller all contri
 - Active stream sessions hold an Electron `prevent-display-sleep` power-save
   blocker across provisioning, negotiation, streaming and recovery, releasing
   it on idle, error, window close or quit so controller-only sessions do not
-  trigger OS display sleep or background timer throttling.
+  trigger OS display sleep.
+  Session phase changes acquire protection before pending provisioning network
+  work settles. This prevents system/display sleep, not every Chromium
+  background or compositor throttling policy.
 - Stream overlay reveal throttles pointer-activity timer resets while already
   visible, and `.stream-console` uses an opaque surface instead of a live-video
   backdrop blur.

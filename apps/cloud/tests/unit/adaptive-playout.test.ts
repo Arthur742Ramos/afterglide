@@ -105,6 +105,41 @@ describe("adaptive video playout", () => {
     expect(policy.target).toBeNull();
   });
 
+  it("preserves bounded backoff through repeated waits and missing observations", () => {
+    const policy = settled();
+    let second = 11;
+    for (const duration of [20, 40, 80, 80]) {
+      policy.suspend(true);
+      policy.suspend(true);
+      policy.update(undefined, healthy, ++second * 1000);
+      policy.suspend();
+      // First advancing pair establishes a fresh healthy window.
+      policy.update(video(++second), healthy, second * 1000);
+      policy.update(video(++second), healthy, second * 1000);
+      for (let elapsed = 1; elapsed < duration; elapsed++) {
+        policy.update(video(++second), healthy, second * 1000);
+        expect(policy.target).toBeNull();
+      }
+      policy.update(video(++second), healthy, second * 1000);
+      expect(policy.target).toBe(0);
+    }
+    policy.reset();
+    for (let elapsed = 0; elapsed <= 11; elapsed++)
+      policy.update(video(elapsed), healthy, elapsed * 1000);
+    expect(policy.target).toBe(0);
+  });
+
+  it("does not penalize deliberate pause or visibility suspension", () => {
+    const policy = settled();
+    policy.suspend();
+    for (let second = 12; second <= 22; second++) {
+      policy.update(video(second), healthy, second * 1000);
+      expect(policy.target).toBeNull();
+    }
+    policy.update(video(23), healthy, 23_000);
+    expect(policy.target).toBe(0);
+  });
+
   it("resets the healthy window when playback waits or becomes hidden", () => {
     const policy = settled();
     policy.reset();

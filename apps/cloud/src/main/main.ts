@@ -72,13 +72,13 @@ let gpuInfoReady = false;
 let refreshingHardware = false;
 let displaySleepBlockerId: number | undefined;
 
-function syncPowerSave(): void {
-  const phase =
+function syncPowerSave(phase = controller?.getSessionPhase() ?? "idle"): void {
+  const activePhase =
     quitting || !mainWindow || mainWindow.isDestroyed() || !controller
       ? "idle"
-      : controller.getSnapshot().session.phase;
+      : phase;
   displaySleepBlockerId = syncDisplaySleepBlocker(
-    phase,
+    activePhase,
     displaySleepBlockerId,
     powerSaveBlocker,
   );
@@ -133,6 +133,7 @@ app.whenReady().then(async () => {
     hardware,
     app.getVersion(),
     undefined,
+    syncPowerSave,
   );
 
   registerIpc(controller);
