@@ -7,6 +7,13 @@ use is useful feedback; it is not blanket qualification of every target.
 
 ## Current evidence
 
+On 2026-10-15, the owner reported several hours of play on a Mac with an Xbox
+controller, very good performance and no noticed network or gameplay issues
+after the previous day's improvements. This is user-reported sustained Mac and
+controller evidence. The exact app revision, Mac model, controller transport and
+instrumented session report were not supplied; it does not qualify Windows,
+every controller combination or clean signed installation.
+
 Main at `c85b20afde82e3a3be981766ddcba232688c95e6` passed all four CI checks.
 [Cloud CI](https://github.com/Arthur742Ramos/afterglide/actions/runs/38669949787)
 passed 381 units per platform, unsigned unpacked packaging and zero audit

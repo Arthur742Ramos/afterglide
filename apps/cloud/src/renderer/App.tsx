@@ -581,8 +581,8 @@ function WelcomeScreen({
           <span>Ready when you are.</span>
         </h1>
         <p className="welcome-lede">
-          A focused Xbox Cloud Gaming library for Windows and macOS. Choose a
-          game, connect your controller, and play.
+          Your Xbox cloud library, in a desktop app for Windows and macOS. Cloud
+          access and game availability depend on your account and region.
         </p>
         <DemoNotice environment={environment} />
         {error && (
