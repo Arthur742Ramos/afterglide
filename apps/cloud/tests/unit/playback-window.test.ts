@@ -35,8 +35,8 @@ function setup(backgroundTest = false) {
   return { state, window, power, publish, observer };
 }
 
-describe("focused stream rendering policy", () => {
-  it("disables throttling only during focused active playback and avoids duplicate writes", () => {
+describe("visible stream rendering policy", () => {
+  it("disables throttling only during visible active playback and avoids duplicate writes", () => {
     const { state, window, observer } = setup();
     expect(state.throttled).toBe(true);
     observer.setPhase("provisioning");
@@ -52,11 +52,24 @@ describe("focused stream rendering policy", () => {
     observer.setPhase("error");
     expect(state.throttled).toBe(true);
   });
-  it("restores throttling on blur, minimize, hide, screen lock and suspend, then resumes", () => {
+  it("keeps visible video unthrottled on blur and refreshes state after fullscreen transitions", () => {
+    const { state, window, publish, observer } = setup();
+    observer.setPhase("streaming");
+    state.focused = false;
+    window.emit("blur");
+    expect(state.throttled).toBe(false);
+    expect(publish.mock.lastCall?.[0].focused).toBe(false);
+    state.visible = false;
+    window.emit("leave-full-screen");
+    expect(state.throttled).toBe(true);
+    state.visible = true;
+    window.emit("enter-full-screen");
+    expect(state.throttled).toBe(false);
+  });
+  it("restores throttling on minimize, hide, screen lock and suspend, then resumes", () => {
     const { state, window, power, publish, observer } = setup();
     observer.setPhase("streaming");
     for (const [field, off, on, value] of [
-      ["focused", "blur", "focus", false],
       ["visible", "hide", "show", false],
       ["minimized", "minimize", "restore", true],
     ] as const) {

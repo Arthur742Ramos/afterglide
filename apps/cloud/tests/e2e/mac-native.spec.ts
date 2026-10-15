@@ -79,9 +79,33 @@ test("native Mac fullscreen hides the idle stream cursor, exits and preserves wi
     await expect(surface).toBeVisible();
     // Exercise the real BrowserWindow lifecycle, independently of mock FPS.
     await expect
+      .poll(async () => ({
+        nativeThrottling: await app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].webContents.getBackgroundThrottling(),
+        ),
+        playback: await page.evaluate(async () => {
+          const snapshot = await window.afterglideCloud.getSnapshot();
+          return { phase: snapshot.session.phase, ...snapshot.playbackWindow };
+        }),
+      }))
+      .toMatchObject({
+        nativeThrottling: false,
+        playback: {
+          visible: true,
+          minimized: false,
+          backgroundThrottling: false,
+        },
+      });
+    // Test hiding a normal window separately from macOS Space transitions.
+    // hide() during native fullscreen can leave the fullscreen Space active.
+    await page.evaluate(() => window.afterglideCloud.setFullscreen(false));
+    await expect(
+      page.getByRole("button", { name: "Exit fullscreen", exact: true }),
+    ).toHaveCount(0, { timeout: 15_000 });
+    await expect
       .poll(() =>
         app.evaluate(({ BrowserWindow }) =>
-          BrowserWindow.getAllWindows()[0].webContents.getBackgroundThrottling(),
+          BrowserWindow.getAllWindows()[0].isFullScreen(),
         ),
       )
       .toBe(false);
@@ -113,6 +137,23 @@ test("native Mac fullscreen hides the idle stream cursor, exits and preserves wi
         focused: true,
         backgroundThrottling: false,
       });
+    await page.evaluate(() => window.afterglideCloud.setFullscreen(true));
+    await expect
+      .poll(
+        () =>
+          app.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows()[0].isFullScreen(),
+          ),
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          async () => (await window.afterglideCloud.getSnapshot()).fullscreen,
+        ),
+      )
+      .toBe(true);
 
     await surface.hover({ position: { x: 200, y: 200 } });
     await expect(page.locator(".stream-view")).not.toHaveClass(

@@ -1,7 +1,7 @@
 import type { BrowserWindow, PowerMonitor } from "electron";
 import type { PlaybackWindowState, SessionPhase } from "../shared/contracts";
 
-/** Keep focused gameplay rendering through macOS occlusion transitions. */
+/** Keep visible gameplay rendering through focus and macOS space transitions. */
 export function observePlaybackWindow(
   window: Pick<
     BrowserWindow,
@@ -34,14 +34,7 @@ export function observePlaybackWindow(
       phase === "recovering";
     const backgroundThrottling =
       !backgroundTest &&
-      !(
-        playing &&
-        visible &&
-        !minimized &&
-        focused &&
-        !screenLocked &&
-        !suspended
-      );
+      !(playing && visible && !minimized && !screenLocked && !suspended);
     if (window.webContents.getBackgroundThrottling() !== backgroundThrottling)
       window.webContents.setBackgroundThrottling(backgroundThrottling);
     const state = {
@@ -80,6 +73,8 @@ export function observePlaybackWindow(
   window.on("restore", sync);
   window.on("focus", sync);
   window.on("blur", sync);
+  window.on("enter-full-screen", sync);
+  window.on("leave-full-screen", sync);
   power.on("lock-screen", lock);
   power.on("unlock-screen", unlock);
   power.on("suspend", suspend);
@@ -98,6 +93,8 @@ export function observePlaybackWindow(
       window.removeListener("restore", sync);
       window.removeListener("focus", sync);
       window.removeListener("blur", sync);
+      window.removeListener("enter-full-screen", sync);
+      window.removeListener("leave-full-screen", sync);
       power.removeListener("lock-screen", lock);
       power.removeListener("unlock-screen", unlock);
       power.removeListener("suspend", suspend);
