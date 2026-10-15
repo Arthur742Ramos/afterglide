@@ -1450,12 +1450,23 @@ async function nativeCommand(id: string) {
 }
 
 async function zoom(page: Page, factor: number) {
-  await page.setViewportSize({ width: 960, height: 570 });
+  const viewport = { width: 960, height: 570 };
+  await page.setViewportSize(viewport);
   await app.evaluate(
     ({ BrowserWindow }, value) =>
       BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(value),
     factor,
   );
+  // setZoomFactor returns before the renderer necessarily receives its resize.
+  // Frame callbacks can still run against the old layout in that interval.
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+    )
+    .toEqual({
+      width: Math.ceil(viewport.width / factor),
+      height: Math.ceil(viewport.height / factor),
+    });
   await page.evaluate(
     () =>
       new Promise<void>((resolve) =>
@@ -1939,6 +1950,60 @@ test("welcome, sign-in and readiness remain reachable at 150 and 200 percent zoo
   await page.screenshot({
     path: join(root, "artifacts/e2e/cloud-readiness-zoom200.png"),
   });
+});
+
+test("zoom waits for the renderer viewport before checking stream actions", async () => {
+  const page = await launch();
+  await play(page);
+  await page.keyboard.press("Escape");
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    const applyZoom = contents.setZoomFactor.bind(contents);
+    const state = globalThis as unknown as {
+      pendingTestZoom: Promise<unknown>;
+      restoreTestZoom: () => void;
+    };
+    state.restoreTestZoom = () => {
+      contents.setZoomFactor = applyZoom;
+    };
+    contents.setZoomFactor = (factor) => {
+      // Native zoom propagation can outlive the helper's two frame waits.
+      // Hold its application behind an explicit renderer frame barrier.
+      state.pendingTestZoom = contents
+        .executeJavaScript(
+          `new Promise(resolve => {
+          let remaining = 8;
+          const frame = () => {
+            if (--remaining === 0) resolve();
+            else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        })`,
+        )
+        .then(() => applyZoom(factor));
+    };
+  });
+  try {
+    await zoom(page, 2);
+    expect(
+      await page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+    ).toEqual({ width: 480, height: 285 });
+    await reachable(
+      page,
+      page.getByRole("button", { name: "Enter fullscreen", exact: true }),
+    );
+  } finally {
+    await app.evaluate(async () => {
+      const state = globalThis as unknown as {
+        pendingTestZoom: Promise<unknown>;
+        restoreTestZoom: () => void;
+      };
+      await state.pendingTestZoom;
+      state.restoreTestZoom();
+      Reflect.deleteProperty(globalThis, "pendingTestZoom");
+      Reflect.deleteProperty(globalThis, "restoreTestZoom");
+    });
+  }
 });
 
 test("error recovery and stream settings remain accessible at large zoom", async () => {
