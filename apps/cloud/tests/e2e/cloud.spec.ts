@@ -111,6 +111,9 @@ test("Health exports complete reports without a native dialog and recovers from 
 
 test("Health distinguishes optional decoder, polling and power readings at desktop and 200 percent zoom", async () => {
   const page = await launch();
+  // Snapshot fixtures must start after restoration, or their higher revision
+  // can replay the boot state over the already visible Health page.
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
   if (process.platform === "win32" || process.platform === "darwin") {
     await app.evaluate(({ powerMonitor }) => {
       powerMonitor.emit("on-ac");
@@ -125,6 +128,7 @@ test("Health distinguishes optional decoder, polling and power readings at deskt
   const baseline = await page.evaluate(() =>
     window.afterglideCloud.getSnapshot(),
   );
+  expect(baseline.auth.status).toBe("signed-in");
   const row = (label: string) =>
     page.getByText(label, { exact: true }).locator("..");
   await page.getByRole("button", { name: "Health", exact: true }).click();
@@ -633,6 +637,33 @@ test("failed artwork keeps a usable fallback and retries a replacement URL", asy
     "https://images.xboxlive.com/e2e-cover.svg",
   );
   await expect(fallback).toHaveCount(0);
+});
+
+test("Settings handles Back as soon as its heading is committed", async () => {
+  const page = await launch();
+  const search = page.getByRole("textbox", { name: "Search cloud games" });
+  await search.fill("Sea");
+  await search.focus();
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (
+        document.querySelector(".settings-page h1")?.textContent !== "Settings"
+      )
+        return;
+      observer.disconnect();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      document.body.dataset.settingsBackDispatched = "true";
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  await nativeCommand("desktop-settings");
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-settings-back-dispatched",
+    "true",
+  );
+  await expect(search).toHaveValue("Sea");
+  await expect(search).toBeFocused();
+  await expect(page.locator(".game-grid button")).toHaveCount(1);
 });
 
 test("Settings returns to the same Library search, filter, page and focus", async () => {
@@ -1419,12 +1450,23 @@ async function nativeCommand(id: string) {
 }
 
 async function zoom(page: Page, factor: number) {
-  await page.setViewportSize({ width: 960, height: 570 });
+  const viewport = { width: 960, height: 570 };
+  await page.setViewportSize(viewport);
   await app.evaluate(
     ({ BrowserWindow }, value) =>
       BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(value),
     factor,
   );
+  // setZoomFactor returns before the renderer necessarily receives its resize.
+  // Frame callbacks can still run against the old layout in that interval.
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+    )
+    .toEqual({
+      width: Math.ceil(viewport.width / factor),
+      height: Math.ceil(viewport.height / factor),
+    });
   await page.evaluate(
     () =>
       new Promise<void>((resolve) =>
@@ -1908,6 +1950,60 @@ test("welcome, sign-in and readiness remain reachable at 150 and 200 percent zoo
   await page.screenshot({
     path: join(root, "artifacts/e2e/cloud-readiness-zoom200.png"),
   });
+});
+
+test("zoom waits for the renderer viewport before checking stream actions", async () => {
+  const page = await launch();
+  await play(page);
+  await page.keyboard.press("Escape");
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    const applyZoom = contents.setZoomFactor.bind(contents);
+    const state = globalThis as unknown as {
+      pendingTestZoom: Promise<unknown>;
+      restoreTestZoom: () => void;
+    };
+    state.restoreTestZoom = () => {
+      contents.setZoomFactor = applyZoom;
+    };
+    contents.setZoomFactor = (factor) => {
+      // Native zoom propagation can outlive the helper's two frame waits.
+      // Hold its application behind an explicit renderer frame barrier.
+      state.pendingTestZoom = contents
+        .executeJavaScript(
+          `new Promise(resolve => {
+          let remaining = 8;
+          const frame = () => {
+            if (--remaining === 0) resolve();
+            else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        })`,
+        )
+        .then(() => applyZoom(factor));
+    };
+  });
+  try {
+    await zoom(page, 2);
+    expect(
+      await page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+    ).toEqual({ width: 480, height: 285 });
+    await reachable(
+      page,
+      page.getByRole("button", { name: "Enter fullscreen", exact: true }),
+    );
+  } finally {
+    await app.evaluate(async () => {
+      const state = globalThis as unknown as {
+        pendingTestZoom: Promise<unknown>;
+        restoreTestZoom: () => void;
+      };
+      await state.pendingTestZoom;
+      state.restoreTestZoom();
+      Reflect.deleteProperty(globalThis, "pendingTestZoom");
+      Reflect.deleteProperty(globalThis, "restoreTestZoom");
+    });
+  }
 });
 
 test("error recovery and stream settings remain accessible at large zoom", async () => {
