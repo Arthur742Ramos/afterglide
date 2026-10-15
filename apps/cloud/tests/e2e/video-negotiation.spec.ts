@@ -78,6 +78,9 @@ test("the real Cloud engine offers browser-supported video repair codecs in Chro
           );
       }
       expect(result.capabilities).toContain("video/rtx");
+      expect(result.sdp).not.toContain("rtp-hdrext/playout-delay");
+      expect(result.sdp).toContain("rtp-hdrext/abs-send-time");
+      expect(result.sdp).toContain("transport-wide-cc-extensions");
       expect(result.sdp).toMatch(/a=fmtp:\d+ apt=\d+/);
       const video = result.sdp.split("m=video ")[1]?.split("\r\nm=")[0];
       const firstPayload = video?.split("\r\n")[0].trim().split(/\s+/)[2];

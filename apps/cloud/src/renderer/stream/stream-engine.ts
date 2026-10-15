@@ -1,5 +1,6 @@
 import { AdaptivePlayoutPolicy, applyPlayoutTarget } from "./adaptive-playout";
 import { preferredVideoCodecs } from "./video-codecs";
+import { prepareStreamOffer } from "./stream-offer";
 import { extractStreamStats, type StreamStatsSample } from "./telemetry";
 import type {
   AppSettings,
@@ -238,11 +239,7 @@ export class XboxStreamEngine {
         offerToReceiveVideo: true,
       });
       if (this.destroyed || this.terminal) return;
-      if (offer.sdp)
-        offer.sdp = offer.sdp.replace(
-          "useinbandfec=1",
-          "useinbandfec=1; stereo=1",
-        );
+      if (offer.sdp) offer.sdp = prepareStreamOffer(offer.sdp);
       await this.peer.setLocalDescription(offer);
       if (this.destroyed || this.terminal) return;
 
