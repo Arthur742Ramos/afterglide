@@ -190,6 +190,14 @@ beforeEach(async () => {
     container: { replaceChildren() {} } as unknown as HTMLElement,
     keyboardControls: true,
     reserveControlChord: true,
+    // These transport tests exercise Automatic's low-delay transitions explicitly.
+    playbackSettings: {
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+      playbackMode: "automatic",
+    },
     controllerSettings: {
       preferredControllerId: "",
       controllerDefaults: defaultControllerTuning,

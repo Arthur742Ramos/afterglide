@@ -349,7 +349,7 @@ export const defaultSettings: AppSettings = {
   muted: false,
   videoFit: "fit",
   inputPolling: "responsive",
-  playbackMode: "automatic",
+  playbackMode: "smooth",
 };
 
 export const emptyTelemetry: StreamTelemetry = {

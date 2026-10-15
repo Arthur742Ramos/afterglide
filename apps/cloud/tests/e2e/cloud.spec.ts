@@ -2341,8 +2341,9 @@ test("Smooth mode persists, switches live, and repair diagnostics stay readable"
   const modes = () =>
     page.getByRole("group", { name: "Stream smoothness", exact: true });
   await expect(
-    modes().getByRole("button", { name: "Automatic", exact: true }),
+    modes().getByRole("button", { name: "Smooth", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+  await modes().getByRole("button", { name: "Automatic", exact: true }).click();
   await modes().getByRole("button", { name: "Smooth", exact: true }).click();
   await expect(
     modes().getByRole("button", { name: "Smooth", exact: true }),

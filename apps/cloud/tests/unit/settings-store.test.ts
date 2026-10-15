@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -127,13 +127,22 @@ describe("SettingsStore", () => {
   });
 });
 
-it("migrates to Automatic and persists Smooth while rejecting invalid modes", () => {
+it("defaults to Smooth and preserves an explicit Automatic preference", () => {
   directory = mkdtempSync(join(tmpdir(), "afterglide-settings-"));
   const path = join(directory, "preferences.json");
   const store = new SettingsStore(path);
-  expect(store.settings.playbackMode).toBe("automatic");
-  store.updateSettings({ playbackMode: "smooth" });
-  expect(new SettingsStore(path).settings.playbackMode).toBe("smooth");
-  store.updateSettings({ playbackMode: "invalid" } as never);
   expect(store.settings.playbackMode).toBe("smooth");
+  writeFileSync(
+    path,
+    JSON.stringify({ settings: { resolution: 720, muted: true } }),
+  );
+  expect(new SettingsStore(path).settings).toMatchObject({
+    playbackMode: "smooth",
+    resolution: 720,
+    muted: true,
+  });
+  store.updateSettings({ playbackMode: "automatic" });
+  expect(new SettingsStore(path).settings.playbackMode).toBe("automatic");
+  store.updateSettings({ playbackMode: "invalid" } as never);
+  expect(store.settings.playbackMode).toBe("automatic");
 });

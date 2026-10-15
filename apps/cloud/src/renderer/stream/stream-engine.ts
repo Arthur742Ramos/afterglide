@@ -8,6 +8,7 @@ import type {
   IceCandidatePayload,
   StreamTelemetry,
 } from "../../shared/contracts";
+import { defaultSettings } from "../../shared/contracts";
 import { NETWORK_POLICY } from "../../shared/network-policy";
 import {
   applyKeyboardInput,
@@ -38,11 +39,11 @@ export type PlaybackSettings = Pick<
 >;
 
 const defaultPlaybackSettings: PlaybackSettings = {
-  volume: 1,
-  muted: false,
-  videoFit: "fit",
-  inputPolling: "responsive",
-  playbackMode: "automatic",
+  volume: defaultSettings.volume,
+  muted: defaultSettings.muted,
+  videoFit: defaultSettings.videoFit,
+  inputPolling: defaultSettings.inputPolling,
+  playbackMode: defaultSettings.playbackMode,
 };
 
 export interface ControllerStatus {

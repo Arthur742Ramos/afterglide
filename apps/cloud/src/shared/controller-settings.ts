@@ -2,7 +2,7 @@ import {
   normalizeAppSettings as normalizeBase,
   sanitizeSettingsUpdate as sanitizeBase,
 } from "../../../../src/shared/controller-settings";
-import type { AppSettings } from "./contracts";
+import { defaultSettings, type AppSettings } from "./contracts";
 export { tuningForController } from "../../../../src/shared/controller-settings";
 
 export function normalizeAppSettings(value: unknown): AppSettings {
@@ -12,7 +12,10 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       : undefined;
   return {
     ...normalizeBase(value),
-    playbackMode: mode === "smooth" ? "smooth" : "automatic",
+    playbackMode:
+      mode === "smooth" || mode === "automatic"
+        ? mode
+        : defaultSettings.playbackMode,
   };
 }
 

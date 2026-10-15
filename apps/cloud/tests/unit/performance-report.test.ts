@@ -113,7 +113,7 @@ describe("performance evidence", () => {
     const result = report.export("v1", "live", hardware);
     expect(result.summaries).toHaveLength(2);
     expect(result.summaries[0]).toMatchObject({
-      configuration: "1080p/responsive/automatic",
+      configuration: "1080p/responsive/smooth",
       decodeMs: { count: 4, median: 2, p95: 4, p99: 4 },
       batteryWatts: { count: 1, median: 8 },
     });
