@@ -3,7 +3,7 @@
 Qualify one immutable candidate at a time. Record its version, source commit,
 artifact SHA-256, host OS/architecture, controller/transport, date and tester.
 Keep credentials and account identifiers out of evidence. The owner's successful
-daily use is useful feedback; it is not blanket qualification of every target.
+use is useful feedback; it is not blanket qualification of every target.
 
 ## Current evidence
 

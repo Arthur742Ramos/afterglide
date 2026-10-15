@@ -1,6 +1,6 @@
 # Known issues and boundaries
 
-Cloud is an alpha preview. The owner reports successful everyday use, and live
+Cloud is an alpha preview. The owner reports successful use, and live
 Mac sessions have been recorded. This feedback does not qualify every machine,
 game, controller or network. See [current release status](docs/RELEASE-STATUS.md).
 
