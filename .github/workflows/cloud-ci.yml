@@ -10,6 +10,7 @@ on:
       - "src/main/performance-report.ts"
       - "src/main/device-metrics.ts"
       - ".github/workflows/cloud-ci.yml"
+      - ".github/workflows/cloud-candidate.yml"
   pull_request:
     paths: *cloud_paths
   workflow_dispatch:
@@ -39,7 +40,7 @@ jobs:
           cache-dependency-path: apps/cloud/package-lock.json
       - run: npm ci
       - run: npm run verify
-      - run: npx prettier --check ../../.github/workflows/cloud-ci.yml
+      - run: npx prettier --check ../../.github/workflows/cloud-ci.yml ../../.github/workflows/cloud-candidate.yml
       - run: npm audit --audit-level=high
       - run: npx playwright test
       - run: npx electron-builder --dir --publish never
