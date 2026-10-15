@@ -34,7 +34,7 @@ On Mac, use native Node for your architecture and install dependencies on that
 Mac. Do not copy `node_modules` or credential stores between machines. See
 [Mac setup](MAC-TESTING.md) if you need help with the development environment.
 
-To look around without a Microsoft login or subscription, close the app and run:
+To look around without a Microsoft login or subscription, quit the app and run:
 
 ```sh
 npm run start:demo
@@ -56,7 +56,8 @@ changed bytes; they do not establish publisher trust or installation safety.
 | Apple Silicon Mac | `Afterglide-Cloud-<version>-mac-arm64.dmg` | **Afterglide Cloud** from Applications |
 
 The Windows installer offers a per-user directory chooser and Start shortcut.
-On Mac, the DMG presents the app and an Applications shortcut. If Windows or
+On Mac, open the DMG and drag the app onto the Applications shortcut, then
+launch it from Applications. If Windows or
 macOS blocks a candidate, stop and use the source route or report it through
 [support](../SUPPORT.md); do not bypass OS protections. Developer ID signing,
 notarization and clean-machine installation remain pending. Intel Mac execution
