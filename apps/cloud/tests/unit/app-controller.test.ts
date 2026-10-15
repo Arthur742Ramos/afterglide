@@ -127,6 +127,69 @@ function makeController(
 }
 
 describe("AppController", () => {
+  it("retains main-process region selection in Health and reports before video arrives", async () => {
+    const platform = new FakePlatform();
+    const selection = {
+      requestedRegion: "Fast",
+      xboxDefaultRegion: "Default",
+      method: "lowest-probe-latency" as const,
+      reason: "measured" as const,
+      measuredAt: 123,
+      scanComplete: true,
+      medianProbeMs: 20,
+      candidates: [],
+    };
+    const started = {
+      sessionId: "session",
+      sessionPath: "v5/sessions/cloud/session",
+      regionSelection: selection,
+    };
+    vi.spyOn(platform, "startSession").mockResolvedValue(started);
+    const controller = makeController(platform);
+    await controller.initialize();
+    await controller.startCloudStream("cloud-game");
+    expect(controller.getSnapshot().regionSelection).toEqual(selection);
+    expect(controller.exportPerformanceReport().regionSelections).toEqual([
+      selection,
+    ]);
+    selection.requestedRegion = "changed";
+    expect(
+      controller.exportPerformanceReport().regionSelections[0]?.requestedRegion,
+    ).toBe("Fast");
+    await controller.stopStream();
+    expect(controller.exportPerformanceReport().regionSelections).toHaveLength(
+      1,
+    );
+  });
+
+  it("exports selected Smooth mode and sanitized repair evidence without inventing missing values", async () => {
+    const controller = makeController(new FakePlatform());
+    await controller.initialize();
+    await controller.updateSettings({ playbackMode: "smooth" });
+    await controller.startCloudStream("cloud-game");
+    await controller.reportStreamEvent("session", "connected");
+    controller.updateTelemetry({
+      ...emptyTelemetry,
+      retransmittedPacketsReceived: 0,
+      retransmittedPacketsPerSecond: 12,
+      nackCount: -1,
+      pliCount: Number.NaN,
+      playoutMode: "smooth",
+      playoutTargetMs: 67,
+      playoutTargetAccepted: false,
+    });
+    const report = controller.exportPerformanceReport();
+    expect(report.samples[0].settings.playbackMode).toBe("smooth");
+    expect(report.samples[0].telemetry).toMatchObject({
+      retransmittedPacketsReceived: 0,
+      retransmittedPacketsPerSecond: 12,
+      nackCount: undefined,
+      pliCount: undefined,
+      playoutMode: "smooth",
+      playoutTargetMs: 67,
+      playoutTargetAccepted: false,
+    });
+  });
   it("retains typed cadence and false decoder evidence, takes power only from main and rejects malformed cadence", async () => {
     const controller = makeController(new FakePlatform());
     await controller.initialize();
@@ -155,6 +218,14 @@ describe("AppController", () => {
         rawButtons: "private",
       } as typeof inputPolling,
       powerEfficientDecoder: false,
+      frameTiming: {
+        observedFrames: 30,
+        decodeP95Ms: 0,
+        presentationLeadP95Ms: -10,
+        receiveIntervalP95Ms: Number.NaN,
+        callbackLatenessP95Ms: -1,
+        privateField: "not retained",
+      } as NonNullable<typeof emptyTelemetry.frameTiming>,
       powerContext: { onBattery: true },
     });
     const first = controller.exportPerformanceReport();
@@ -164,6 +235,14 @@ describe("AppController", () => {
       powerContext: { onBattery: false, speedLimitPercent: 0 },
     });
     expect(JSON.stringify(first)).not.toContain("rawButtons");
+    expect(first.samples[0].telemetry.frameTiming).toMatchObject({
+      observedFrames: 30,
+      decodeP95Ms: 0,
+      presentationLeadP95Ms: -10,
+      receiveIntervalP95Ms: undefined,
+      callbackLatenessP95Ms: undefined,
+    });
+    expect(JSON.stringify(first)).not.toContain("privateField");
     expect(first.summaries[0].inputPollMeanJitterMs?.median).toBe(0);
     controller.updateTelemetry({
       ...emptyTelemetry,

@@ -19,15 +19,59 @@ function setup(windowSize = 600) {
   return {
     tracker,
     video,
-    present: (time: number, presentedFrames?: number) =>
+    present: (
+      time: number,
+      presentedFrames?: number,
+      expectedDisplayTime?: number,
+    ) =>
       callback(time, {
         presentationTime: time,
+        expectedDisplayTime,
         presentedFrames,
       } as VideoFrameCallbackMetadata),
   };
 }
 
 describe("browser presentation and real media counters", () => {
+  it("measures expected display cadence independently of uneven submission timing", () => {
+    const { tracker, present } = setup();
+    present(0, 1, 16);
+    present(50, 2, 49);
+    present(66, 3, 82);
+    expect(tracker.snapshot()).toMatchObject({
+      frameIntervalP95Ms: 33,
+      frameIntervalSource: "expected-display",
+    });
+    present(100, 4);
+    expect(tracker.snapshot().frameIntervalP95Ms).toBeUndefined();
+    present(133, 5);
+    expect(tracker.snapshot()).toMatchObject({
+      frameIntervalP95Ms: 33,
+      frameIntervalSource: "presentation",
+    });
+  });
+  it("clears old cadence and excludes hidden and resume-boundary drops", () => {
+    const { tracker, present } = setup();
+    present(0, 1);
+    present(200, 2);
+    tracker.snapshot({ id: "v", framesDropped: 2 });
+    tracker.setVisible(false);
+    expect(tracker.snapshot({ id: "v", framesDropped: 100 })).toMatchObject({
+      framesDropped: 2,
+      frameIntervalP95Ms: undefined,
+    });
+    tracker.setVisible(true);
+    expect(
+      tracker.snapshot({ id: "v", framesDropped: 110 }).framesDropped,
+    ).toBe(2);
+    present(1000, 100);
+    present(1033, 101);
+    expect(tracker.snapshot({ id: "v", framesDropped: 111 })).toMatchObject({
+      framesDropped: 3,
+      frameIntervalP95Ms: 33,
+    });
+  });
+
   it("measures compositor frame submissions even when callbacks miss observations", () => {
     const { tracker, present } = setup();
     present(0, 1);

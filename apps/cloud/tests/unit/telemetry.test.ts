@@ -190,3 +190,55 @@ describe("truthful stream telemetry", () => {
     expect(telemetry.networkQuality).toBe("good");
   });
 });
+
+it("reports retransmission and feedback counters, validates rates and measures target buffers", () => {
+  const baseline = {
+    timestamp: 1000,
+    retransmittedPacketsReceived: 10,
+    retransmittedBytesReceived: 500,
+    nackCount: 5,
+    pliCount: 0,
+    firCount: 0,
+    framesDropped: 7,
+    jitterBufferEmittedCount: 100,
+    jitterBufferTargetDelay: 3,
+    jitterBufferMinimumDelay: 1,
+  };
+  const first = extractStreamStats(records(baseline), undefined, 1000);
+  expect(first.telemetry.retransmittedPacketsPerSecond).toBeUndefined();
+  expect(first.telemetry).toMatchObject({
+    retransmittedPacketsReceived: 10,
+    pliCount: 0,
+    receiverFramesDropped: 7,
+  });
+  const next = {
+    ...baseline,
+    timestamp: 2000,
+    retransmittedPacketsReceived: 30,
+    jitterBufferEmittedCount: 200,
+    jitterBufferTargetDelay: 8,
+    jitterBufferMinimumDelay: 3,
+  };
+  expect(
+    extractStreamStats(records(next), first.sample, 2500).telemetry,
+  ).toMatchObject({
+    retransmittedPacketsPerSecond: 20,
+    jitterBufferTargetMs: 50,
+    jitterBufferMinimumMs: 20,
+  });
+  for (const override of [
+    { id: "replacement" },
+    { timestamp: 1000 },
+    { timestamp: 9000 },
+    { retransmittedPacketsReceived: 1 },
+    { retransmittedPacketsReceived: undefined },
+    { retransmittedPacketsReceived: -1 },
+  ])
+    expect(
+      extractStreamStats(records({ ...next, ...override }), first.sample, 2500)
+        .telemetry.retransmittedPacketsPerSecond,
+    ).toBeUndefined();
+  const absent = extractStreamStats(records(), undefined, 0).telemetry;
+  expect(absent.retransmittedPacketsReceived).toBeUndefined();
+  expect(absent.nackCount).toBeUndefined();
+});

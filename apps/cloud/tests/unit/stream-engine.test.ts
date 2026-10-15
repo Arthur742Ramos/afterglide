@@ -59,6 +59,7 @@ class Peer extends EventTarget {
   }
 }
 class Media extends EventTarget {
+  srcObject: MediaStream | null = null;
   style = { objectFit: "" };
   volume = 1;
   muted = false;
@@ -175,11 +176,28 @@ beforeEach(async () => {
     },
   );
   vi.stubGlobal("RTCRtpReceiver", { getCapabilities: () => ({ codecs: [] }) });
+  vi.stubGlobal(
+    "MediaStream",
+    class {
+      constructor(private tracks: MediaStreamTrack[]) {}
+      getTracks() {
+        return [...this.tracks];
+      }
+    },
+  );
   engine = new XboxStreamEngine({
     sessionId: "test",
     container: { replaceChildren() {} } as unknown as HTMLElement,
     keyboardControls: true,
     reserveControlChord: true,
+    // These transport tests exercise Automatic's low-delay transitions explicitly.
+    playbackSettings: {
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+      playbackMode: "automatic",
+    },
     controllerSettings: {
       preferredControllerId: "",
       controllerDefaults: defaultControllerTuning,
@@ -200,6 +218,37 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
+it.each([false, true])(
+  "isolates bundled tracks in their media sinks (video first: %s)",
+  (videoFirst) => {
+    const video = {
+      kind: "video",
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
+    const audio = {
+      kind: "audio",
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
+    const bundled = new MediaStream([video, audio]);
+    for (const track of videoFirst ? [video, audio] : [audio, video]) {
+      peer.dispatchEvent(
+        Object.assign(new Event("track"), {
+          track,
+          streams: [bundled],
+          receiver: { track },
+        }),
+      );
+    }
+    expect(media[0].srcObject?.getTracks()).toEqual([video]);
+    expect(media[1].srcObject?.getTracks()).toEqual([audio]);
+    expect(media[0].srcObject).not.toBe(bundled);
+    expect(media[1].srcObject).not.toBe(bundled);
+    expect(bundled.getTracks()).toEqual([video, audio]);
+    expect(video.stop).not.toHaveBeenCalled();
+    expect(audio.stop).not.toHaveBeenCalled();
+  },
+);
 function ack() {
   peer.channels.message.dispatchEvent(
     new MessageEvent("message", {
@@ -246,6 +295,45 @@ function actuator() {
 }
 
 describe("real stream engine input lifecycle", () => {
+  it("releases input and suspends metrics on native hide even when Chromium remains visible", async () => {
+    ready();
+    const state = {
+      visible: true,
+      focused: true,
+      minimized: false,
+      screenLocked: false,
+      suspended: false,
+      backgroundThrottling: false,
+    };
+    engine.setPlaybackWindow(state);
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+    engine.setPlaybackWindow({ ...state, visible: false });
+    expect(a(frames().at(-1)!)).toBe(false);
+    const poll = vi.spyOn(navigator, "getGamepads");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(poll).not.toHaveBeenCalled();
+    expect(onTelemetry.mock.lastCall?.[0]).toMatchObject({
+      playbackVisible: false,
+      documentVisible: true,
+    });
+    engine.setPlaybackWindow(state);
+    // A held controller button must not be replayed on restore.
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(false);
+    button = 0;
+    vi.advanceTimersByTime(4);
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+    engine.setPlaybackWindow({ ...state, focused: false });
+    expect(a(frames().at(-1)!)).toBe(false);
+    engine.setPlaybackWindow(state);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].playbackVisible).toBe(true);
+  });
+
   it("reports periodic cadence only while active and resets on capture, mode, hidden and removal", async () => {
     const started = Date.now();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now() - started);
@@ -288,6 +376,7 @@ describe("real stream engine input lifecycle", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(onTelemetry.mock.lastCall?.[0].inputPolling?.maxIntervalMs).toBe(4);
     engine.setPlaybackSettings({
+      playbackMode: "automatic",
       volume: 1,
       muted: false,
       videoFit: "fit",
@@ -392,6 +481,33 @@ describe("real stream engine input lifecycle", () => {
     }
     await tick();
     expect(targets()).toEqual([0, 0]);
+    engine.setPlaybackSettings({
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+      playbackMode: "smooth",
+    });
+    expect(targets()).toEqual([null, null]);
+    await tick();
+    await tick();
+    expect(targets()).toEqual([33, 33]);
+    expect(onTelemetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        playoutMode: "smooth",
+        playoutTargetMs: 33,
+        playoutTargetAccepted: true,
+      }),
+    );
+    expect(peer.closeCalls).toBe(0);
+    engine.setPlaybackSettings({
+      volume: 1,
+      muted: false,
+      videoFit: "fit",
+      inputPolling: "responsive",
+      playbackMode: "automatic",
+    });
+    expect(targets()).toEqual([null, null]);
     expect(onError).not.toHaveBeenCalled();
     expect(onInterrupted).not.toHaveBeenCalled();
   });
@@ -1311,6 +1427,7 @@ describe("real stream engine input lifecycle", () => {
       (media[0] as unknown as HTMLVideoElement).disableRemotePlayback,
     ).toBe(true);
     engine.setPlaybackSettings({
+      playbackMode: "automatic",
       volume: 0.35,
       muted: true,
       videoFit: "fill",
@@ -1325,6 +1442,7 @@ describe("real stream engine input lifecycle", () => {
     vi.advanceTimersByTime(4);
     expect(frames().map(a)).toEqual([true]);
     engine.setPlaybackSettings({
+      playbackMode: "automatic",
       volume: 1,
       muted: false,
       videoFit: "fit",
@@ -1379,6 +1497,7 @@ describe("real stream engine input lifecycle", () => {
       button = 1;
       vi.advanceTimersByTime(2);
       engine.setPlaybackSettings({
+        playbackMode: "automatic",
         volume,
         muted: false,
         videoFit: "fit",

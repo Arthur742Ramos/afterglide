@@ -184,8 +184,10 @@ proof of a 250 Hz hardware sampling rate or superior streaming.
 ## Collecting evidence in the app
 
 After a run, leave the stream and use Health's performance export action. The
-native save dialog writes a JSON file only to the location you select. Canceling
-does not save anything. The report remains available after leaving a stream;
+export writes a uniquely named JSON file to Downloads and shows its full path.
+Each click creates a new file with owner-only permissions where supported;
+previous reports are never overwritten. A write failure is shown in Health and
+can be retried. The report remains available after leaving a stream;
 starting a fresh, non-recovery session resets it. Automatic reconnections retain
 the same report and increment its local connection number.
 
@@ -292,3 +294,12 @@ privileged command, raw button history or automatic upload.
 by existing WebRTC stats. False remains false; missing stays omitted/unavailable.
 No hardware permission is requested to obtain it. It is optional decoder evidence,
 not GPU utilization or independent verification of hardware acceleration.
+
+Frame timing diagnostics (`frameTiming`) summarize the frames observed since the
+previous telemetry sample, capped at 600 observations. They separate media
+timestamp cadence, last-packet arrival cadence, decoding duration, time from
+arrival to compositor submission, signed expected presentation lead (negative when submission is late), and JavaScript
+callback lateness. These are browser observations of presented frames, not
+physical display measurements. Frames dropped before presentation are absent;
+missing browser metadata stays unavailable. Visibility changes reset timing
+baselines, and skipped callback boundaries are excluded from interval readings.

@@ -38,6 +38,11 @@ export function MockStreamSurface({
         videoDecoder: "E2E deterministic surface",
         decodeMs: 4.2,
         jitterBufferMs: 8.4,
+        retransmittedPacketsReceived: 0,
+        retransmittedPacketsPerSecond: 0,
+        nackCount: 0,
+        pliCount: 0,
+        receiverFramesDropped: 0,
         inputQueueBytes: 0,
         frameIntervalP95Ms: 16.7,
         frameIntervalP99Ms: 17.4,
@@ -68,6 +73,7 @@ export function MockStreamSurface({
         data-volume={playbackSettings.volume}
         data-muted={playbackSettings.muted}
         data-input-polling={playbackSettings.inputPolling}
+        data-playback-mode={playbackSettings.playbackMode}
         style={
           playbackSettings.videoFit === "fit"
             ? {

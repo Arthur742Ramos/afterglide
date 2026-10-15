@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   _electron as electron,
@@ -58,6 +65,48 @@ test.afterEach(async () => {
   if (app) await app.close();
   if (directory) rmSync(directory, { recursive: true, force: true });
   expect(errors).toEqual([]);
+});
+
+test("Health exports complete reports without a native dialog and recovers from write failure", async () => {
+  const page = await launch();
+  const downloads = join(directory, "Downloads");
+  mkdirSync(downloads);
+  await app.evaluate(
+    ({ app }, path) => app.setPath("downloads", path),
+    downloads,
+  );
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  const exportButton = page.getByRole("button", {
+    name: "Export performance report",
+    exact: true,
+  });
+  for (let count = 1; count <= 2; count++) {
+    await exportButton.click();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "Performance report saved to" }),
+    ).toContainText("Performance report saved to");
+    const files = readdirSync(downloads);
+    expect(files).toHaveLength(count);
+    for (const file of files) {
+      const report = JSON.parse(readFileSync(join(downloads, file), "utf8"));
+      expect(report.application.environment).toBe("test");
+      expect(report.retainedSamples).toBe(report.samples.length);
+    }
+  }
+  rmSync(downloads, { recursive: true });
+  await exportButton.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Couldn’t save to Downloads",
+  );
+  await expect(exportButton).toBeEnabled();
+  mkdirSync(downloads);
+  await exportButton.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Performance report saved to" }),
+  ).toContainText("Performance report saved to");
+  expect(readdirSync(downloads)).toHaveLength(1);
 });
 
 test("Health distinguishes optional decoder, polling and power readings at desktop and 200 percent zoom", async () => {
@@ -1432,7 +1481,13 @@ async function accessible(page: Page) {
       await (window as unknown as { axe: typeof axeCore }).axe.run(document, {
         runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
       })
-    ).violations.map((v) => ({ id: v.id, nodes: v.nodes.length })),
+    ).violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((node) => ({
+        target: node.target,
+        summary: node.failureSummary,
+      })),
+    })),
   );
   expect(violations).toEqual([]);
 }
@@ -2278,4 +2333,146 @@ test("late bootstrap reply and obsolete account events cannot replace a newer ca
   await expect(
     page.getByRole("heading", { name: "Newer catalog fixture", exact: true }),
   ).toHaveCount(0);
+});
+
+test("Smooth mode persists, switches live, and repair diagnostics stay readable", async () => {
+  let page = await launch();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const modes = () =>
+    page.getByRole("group", { name: "Stream smoothness", exact: true });
+  await expect(
+    modes().getByRole("button", { name: "Smooth", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await modes().getByRole("button", { name: "Automatic", exact: true }).click();
+  await modes().getByRole("button", { name: "Smooth", exact: true }).click();
+  await expect(
+    modes().getByRole("button", { name: "Smooth", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await app.close();
+  page = await launch("happy", true, false, directory);
+  await play(page);
+  await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+    "data-playback-mode",
+    "smooth",
+  );
+  const sessionId = await page.evaluate(
+    async () => (await window.afterglideCloud.getSnapshot()).session.sessionId,
+  );
+  await page.evaluate(() =>
+    window.afterglideCloudTest!.injectGamepad("controls"),
+  );
+  for (const factor of [1, 2]) {
+    await zoom(page, factor);
+    await modes()
+      .getByRole("button", { name: "Automatic", exact: true })
+      .click();
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-playback-mode",
+      "automatic",
+    );
+    await modes().getByRole("button", { name: "Smooth", exact: true }).click();
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-playback-mode",
+      "smooth",
+    );
+    await accessible(page);
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-smooth-controls-${factor}.png`),
+    });
+  }
+  expect(
+    await page.evaluate(
+      async () =>
+        (await window.afterglideCloud.getSnapshot()).session.sessionId,
+    ),
+  ).toBe(sessionId);
+  await zoom(page, 1);
+  await page.keyboard.press("F10");
+  await page.keyboard.press("F3");
+  await expect(
+    page
+      .getByLabel("Stream performance")
+      .locator(".metric")
+      .filter({ hasText: "RTX" }),
+  ).toContainText("0 PKT/S");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Leave Xbox stream" }).click();
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  await expect(
+    page.getByText("Video retransmission rate", { exact: true }).locator(".."),
+  ).toContainText("0 packets/s");
+  await expect(
+    page.getByText("Full frame requests (FIR)", { exact: true }).locator(".."),
+  ).toContainText("Not reported");
+  for (const factor of [1, 2]) {
+    await zoom(page, factor);
+    await page
+      .getByText("Retransmitted video packets", { exact: true })
+      .scrollIntoViewIfNeeded();
+    await accessible(page);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-smooth-health-${factor}.png`),
+    });
+  }
+});
+
+test("Health identifies measured region selection and default fallback without calling it gameplay ping", async () => {
+  const page = await launch();
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
+  const baseline = await page.evaluate(() =>
+    window.afterglideCloud.getSnapshot(),
+  );
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  const row = (label: string) =>
+    page.getByText(label, { exact: true }).locator("..");
+  for (const measured of [false, true]) {
+    await app.evaluate(
+      ({ BrowserWindow }, snapshot) =>
+        BrowserWindow.getAllWindows()[0].webContents.send(
+          "afterglide-cloud:snapshot",
+          snapshot,
+        ),
+      {
+        ...baseline,
+        revision: baseline.revision + (measured ? 102 : 101),
+        regionSelection: {
+          requestedRegion: "Default region",
+          xboxDefaultRegion: "Default region",
+          method: "xbox-default",
+          reason: measured ? "media-route-unverified" : "probes-unavailable",
+          measuredAt: 123,
+          scanComplete: true,
+          medianProbeMs: measured ? 0 : undefined,
+          candidates: [],
+        },
+      },
+    );
+    await expect(row("Requested cloud region")).toContainText("Default region");
+    await expect(row("Region selection")).toContainText(
+      measured
+        ? "Xbox default · service probes are diagnostic"
+        : "Xbox default · probes unavailable",
+    );
+    await expect(row("Region probe latency (not gameplay ping)")).toContainText(
+      measured ? "0.0 ms · median of 3" : "Not measured",
+    );
+  }
+  for (const factor of [1, 2]) {
+    await zoom(page, factor);
+    await row("Requested cloud region").scrollIntoViewIfNeeded();
+    await accessible(page);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(root, `artifacts/e2e/cloud-region-health-${factor}.png`),
+    });
+  }
 });

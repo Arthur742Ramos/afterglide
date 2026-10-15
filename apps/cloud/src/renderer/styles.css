@@ -1644,6 +1644,8 @@ kbd.wide {
   flex-shrink: 0;
 }
 .quick-setting-actions button {
+  /* Change selected text/background together to preserve contrast throughout. */
+  transition: transform 180ms ease-out;
   min-height: 56px;
   min-width: 56px;
   padding: 8px 14px;

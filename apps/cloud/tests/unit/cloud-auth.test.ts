@@ -26,12 +26,17 @@ const token = {
     regions: [{ baseUri: "https://test.xboxlive.com", isDefault: true }],
   },
 };
-function service() {
-  return new LivePlatformService({
-    load: vi.fn(),
-    getUserToken: () => ({}),
-    removeAll: vi.fn(),
-  } as unknown as SecureTokenStore);
+function service(
+  probe?: import("../../src/main/region-selection").RegionProbe,
+) {
+  return new LivePlatformService(
+    {
+      load: vi.fn(),
+      getUserToken: () => ({}),
+      removeAll: vi.fn(),
+    } as unknown as SecureTokenStore,
+    probe,
+  );
 }
 beforeEach(() => {
   vi.resetAllMocks();
@@ -457,5 +462,121 @@ describe("cloud-only service authentication", () => {
     finish({ data: token });
     await restoring;
     expect(platform.cloudAvailable).toBe(false);
+  });
+});
+
+describe("measured region provisioning", () => {
+  const offered = [
+    {
+      name: "WestEurope",
+      baseUri: "https://weu.core.gssv-play-prod.xboxlive.com",
+      isDefault: false,
+    },
+    {
+      name: "EastUs",
+      baseUri: "https://eus.core.gssv-play-prod.xboxlive.com",
+      isDefault: true,
+    },
+    {
+      name: "SouthCentralUs",
+      baseUri: "https://scus.core.gssv-play-prod.xboxlive.com",
+      isDefault: false,
+    },
+  ];
+  it.each([true, false])(
+    "routes creation and later session requests through the selected region (measured=%s)",
+    async (measured) => {
+      auth.getStreamToken.mockResolvedValue({
+        data: { ...token, offeringSettings: { regions: offered } },
+      });
+      const requests: Array<{ url: string; init: RequestInit }> = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init: RequestInit) => {
+          requests.push({ url, init });
+          return Response.json(
+            init.method === "POST"
+              ? { sessionId: "s", sessionPath: "v5/sessions/cloud/s" }
+              : { state: "Provisioned" },
+          );
+        }),
+      );
+      try {
+        const platform = service(async (url) =>
+          measured ? (url.hostname.startsWith("weu.") ? 10 : 70) : undefined,
+        );
+        const result = await platform.startSession(
+          { source: "cloud", id: "game" },
+          1080,
+        );
+        const expected = offered[1]!;
+        expect(result.regionSelection?.requestedRegion).toBe(expected.name);
+        expect(requests[0]!.url).toBe(
+          `${expected.baseUri}/v5/sessions/cloud/play`,
+        );
+        expect(
+          JSON.parse(String(requests[0]!.init.body)).fallbackRegionNames,
+        ).toEqual(["WestEurope", "SouthCentralUs"]);
+        expect(result.regionSelection?.method).toBe("xbox-default");
+        await platform.getSessionState(result.sessionPath);
+        expect(requests[1]!.url).toBe(
+          `${expected.baseUri}/v5/sessions/cloud/s/state`,
+        );
+        expect(JSON.stringify(result.regionSelection)).not.toContain(
+          token.gsToken,
+        );
+        expect(JSON.stringify(result.regionSelection)).not.toContain(
+          "https://",
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+  it("does not create a session after cancellation during the scan", async () => {
+    auth.getStreamToken.mockResolvedValue({
+      data: { ...token, offeringSettings: { regions: offered } },
+    });
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const probe = vi.fn(
+        async () => new Promise<number | undefined>(() => {}),
+      );
+      const platform = service(probe);
+      const controller = new AbortController();
+      const pending = platform.startSession(
+        { source: "cloud", id: "game" },
+        1080,
+        { signal: controller.signal },
+      );
+      const rejection = expect(pending).rejects.toMatchObject({
+        code: "OPERATION_CANCELLED",
+      });
+      await vi.waitFor(() => expect(probe).toHaveBeenCalled());
+      controller.abort();
+      await rejection;
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("never duplicates a session POST after an ambiguous network failure", async () => {
+    auth.getStreamToken.mockResolvedValue({
+      data: { ...token, offeringSettings: { regions: offered } },
+    });
+    const fetcher = vi.fn().mockRejectedValue(new TypeError("network error"));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const platform = service(async (url) =>
+        url.hostname.startsWith("weu.") ? 10 : 70,
+      );
+      await expect(
+        platform.startSession({ source: "cloud", id: "game" }, 1080),
+      ).rejects.toThrow();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

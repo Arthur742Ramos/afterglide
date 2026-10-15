@@ -2,8 +2,12 @@ import type { StreamTelemetry } from "../../shared/contracts";
 import type { MediaCounters } from "./media-metrics";
 import { intervalFrameRate } from "./frame-rates";
 
+import { FrameTimingTracker } from "./frame-timing";
+
 type FrameMetrics = Pick<
   StreamTelemetry,
+  | "frameTiming"
+  | "frameIntervalSource"
   | "frameIntervalP95Ms"
   | "frameIntervalP99Ms"
   | "framesDropped"
@@ -39,7 +43,10 @@ class SessionCounter {
 
 /** Browser presentation cadence, not display/photon or input-to-photon latency. */
 export class FrameMetricsTracker {
+  private timing = new FrameTimingTracker();
   private intervals: number[] = [];
+  private intervalSource?: "expected-display" | "presentation";
+  private skipDropDelta = false;
   private previousPresentation?: number;
   private lastPresentedFrames?: number;
   private missedObservations = 0;
@@ -68,6 +75,10 @@ export class FrameMetricsTracker {
   setVisible(visible: boolean): void {
     if (visible === this.visible) return;
     this.visible = visible;
+    this.timing.reset();
+    this.intervals = [];
+    this.intervalSource = undefined;
+    this.skipDropDelta = true;
     this.previousPresentation = undefined;
     this.lastPresentedFrames = undefined;
     this.previousRenderedReport = undefined;
@@ -79,6 +90,7 @@ export class FrameMetricsTracker {
 
   stop(): void {
     this.stopped = true;
+    this.timing.reset();
     if (this.callbackId !== undefined)
       this.video.cancelVideoFrameCallback?.(this.callbackId);
     this.callbackId = undefined;
@@ -145,6 +157,7 @@ export class FrameMetricsTracker {
         ? { frames: this.lastPresentedFrames, at: observedAt }
         : undefined;
     const result: FrameMetrics = {
+      frameTiming: this.visible ? this.timing.snapshot() : undefined,
       displayedFramesPerSecond,
       displayedFpsSource:
         displayedFramesPerSecond === undefined
@@ -160,11 +173,13 @@ export class FrameMetricsTracker {
         typeof this.video.requestVideoFrameCallback === "function"
           ? this.intervals.length
           : undefined,
+      frameIntervalSource: this.intervalSource,
       frameIntervalP95Ms: percentile(0.95),
       frameIntervalP99Ms: percentile(0.99),
       framesDropped: this.drops.update(
         this.dropSource === "quality" ? qualityDrops : report?.framesDropped,
         this.dropSource === "quality" ? "playback-quality" : source,
+        this.visible && !this.skipDropDelta,
       ),
       freezeCount: this.freezes.update(
         report?.freezeCount,
@@ -177,6 +192,7 @@ export class FrameMetricsTracker {
         this.visible && !this.skipFreezeDurationDelta,
       ),
     };
+    if (result.framesDropped !== undefined) this.skipDropDelta = false;
     if (result.freezeDurationMs !== undefined) result.freezeDurationMs *= 1000;
     // Keep the exclusion until real counters establish a new baseline.
     if (
@@ -203,7 +219,19 @@ export class FrameMetricsTracker {
     this.callbackId = this.video.requestVideoFrameCallback((_now, metadata) => {
       if (this.stopped) return;
       if (this.visible) {
-        const time = metadata.presentationTime;
+        this.timing.add(_now, metadata);
+        const source = Number.isFinite(metadata.expectedDisplayTime)
+          ? "expected-display"
+          : "presentation";
+        const time =
+          source === "expected-display"
+            ? metadata.expectedDisplayTime
+            : metadata.presentationTime;
+        if (source !== this.intervalSource) {
+          this.intervals = [];
+          this.previousPresentation = undefined;
+          this.intervalSource = source;
+        }
         const count = metadata.presentedFrames;
         const hasCounter = Number.isFinite(count) && count >= 0;
         const delta =

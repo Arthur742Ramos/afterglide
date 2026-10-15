@@ -75,7 +75,32 @@ export interface PowerContext {
   speedLimitObservedAt?: number;
 }
 
+/** Native window state, independent of Chromium's occlusion/visibility heuristics. */
+export interface PlaybackWindowState {
+  visible: boolean;
+  minimized: boolean;
+  focused: boolean;
+  screenLocked: boolean;
+  suspended: boolean;
+  backgroundThrottling: boolean;
+}
+
+export interface FrameTiming {
+  observedFrames: number;
+  receiveIntervalP95Ms?: number;
+  mediaIntervalP95Ms?: number;
+  decodeP95Ms?: number;
+  receiveToPresentationP95Ms?: number;
+  presentationLeadP95Ms?: number;
+  callbackLatenessP95Ms?: number;
+}
+
 export interface StreamTelemetry {
+  frameTiming?: FrameTiming;
+  playbackWindow?: PlaybackWindowState;
+  documentVisible?: boolean;
+  frameIntervalSource?: "expected-display" | "presentation";
+
   resolution: string;
   framesPerSecond?: number;
   incomingFramesPerSecond?: number;
@@ -98,7 +123,19 @@ export interface StreamTelemetry {
   decodeMs?: number;
   jitterBufferMs?: number;
   jitterMs?: number;
-  playoutMode?: "automatic" | "low-delay";
+  playoutMode?: "automatic" | "low-delay" | "smooth";
+  playoutTargetMs?: number;
+  playoutTargetAccepted?: boolean;
+  retransmittedPacketsReceived?: number;
+  retransmittedBytesReceived?: number;
+  nackCount?: number;
+  pliCount?: number;
+  firCount?: number;
+  receiverFramesDropped?: number;
+  retransmittedPacketsPerSecond?: number;
+  jitterBufferTargetMs?: number;
+  jitterBufferMinimumMs?: number;
+
   inputQueueBytes?: number;
   frameIntervalP95Ms?: number;
   frameIntervalP99Ms?: number;
@@ -172,9 +209,35 @@ export interface AppSettings {
   muted: boolean;
   videoFit: "fit" | "fill";
   inputPolling: "responsive" | "efficient";
+  playbackMode: "automatic" | "smooth";
+}
+
+export interface RegionSelection {
+  requestedRegion: string;
+  xboxDefaultRegion: string;
+  method: "lowest-probe-latency" | "xbox-default";
+  reason:
+    | "measured"
+    | "probes-unavailable"
+    | "single-region"
+    | "region-limit"
+    | "probe-timeout"
+    | "media-route-unverified";
+  measuredAt: number;
+  scanComplete: boolean;
+  medianProbeMs?: number;
+  candidates: Array<{
+    name: string;
+    successfulSamples: number;
+    attemptedSamples: number;
+    medianProbeMs?: number;
+    status: "measured" | "incomplete" | "unsupported" | "not-tested";
+  }>;
 }
 
 export interface AppSnapshot {
+  playbackWindow?: PlaybackWindowState;
+  regionSelection?: RegionSelection;
   powerContext?: PowerContext;
   revision: number;
   auth: {
@@ -250,7 +313,7 @@ export interface StreamApi {
   updateTelemetry(telemetry: StreamTelemetry): void;
   updateSettings(settings: Partial<AppSettings>): Promise<void>;
   checkForUpdates(): Promise<void>;
-  exportPerformanceReport(): Promise<boolean>;
+  exportPerformanceReport(): Promise<string>;
   setFullscreen(fullscreen: boolean): Promise<void>;
   quit(): Promise<void>;
   onSnapshot(listener: (snapshot: SnapshotUpdate) => void): () => void;
@@ -286,6 +349,7 @@ export const defaultSettings: AppSettings = {
   muted: false,
   videoFit: "fit",
   inputPolling: "responsive",
+  playbackMode: "smooth",
 };
 
 export const emptyTelemetry: StreamTelemetry = {

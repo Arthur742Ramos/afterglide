@@ -9,6 +9,7 @@ import type {
   StreamTelemetry,
   InputPollingTelemetry,
   PowerContext,
+  PlaybackWindowState,
 } from "../shared/contracts";
 import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
 import { sanitizeSettingsUpdate } from "../shared/controller-settings";
@@ -198,6 +199,7 @@ export class AppController {
           status: "idle",
         },
         session: idleSession(),
+        regionSelection: undefined,
         telemetry: { ...emptyTelemetry },
       });
     } finally {
@@ -400,6 +402,7 @@ export class AppController {
       this.recoveryMs = undefined;
     }
     this.deviceMetrics = undefined;
+    this.patch({ regionSelection: undefined });
     let receivedCreation: SessionStart | undefined;
     let creationCleanupStarted = false;
     const cleanupCreation = () => {
@@ -420,7 +423,7 @@ export class AppController {
       this.setSession(
         "provisioning",
         "Launching from the cloud",
-        "Xbox Cloud Gaming is finding capacity for your game.",
+        "Checking region diagnostics, then requesting capacity in Xbox’s default region.",
         34,
         target,
       );
@@ -444,6 +447,9 @@ export class AppController {
         .catch(() => {});
       const started = await operation.wait(() => creation);
       this.assertCurrent(generation);
+      this.patch({ regionSelection: started.regionSelection });
+      if (started.regionSelection)
+        this.performanceReport.recordRegionSelection(started.regionSelection);
       this.activeSession = {
         id: started.sessionId,
         path: started.sessionPath,
@@ -684,6 +690,10 @@ export class AppController {
     };
   }
 
+  updatePlaybackWindow(playbackWindow: PlaybackWindowState): void {
+    this.patch({ playbackWindow });
+  }
+
   updatePowerContext(context: PowerContext): void {
     this.patch({ powerContext: { ...context } });
   }
@@ -697,7 +707,46 @@ export class AppController {
   }
 
   updateTelemetry(telemetry: StreamTelemetry): void {
+    const timing = telemetry.frameTiming;
     const sanitized: StreamTelemetry = {
+      frameTiming:
+        timing && optionalMeasurement(timing.observedFrames, 600) !== undefined
+          ? {
+              observedFrames: optionalMeasurement(timing.observedFrames, 600)!,
+              receiveIntervalP95Ms: optionalMeasurement(
+                timing.receiveIntervalP95Ms,
+                60_000,
+              ),
+              mediaIntervalP95Ms: optionalMeasurement(
+                timing.mediaIntervalP95Ms,
+                60_000,
+              ),
+              decodeP95Ms: optionalMeasurement(timing.decodeP95Ms, 60_000),
+              receiveToPresentationP95Ms: optionalMeasurement(
+                timing.receiveToPresentationP95Ms,
+                60_000,
+              ),
+              presentationLeadP95Ms: optionalMeasurement(
+                timing.presentationLeadP95Ms,
+                60_000,
+                -60_000,
+              ),
+              callbackLatenessP95Ms: optionalMeasurement(
+                timing.callbackLatenessP95Ms,
+                60_000,
+              ),
+            }
+          : undefined,
+      playbackWindow: this.snapshot.playbackWindow,
+      documentVisible:
+        typeof telemetry.documentVisible === "boolean"
+          ? telemetry.documentVisible
+          : undefined,
+      frameIntervalSource:
+        telemetry.frameIntervalSource === "expected-display" ||
+        telemetry.frameIntervalSource === "presentation"
+          ? telemetry.frameIntervalSource
+          : undefined,
       resolution: String(telemetry.resolution).slice(0, 32),
       framesPerSecond: optionalMeasurement(telemetry.framesPerSecond, 240),
       incomingFramesPerSecond: optionalMeasurement(
@@ -756,10 +805,52 @@ export class AppController {
       powerContext: this.snapshot.powerContext,
       decodeMs: optionalMeasurement(telemetry.decodeMs, 10_000),
       jitterBufferMs: optionalMeasurement(telemetry.jitterBufferMs, 10_000),
+      retransmittedPacketsReceived: optionalMeasurement(
+        telemetry.retransmittedPacketsReceived,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      retransmittedBytesReceived: optionalMeasurement(
+        telemetry.retransmittedBytesReceived,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      nackCount: optionalMeasurement(
+        telemetry.nackCount,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      pliCount: optionalMeasurement(
+        telemetry.pliCount,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      firCount: optionalMeasurement(
+        telemetry.firCount,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      receiverFramesDropped: optionalMeasurement(
+        telemetry.receiverFramesDropped,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      retransmittedPacketsPerSecond: optionalMeasurement(
+        telemetry.retransmittedPacketsPerSecond,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      jitterBufferTargetMs: optionalMeasurement(
+        telemetry.jitterBufferTargetMs,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      jitterBufferMinimumMs: optionalMeasurement(
+        telemetry.jitterBufferMinimumMs,
+        Number.MAX_SAFE_INTEGER,
+      ),
+      playoutTargetMs: optionalMeasurement(telemetry.playoutTargetMs, 4_000),
+      playoutTargetAccepted:
+        typeof telemetry.playoutTargetAccepted === "boolean"
+          ? telemetry.playoutTargetAccepted
+          : undefined,
       jitterMs: optionalMeasurement(telemetry.jitterMs, 10_000),
       playoutMode:
         telemetry.playoutMode === "automatic" ||
-        telemetry.playoutMode === "low-delay"
+        telemetry.playoutMode === "low-delay" ||
+        telemetry.playoutMode === "smooth"
           ? telemetry.playoutMode
           : undefined,
       inputQueueBytes: optionalMeasurement(
@@ -973,8 +1064,9 @@ function isNetworkQuality(
 function optionalMeasurement(
   value: unknown,
   maximum: number,
+  minimum = 0,
 ): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
+  return typeof value === "number" && Number.isFinite(value) && value >= minimum
     ? Math.min(value, maximum)
     : undefined;
 }

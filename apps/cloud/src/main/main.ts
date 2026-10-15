@@ -5,13 +5,12 @@ import {
   ipcMain,
   shell,
   session,
-  dialog,
   powerMonitor,
   powerSaveBlocker,
   Menu,
   screen,
 } from "electron";
-import { writeFile } from "node:fs/promises";
+import { savePerformanceReport } from "./save-performance-report";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
@@ -31,6 +30,7 @@ import {
 } from "./secure-token-store";
 import { SettingsStore } from "./settings-store";
 import { readDeviceMetrics } from "./device-metrics";
+import { observePlaybackWindow } from "./playback-window";
 import { observePowerContext } from "./power-context";
 import {
   desktopMenuTemplate,
@@ -72,12 +72,14 @@ let shutdownComplete = false;
 let gpuInfoReady = false;
 let refreshingHardware = false;
 let displaySleepBlockerId: number | undefined;
+let playbackWindow: ReturnType<typeof observePlaybackWindow> | undefined;
 
 function syncPowerSave(phase = controller?.getSessionPhase() ?? "idle"): void {
   const activePhase =
     quitting || !mainWindow || mainWindow.isDestroyed() || !controller
       ? "idle"
       : phase;
+  playbackWindow?.setPhase(activePhase);
   displaySleepBlockerId = syncDisplaySleepBlocker(
     activePhase,
     displaySleepBlockerId,
@@ -236,10 +238,20 @@ function openMainWindow(): void {
   const window = createWindow(preferences.settings.launchFullscreen);
   mainWindow = window;
   controller.attachWindow(window);
+  const observation = observePlaybackWindow(
+    window,
+    powerMonitor,
+    (state) => controller?.updatePlaybackWindow(state),
+    isBackgroundTest,
+  );
+  playbackWindow = observation;
+  observation.setPhase(controller.getSessionPhase());
   controller.setFullscreenState(window.isFullScreen());
   window.on("enter-full-screen", () => controller?.setFullscreenState(true));
   window.on("leave-full-screen", () => controller?.setFullscreenState(false));
   window.on("closed", () => {
+    observation.dispose();
+    if (playbackWindow === observation) playbackWindow = undefined;
     if (mainWindow === window) mainWindow = undefined;
     syncPowerSave();
     if (process.platform === "darwin" && !quitting && !isTest) {
@@ -429,16 +441,7 @@ function registerIpc(appController: AppController): void {
     exporting = true;
     try {
       const report = appController.exportPerformanceReport();
-      const selected = await dialog.showSaveDialog(mainWindow, {
-        title: "Export stream performance",
-        defaultPath: "afterglide-cloud-performance.json",
-        filters: [{ name: "Performance report", extensions: ["json"] }],
-      });
-      if (selected.canceled || !selected.filePath) return false;
-      await writeFile(selected.filePath, JSON.stringify(report, null, 2), {
-        mode: 0o600,
-      });
-      return true;
+      return await savePerformanceReport(app.getPath("downloads"), report);
     } finally {
       exporting = false;
     }

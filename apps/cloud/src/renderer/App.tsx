@@ -1774,6 +1774,7 @@ function StreamView({
       } ${hideCursor ? "cursor-hidden" : ""} ${snapshot.settings.reducedMotion ? "reduced-motion" : ""}`}
     >
       <StreamSurface
+        playbackWindow={snapshot.playbackWindow}
         descriptor={descriptor}
         reducedMotion={snapshot.settings.reducedMotion}
         keyboardControls={snapshot.settings.keyboardControls}
@@ -1894,6 +1895,30 @@ function StreamView({
               telemetry.roundTripMs === undefined
                 ? "NOT REPORTED"
                 : `${Math.round(telemetry.roundTripMs)} MS`
+            }
+          />
+          <Metric
+            label="BUFFER"
+            value={
+              telemetry.jitterBufferMs === undefined
+                ? "NOT REPORTED"
+                : `${telemetry.jitterBufferMs.toFixed(0)} MS`
+            }
+          />
+          <Metric
+            label="REQUEST"
+            value={
+              telemetry.playoutTargetMs === undefined
+                ? "AUTO"
+                : `${telemetry.playoutTargetMs} MS${telemetry.playoutTargetAccepted === false ? " · UNSUPPORTED" : ""}`
+            }
+          />
+          <Metric
+            label="RTX"
+            value={
+              telemetry.retransmittedPacketsPerSecond === undefined
+                ? "NOT REPORTED"
+                : `${telemetry.retransmittedPacketsPerSecond.toFixed(0)} PKT/S`
             }
           />
           <Metric
@@ -2097,12 +2122,12 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
     setExportStatus("");
     try {
       const saved = await window.afterglideCloud.exportPerformanceReport();
-      setExportStatus(
-        saved ? "Performance report saved." : "Export cancelled.",
-      );
+      setExportStatus(`Performance report saved to ${saved}`);
     } catch {
       setExportError(true);
-      setExportStatus("Couldn’t save the performance report. Try again.");
+      setExportStatus(
+        "Couldn’t save to Downloads. Check that the folder is writable and has free space, then try again.",
+      );
     } finally {
       setExporting(false);
     }
@@ -2352,12 +2377,155 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
           }
         />
         <DiagnosticRow
+          icon="display"
+          label="Selected playback mode"
+          value={
+            snapshot.settings.playbackMode === "smooth"
+              ? "Smooth (experimental)"
+              : "Automatic"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Requested buffer hint"
+          value={
+            snapshot.telemetry.updatedAt
+              ? snapshot.telemetry.playoutTargetMs === undefined
+                ? "Browser automatic"
+                : `${snapshot.telemetry.playoutTargetMs} ms`
+              : "Measured during play"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Buffer hint accepted (not achieved delay)"
+          value={
+            snapshot.telemetry.playoutTargetAccepted === undefined
+              ? "Not reported"
+              : snapshot.telemetry.playoutTargetAccepted
+                ? "Yes"
+                : "No"
+          }
+        />
+        {(
+          [
+            [
+              "Receiver target buffer",
+              snapshot.telemetry.jitterBufferTargetMs,
+              "ms",
+            ],
+            [
+              "Network minimum buffer",
+              snapshot.telemetry.jitterBufferMinimumMs,
+              "ms",
+            ],
+            [
+              "Retransmitted video packets",
+              snapshot.telemetry.retransmittedPacketsReceived,
+              "packets (total)",
+            ],
+            [
+              "Video retransmission rate",
+              snapshot.telemetry.retransmittedPacketsPerSecond,
+              "packets/s",
+            ],
+            [
+              "Retransmitted video bytes",
+              snapshot.telemetry.retransmittedBytesReceived,
+              "bytes (total)",
+            ],
+            [
+              "Retransmission requests (NACK)",
+              snapshot.telemetry.nackCount,
+              "feedback messages (total)",
+            ],
+            [
+              "Picture loss requests (PLI)",
+              snapshot.telemetry.pliCount,
+              "messages (total)",
+            ],
+            [
+              "Full frame requests (FIR)",
+              snapshot.telemetry.firCount,
+              "messages (total)",
+            ],
+            [
+              "Receiver frame drops",
+              snapshot.telemetry.receiverFramesDropped,
+              "frames (total)",
+            ],
+          ] as const
+        ).map(([label, value, unit]) => (
+          <DiagnosticRow
+            key={label}
+            icon="pulse"
+            label={label}
+            value={
+              value === undefined
+                ? "Not reported"
+                : `${Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`
+            }
+          />
+        ))}
+        <DiagnosticRow
           icon="wifi"
           label="Input send queue"
           value={
             snapshot.telemetry.inputQueueBytes === undefined
               ? "Measured during play"
               : `${snapshot.telemetry.inputQueueBytes} bytes`
+          }
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Requested cloud region"
+          value={
+            snapshot.regionSelection?.requestedRegion ??
+            "Selected when launching"
+          }
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Region selection"
+          value={
+            snapshot.regionSelection
+              ? snapshot.regionSelection.method === "lowest-probe-latency"
+                ? snapshot.regionSelection.scanComplete
+                  ? "Lowest median HTTPS probe"
+                  : "Lowest measured probe · partial scan"
+                : {
+                    "single-region": "Only one region offered",
+                    "region-limit": "Xbox default · region scan limit",
+                    "probe-timeout": "Xbox default · scan timed out",
+                    "probes-unavailable": "Xbox default · probes unavailable",
+                    "media-route-unverified":
+                      "Xbox default · service probes are diagnostic",
+                    measured: "Xbox default",
+                  }[snapshot.regionSelection.reason]
+              : "Automatic at each launch"
+          }
+        />
+        <DiagnosticRow
+          icon="pulse"
+          label="Region probe latency (not gameplay ping)"
+          value={
+            snapshot.regionSelection?.medianProbeMs === undefined
+              ? "Not measured"
+              : `${snapshot.regionSelection.medianProbeMs.toFixed(1)} ms · median of 3`
+          }
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Xbox default region"
+          value={snapshot.regionSelection?.xboxDefaultRegion ?? "Not reported"}
+        />
+        <DiagnosticRow
+          icon="wifi"
+          label="Regions with complete measurements"
+          value={
+            snapshot.regionSelection
+              ? `${snapshot.regionSelection.candidates.filter((candidate) => candidate.status === "measured").length} of ${snapshot.regionSelection.candidates.length}`
+              : "Not measured"
           }
         />
         <DiagnosticRow
@@ -2377,7 +2545,10 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
         />
       </div>
       <p className="credential-note">
-        JS polling describes observed timer cadence, not controller hardware or
+        Region probes are diagnostic; Xbox’s default is retained because service
+        timing does not establish gameplay latency. Xbox may assign a fallback
+        region. Gameplay ping measures the active stream separately. JS polling
+        describes observed timer cadence, not controller hardware or
         input-to-photon latency. Jitter is mean absolute deviation from the
         requested interval; p95 uses 1 ms histogram bounds. Power context is
         OS-reported state, not temperature, watts or GPU utilization.
@@ -2393,7 +2564,15 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
       >
         {exporting ? "Saving report…" : "Export performance report"}
       </button>
-      <p role={exportError ? "alert" : "status"}>{exportStatus}</p>
+      <p className="credential-note">
+        Saves a new JSON file to Downloads. Existing reports are kept.
+      </p>
+      <p
+        role={exportError ? "alert" : "status"}
+        style={{ overflowWrap: "anywhere" }}
+      >
+        {exportStatus}
+      </p>
       <button
         className="secondary-action refresh-health"
         data-focusable
@@ -2582,6 +2761,31 @@ function SettingsPage({
             initialFocus
             onChange={(value) => update({ showPerformance: value })}
           />
+        </SettingRow>
+        <SettingRow
+          icon="display"
+          title="Stream smoothness"
+          detail="Smooth adds buffering to reduce stutter and may increase input delay. Experimental; you can switch during play."
+        >
+          <div
+            className="segmented"
+            role="group"
+            aria-label="Stream smoothness"
+          >
+            {(["automatic", "smooth"] as const).map((mode) => (
+              <button
+                key={mode}
+                data-focusable
+                aria-pressed={snapshot.settings.playbackMode === mode}
+                className={
+                  snapshot.settings.playbackMode === mode ? "active" : ""
+                }
+                onClick={() => update({ playbackMode: mode })}
+              >
+                {mode === "smooth" ? "Smooth" : "Automatic"}
+              </button>
+            ))}
+          </div>
         </SettingRow>
         <SettingRow
           icon="controller"

@@ -1,11 +1,14 @@
 import { AdaptivePlayoutPolicy, applyPlayoutTarget } from "./adaptive-playout";
 import { preferredVideoCodecs } from "./video-codecs";
+import { prepareStreamOffer } from "./stream-offer";
 import { extractStreamStats, type StreamStatsSample } from "./telemetry";
 import type {
   AppSettings,
+  PlaybackWindowState,
   IceCandidatePayload,
   StreamTelemetry,
 } from "../../shared/contracts";
+import { defaultSettings } from "../../shared/contracts";
 import { NETWORK_POLICY } from "../../shared/network-policy";
 import {
   applyKeyboardInput,
@@ -32,14 +35,15 @@ import { ControllerChordInput } from "./controller-chord";
 
 export type PlaybackSettings = Pick<
   AppSettings,
-  "volume" | "muted" | "videoFit" | "inputPolling"
+  "volume" | "muted" | "videoFit" | "inputPolling" | "playbackMode"
 >;
 
 const defaultPlaybackSettings: PlaybackSettings = {
-  volume: 1,
-  muted: false,
-  videoFit: "fit",
-  inputPolling: "responsive",
+  volume: defaultSettings.volume,
+  muted: defaultSettings.muted,
+  videoFit: defaultSettings.videoFit,
+  inputPolling: defaultSettings.inputPolling,
+  playbackMode: defaultSettings.playbackMode,
 };
 
 export interface ControllerStatus {
@@ -85,6 +89,7 @@ export class XboxStreamEngine {
   private readonly inputPollingMetrics = new InputPollingMetrics();
   private readonly sampledFrame = emptyXboxInputFrame();
   private playbackSettings?: PlaybackSettings;
+  private playbackWindow?: PlaybackWindowState;
   private readonly localCandidates: IceCandidatePayload[] = [];
   private readonly localCandidateKeys = new Set<string>();
   private readonly pressedKeys = new Set<string>();
@@ -174,7 +179,7 @@ export class XboxStreamEngine {
       options.playbackSettings ?? defaultPlaybackSettings,
     );
     this.frameMetrics = new FrameMetricsTracker(this.video);
-    this.frameMetrics.start(document.visibilityState === "visible");
+    this.frameMetrics.start(this.isPlaybackVisible());
 
     this.peer.addTransceiver("audio", { direction: "sendrecv" });
     const videoTransceiver = this.peer.addTransceiver("video", {
@@ -205,9 +210,7 @@ export class XboxStreamEngine {
     for (const event of ["waiting", "pause", "ended"]) {
       this.video.addEventListener(event, () => {
         this.videoPlaying = false;
-        this.suspendPlayout(
-          event === "waiting" && document.visibilityState === "visible",
-        );
+        this.suspendPlayout(event === "waiting" && this.isPlaybackVisible());
       });
     }
 
@@ -237,11 +240,7 @@ export class XboxStreamEngine {
         offerToReceiveVideo: true,
       });
       if (this.destroyed || this.terminal) return;
-      if (offer.sdp)
-        offer.sdp = offer.sdp.replace(
-          "useinbandfec=1",
-          "useinbandfec=1; stereo=1",
-        );
+      if (offer.sdp) offer.sdp = prepareStreamOffer(offer.sdp);
       await this.peer.setLocalDescription(offer);
       if (this.destroyed || this.terminal) return;
 
@@ -317,11 +316,15 @@ export class XboxStreamEngine {
       this.playbackSettings?.volume === settings.volume &&
       this.playbackSettings.muted === settings.muted &&
       this.playbackSettings.videoFit === settings.videoFit &&
-      this.playbackSettings.inputPolling === settings.inputPolling
+      this.playbackSettings.inputPolling === settings.inputPolling &&
+      this.playbackSettings.playbackMode === settings.playbackMode
     )
       return;
     const pollingChanged =
       this.playbackSettings?.inputPolling !== settings.inputPolling;
+    this.playout.setMode(settings.playbackMode);
+    for (const receiver of this.mediaReceivers)
+      applyPlayoutTarget(receiver, this.playout.target);
     this.playbackSettings = { ...settings };
     this.audio.volume = settings.volume;
     this.audio.muted = settings.muted;
@@ -361,8 +364,8 @@ export class XboxStreamEngine {
       !this.terminal &&
       !this.inputSuspended &&
       !this.transportDisconnected &&
-      document.hasFocus() &&
-      document.visibilityState === "visible";
+      this.hasPlaybackFocus() &&
+      this.isPlaybackVisible();
     // Paused/hidden streams only retry neutral. Wake promptly on focus/visibility.
     if (!active && !this.neutralPending) {
       this.inputPollingMetrics.reset();
@@ -451,7 +454,11 @@ export class XboxStreamEngine {
   private attachTrack(event: RTCTrackEvent): void {
     this.mediaReceivers.add(event.receiver);
     applyPlayoutTarget(event.receiver, this.playout.target);
-    const stream = event.streams[0] ?? new MediaStream([event.track]);
+    // The server can bundle audio and video in the same stream. Chromium
+    // creates a video renderer even for <audio> when its stream has video,
+    // and a muted <video> still creates an audio renderer. Give each sink
+    // only its own track; do not mutate the receiver's shared stream.
+    const stream = new MediaStream([event.track]);
     if (event.track.kind === "video") this.video.srcObject = stream;
     if (event.track.kind === "audio") this.audio.srcObject = stream;
   }
@@ -596,7 +603,7 @@ export class XboxStreamEngine {
     this.channels.input.send(packet);
     this.inputActive = true;
     // Seed while startup controls are still held, before the first input tick.
-    if (document.hasFocus() && document.visibilityState === "visible") {
+    if (this.hasPlaybackFocus() && this.isPlaybackVisible()) {
       const gamepad = this.resolveGamepad();
       if (gamepad)
         this.gamepadRelease.prime(
@@ -672,8 +679,8 @@ export class XboxStreamEngine {
       this.inputActive &&
       !this.inputSuspended &&
       !this.transportDisconnected &&
-      document.hasFocus() &&
-      document.visibilityState === "visible"
+      this.hasPlaybackFocus() &&
+      this.isPlaybackVisible()
     ) {
       this.sendCurrentInput(
         performance.now() - this.lastInputAt >= NETWORK_POLICY.inputHeartbeatMs,
@@ -690,8 +697,8 @@ export class XboxStreamEngine {
       this.terminal ||
       this.destroyed ||
       this.neutralPending ||
-      !document.hasFocus() ||
-      document.visibilityState !== "visible"
+      !this.hasPlaybackFocus() ||
+      !this.isPlaybackVisible()
     )
       return;
     if (fromTimer) this.inputPollingMetrics.observe(performance.now());
@@ -778,8 +785,8 @@ export class XboxStreamEngine {
       !this.transportDisconnected &&
       !this.destroyed &&
       !this.terminal &&
-      document.hasFocus() &&
-      document.visibilityState === "visible"
+      this.hasPlaybackFocus() &&
+      this.isPlaybackVisible()
     ) {
       const gamepad = selectController(
         navigator.getGamepads(),
@@ -794,13 +801,38 @@ export class XboxStreamEngine {
     }
   }
 
+  private hasPlaybackFocus(): boolean {
+    return document.hasFocus() && this.playbackWindow?.focused !== false;
+  }
+
+  private isPlaybackVisible(): boolean {
+    const state = this.playbackWindow;
+    return (
+      document.visibilityState === "visible" &&
+      (!state ||
+        (state.visible &&
+          !state.minimized &&
+          !state.screenLocked &&
+          !state.suspended))
+    );
+  }
+
+  setPlaybackWindow(state: PlaybackWindowState | undefined): void {
+    const wasVisible = this.isPlaybackVisible();
+    const wasFocused = this.playbackWindow?.focused;
+    this.playbackWindow = state;
+    if (wasVisible !== this.isPlaybackVisible()) this.onVisibilityChange();
+    if (state?.focused === false && wasFocused !== false) this.onBlur();
+    else if (state?.focused === true && wasFocused === false) this.onFocus();
+  }
+
   private onVisibilityChange = (): void => {
-    if (document.visibilityState !== "visible") {
+    if (!this.isPlaybackVisible()) {
       this.suspendPlayout();
       this.controlsShortcut.reset();
       this.releaseInput();
     } else this.primeControllerRelease();
-    this.frameMetrics.setVisible(document.visibilityState === "visible");
+    this.frameMetrics.setVisible(this.isPlaybackVisible());
     this.updateInputPolling();
   };
 
@@ -810,7 +842,8 @@ export class XboxStreamEngine {
       this.inputSuspended ||
       this.transportDisconnected ||
       !isKeyboardControlCode(event.code) ||
-      !document.hasFocus()
+      !this.isPlaybackVisible() ||
+      !this.hasPlaybackFocus()
     )
       return;
     if (event.repeat) {
@@ -840,8 +873,8 @@ export class XboxStreamEngine {
       this.inputSuspended ||
       this.transportDisconnected ||
       !this.inputActive ||
-      !document.hasFocus() ||
-      document.visibilityState !== "visible"
+      !this.hasPlaybackFocus() ||
+      !this.isPlaybackVisible()
     )
       return;
     if (!(event.data instanceof ArrayBuffer)) return;
@@ -965,8 +998,8 @@ export class XboxStreamEngine {
       this.terminal ||
       this.inputSuspended ||
       !this.options.reserveControlChord ||
-      !document.hasFocus() ||
-      document.visibilityState !== "visible"
+      !this.hasPlaybackFocus() ||
+      !this.isPlaybackVisible()
     ) {
       this.controlsShortcut.reset();
       return;
@@ -997,19 +1030,30 @@ export class XboxStreamEngine {
       if (
         this.videoPlaying &&
         !this.transportDisconnected &&
-        document.visibilityState === "visible"
+        this.isPlaybackVisible()
       )
         this.playout.update(sample.video, telemetry, sample.observedAt);
       else this.playout.suspend();
-      for (const receiver of this.mediaReceivers)
-        applyPlayoutTarget(receiver, this.playout.target);
+      let videoTargetAccepted: boolean | undefined;
+      for (const receiver of this.mediaReceivers) {
+        const accepted = applyPlayoutTarget(receiver, this.playout.target);
+        if (receiver.track.kind === "video") videoTargetAccepted = accepted;
+      }
       this.options.onTelemetry({
         ...telemetry,
-        playoutMode: this.playout.target === null ? "automatic" : "low-delay",
+        playoutMode:
+          this.playout.target === null
+            ? "automatic"
+            : this.playout.target === 0
+              ? "low-delay"
+              : "smooth",
+        playoutTargetMs: this.playout.target ?? undefined,
+        playoutTargetAccepted: videoTargetAccepted,
         inputQueueBytes: this.channels.input.bufferedAmount,
         inputPolling: this.inputPollingMetrics.snapshot(),
-        playbackVisible: document.visibilityState === "visible",
-        playbackFocused: document.hasFocus(),
+        playbackVisible: this.isPlaybackVisible(),
+        documentVisible: document.visibilityState === "visible",
+        playbackFocused: this.hasPlaybackFocus(),
         updatedAt: Date.now(),
       });
       this.previousStats = sample;

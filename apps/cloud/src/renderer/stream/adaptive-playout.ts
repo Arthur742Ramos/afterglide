@@ -8,6 +8,9 @@ export const PLAYOUT_POLICY = {
   maxHealthyJitterMs: 5,
   maxHealthyLossPercent: 0.5,
   maxHealthyRoundTripMs: 80,
+  smoothStableDurationMs: 15_000,
+  smoothStableJitterMs: 20,
+  smoothDisturbedJitterMs: 30,
 } as const;
 
 interface Baseline {
@@ -21,12 +24,22 @@ interface Baseline {
 }
 
 /**
- * Leave buffering to Chromium until advancing video and network measurements
- * stay healthy for ten seconds. A disturbance immediately removes our hint;
- * this requests neither a fixed buffer size nor a server bitrate change.
+ * Automatic waits for healthy measurements before requesting low delay.
+ * Smooth requests a bounded buffer and adjusts slowly after measured trends.
+ * These receiver hints neither guarantee achieved delay nor change server bitrate.
  */
 export class AdaptivePlayoutPolicy {
-  target: 0 | null = null;
+  target: number | null = null;
+  private mode: "automatic" | "smooth" = "automatic";
+  private smoothLevel = 1;
+  private disturbedSince?: number;
+  private lastIncrease?: number;
+
+  setMode(mode: "automatic" | "smooth"): void {
+    if (this.mode === mode) return;
+    this.mode = mode;
+    this.reset();
+  }
   private baseline?: Baseline;
   private healthySince?: number;
   private mediaDisturbances = 0;
@@ -34,6 +47,8 @@ export class AdaptivePlayoutPolicy {
   reset(): void {
     this.suspend();
     this.mediaDisturbances = 0;
+    this.smoothLevel = 1;
+    this.lastIncrease = undefined;
   }
 
   /** Restart observations without forgetting earlier low-delay disturbances. */
@@ -51,6 +66,7 @@ export class AdaptivePlayoutPolicy {
       );
     this.target = null;
     this.healthySince = undefined;
+    this.disturbedSince = undefined;
   }
 
   update(
@@ -83,6 +99,10 @@ export class AdaptivePlayoutPolicy {
     };
     const previous = this.baseline;
     this.baseline = current;
+    if (this.mode === "smooth") {
+      this.updateSmooth(current, previous, telemetry);
+      return;
+    }
     const mediaHealthy =
       previous !== undefined &&
       previous.id === current.id &&
@@ -114,6 +134,88 @@ export class AdaptivePlayoutPolicy {
       PLAYOUT_POLICY.healthyDurationMs * 2 ** this.mediaDisturbances;
     if (observedAt - this.healthySince >= requiredHealthyMs) this.target = 0;
   }
+  private updateSmooth(
+    current: Baseline,
+    previous: Baseline | undefined,
+    telemetry: Pick<
+      StreamTelemetry,
+      "jitterMs" | "packetLossPercent" | "roundTripMs" | "framesDropped"
+    >,
+  ): void {
+    // Unknown, stale, reset or replaced sources cannot establish a trend.
+    const counters = [
+      "frames",
+      "freezes",
+      "dropped",
+      "playbackDropped",
+    ] as const;
+    if (
+      !previous ||
+      current.id !== previous.id ||
+      current.timestamp <= previous.timestamp ||
+      current.observedAt <= previous.observedAt ||
+      current.observedAt - previous.observedAt >
+        PLAYOUT_POLICY.maxSampleGapMs ||
+      counters.some(
+        (key) =>
+          (current[key] === undefined) !== (previous[key] === undefined) ||
+          (current[key] !== undefined &&
+            previous[key] !== undefined &&
+            current[key]! < previous[key]!),
+      ) ||
+      [
+        telemetry.jitterMs,
+        telemetry.packetLossPercent,
+        telemetry.roundTripMs,
+      ].some((value) => nonnegative(value) === undefined)
+    ) {
+      this.automatic(false);
+      return;
+    }
+    // Presentation drops are local display scheduling, not evidence that a
+    // network buffer is too small. Receiver drops/freezes and packet loss are.
+    const mediaDisturbed =
+      current.frames === previous.frames ||
+      current.freezes !== previous.freezes ||
+      current.dropped !== previous.dropped;
+    const disturbed =
+      mediaDisturbed ||
+      telemetry.jitterMs! >= PLAYOUT_POLICY.smoothDisturbedJitterMs ||
+      telemetry.packetLossPercent! > PLAYOUT_POLICY.maxHealthyLossPercent;
+    const stable =
+      !mediaDisturbed &&
+      telemetry.jitterMs! <= PLAYOUT_POLICY.smoothStableJitterMs &&
+      telemetry.packetLossPercent! <= PLAYOUT_POLICY.maxHealthyLossPercent;
+    // High RTT alone does not call for extra buffering. The neutral jitter
+    // band prevents oscillation and cannot count toward sustained stability.
+    if (disturbed) {
+      this.healthySince = undefined;
+      this.disturbedSince ??= current.observedAt;
+      if (
+        current.observedAt - this.disturbedSince >= 2_000 &&
+        (this.lastIncrease === undefined ||
+          current.observedAt - this.lastIncrease >= 5_000)
+      ) {
+        this.smoothLevel = Math.min(3, this.smoothLevel + 1);
+        this.lastIncrease = current.observedAt;
+        this.disturbedSince = current.observedAt;
+      }
+    } else if (stable) {
+      this.disturbedSince = undefined;
+      this.healthySince ??= current.observedAt;
+      if (
+        current.observedAt - this.healthySince >=
+        PLAYOUT_POLICY.smoothStableDurationMs
+      ) {
+        this.smoothLevel = Math.max(0, this.smoothLevel - 1);
+        this.healthySince = current.observedAt;
+      }
+    } else {
+      this.disturbedSince = undefined;
+      this.healthySince = undefined;
+    }
+    this.target = [16, 33, 67, 100][this.smoothLevel]!;
+  }
 }
 
 function nonnegative(value: unknown): number | undefined {
@@ -130,15 +232,15 @@ function within(value: unknown, maximum: number): boolean {
 /** Unsupported receivers retain the browser default; avoid repeated writes. */
 export function applyPlayoutTarget(
   receiver: RTCRtpReceiver,
-  target: 0 | null,
-): void {
+  target: number | null,
+): boolean {
   try {
-    if (
-      "jitterBufferTarget" in receiver &&
-      receiver.jitterBufferTarget !== target
-    )
+    if (!("jitterBufferTarget" in receiver)) return false;
+    if (receiver.jitterBufferTarget !== target)
       receiver.jitterBufferTarget = target;
+    return receiver.jitterBufferTarget === target;
   } catch {
-    // Capability detection does not guarantee a writable property.
+    // Readback confirms acceptance of the hint, never achieved buffering.
+    return false;
   }
 }

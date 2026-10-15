@@ -27,17 +27,19 @@ import {
   type OperationContext,
 } from "./operation-context";
 
+import {
+  selectCloudRegion,
+  xboxDefaultRegion,
+  type CloudRegion,
+  type RegionProbe,
+} from "./region-selection";
+
 interface StreamTokenData {
   gsToken: string;
   durationInSeconds?: number;
   market: string;
   offeringSettings: {
-    regions: Array<{
-      baseUri: string;
-      isDefault: boolean;
-      name?: string;
-      networkTestHostname?: string;
-    }>;
+    regions: CloudRegion[];
   };
 }
 
@@ -100,7 +102,10 @@ export class LivePlatformService implements PlatformService {
   private recentIds = new Set<string>();
   private searchedProducts = new Map<string, CatalogProduct>();
 
-  constructor(private readonly tokenStore: SecureTokenStore) {
+  constructor(
+    private readonly tokenStore: SecureTokenStore,
+    private readonly regionProbe?: RegionProbe,
+  ) {
     tokenStore.load();
     this.msal = this.sessionAuthentication();
   }
@@ -523,7 +528,13 @@ export class LivePlatformService implements PlatformService {
           "XCLOUD_UNAVAILABLE",
           "Cloud gaming is not available for this account or region.",
         );
-      const region = chooseRegion(token);
+      const selection = await selectCloudRegion(
+        token.offeringSettings.regions,
+        operation,
+        this.regionProbe,
+      );
+      operation.check();
+      const region = selection.region;
       if (!region)
         throw new AfterglideError(
           "NO_REGION",
@@ -568,6 +579,7 @@ export class LivePlatformService implements PlatformService {
               target,
               resolution,
               token.offeringSettings.regions,
+              region,
             ),
           ),
           headers: { "X-MS-Device-Info": deviceInfo(resolution) },
@@ -584,7 +596,7 @@ export class LivePlatformService implements PlatformService {
       }
       this.currentSession?.abort();
       this.currentSession = sessionContext(response);
-      return response;
+      return { ...response, regionSelection: selection.diagnostics };
     } finally {
       this.pendingSessionCreations.delete(creation);
       operation.dispose();
@@ -993,22 +1005,19 @@ function authenticationCancelled(): AfterglideError {
 }
 
 function chooseRegion(token: StreamTokenData) {
-  return (
-    token.offeringSettings.regions.find((candidate) => candidate.isDefault) ??
-    token.offeringSettings.regions[0]
-  );
+  return xboxDefaultRegion(token.offeringSettings.regions);
 }
 
 function fallbackRegions(
   regions: StreamTokenData["offeringSettings"]["regions"],
+  primary = xboxDefaultRegion(regions),
 ): string[] {
-  const primary =
-    regions.find((candidate) => candidate.isDefault) ?? regions[0];
   const seen = new Set<string>();
   const primaryName = primary?.name?.trim();
   if (primaryName) seen.add(primaryName);
   const names: string[] = [];
-  for (const region of regions) {
+  for (const region of [xboxDefaultRegion(regions), ...regions]) {
+    if (!region) continue;
     if (region === primary || region.baseUri === primary?.baseUri) continue;
     const name = region.name?.trim();
     if (!name || seen.has(name)) continue;
@@ -1022,6 +1031,7 @@ export function buildSessionPayload(
   target: StreamTarget,
   resolution: 720 | 1080,
   regions: StreamTokenData["offeringSettings"]["regions"] = [],
+  selectedRegion = xboxDefaultRegion(regions),
 ) {
   return {
     clientSessionId: "",
@@ -1039,7 +1049,7 @@ export function buildSessionPayload(
       osName: process.platform === "darwin" ? "macos" : "windows",
     },
     serverId: "",
-    fallbackRegionNames: fallbackRegions(regions),
+    fallbackRegionNames: fallbackRegions(regions, selectedRegion),
   };
 }
 
