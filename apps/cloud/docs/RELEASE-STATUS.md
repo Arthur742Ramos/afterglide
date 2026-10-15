@@ -24,6 +24,12 @@ commit/ref, record the Actions run and use the manifest's commit as the candidat
 identity. See [release qualification](RELEASE-QUALIFICATION.md) before promoting
 any candidate.
 
+Both ordinary Cloud CI and the candidate workflow load required libraries from
+the packaged archive and compare its license/notices with source. This catches
+missing packaged dependencies even when the installer builder exits successfully.
+It does not launch a UI, read credentials or contact Xbox, and does not qualify
+installation or gameplay.
+
 Cloud updates are disabled until a separate release source is approved. The first
 distribution can use a documented manual upgrade path; automatic replacement
 is not required for this alpha campaign. A future Cloud release needs its own
