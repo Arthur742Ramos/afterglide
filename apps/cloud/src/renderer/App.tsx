@@ -2122,12 +2122,12 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
     setExportStatus("");
     try {
       const saved = await window.afterglideCloud.exportPerformanceReport();
-      setExportStatus(
-        saved ? "Performance report saved." : "Export cancelled.",
-      );
+      setExportStatus(`Performance report saved to ${saved}`);
     } catch {
       setExportError(true);
-      setExportStatus("Couldn’t save the performance report. Try again.");
+      setExportStatus(
+        "Couldn’t save to Downloads. Check that the folder is writable and has free space, then try again.",
+      );
     } finally {
       setExporting(false);
     }
@@ -2564,7 +2564,15 @@ function DiagnosticsPage({ snapshot }: { snapshot: AppSnapshot }) {
       >
         {exporting ? "Saving report…" : "Export performance report"}
       </button>
-      <p role={exportError ? "alert" : "status"}>{exportStatus}</p>
+      <p className="credential-note">
+        Saves a new JSON file to Downloads. Existing reports are kept.
+      </p>
+      <p
+        role={exportError ? "alert" : "status"}
+        style={{ overflowWrap: "anywhere" }}
+      >
+        {exportStatus}
+      </p>
       <button
         className="secondary-action refresh-health"
         data-focusable

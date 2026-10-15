@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 import { build } from "tsup";
+import type { FrameTiming } from "../../src/shared/contracts";
 
 test("native WebRTC video produces distinct arrival, decode and presentation measurements", async () => {
   const directory = mkdtempSync(join(tmpdir(), "afterglide-frame-probe-"));
@@ -96,6 +97,7 @@ test("native WebRTC video produces distinct arrival, decode and presentation mea
         decodedFramesPerSecond?: number;
         displayedFramesPerSecond?: number;
         displayedFpsSource?: string;
+        frameTiming?: FrameTiming;
       }>;
       const measurements = samples.filter(
         (sample) =>
@@ -111,6 +113,12 @@ test("native WebRTC video produces distinct arrival, decode and presentation mea
       );
       expect(measurements.length).toBeGreaterThanOrEqual(2);
       for (const sample of measurements) {
+        expect(sample.frameTiming?.observedFrames).toBeGreaterThan(5);
+        expect(sample.frameTiming?.decodeP95Ms).toBeGreaterThanOrEqual(0);
+        expect(sample.frameTiming?.receiveIntervalP95Ms).toBeGreaterThan(0);
+        expect(
+          sample.frameTiming?.receiveToPresentationP95Ms,
+        ).toBeGreaterThanOrEqual(0);
         expect(sample.incomingFramesPerSecond).toBeGreaterThan(5);
         expect(sample.decodedFramesPerSecond).toBeGreaterThan(5);
         expect(sample.displayedFramesPerSecond).toBeGreaterThan(5);

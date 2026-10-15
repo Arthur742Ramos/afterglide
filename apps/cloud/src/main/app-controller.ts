@@ -707,7 +707,36 @@ export class AppController {
   }
 
   updateTelemetry(telemetry: StreamTelemetry): void {
+    const timing = telemetry.frameTiming;
     const sanitized: StreamTelemetry = {
+      frameTiming:
+        timing && optionalMeasurement(timing.observedFrames, 600) !== undefined
+          ? {
+              observedFrames: optionalMeasurement(timing.observedFrames, 600)!,
+              receiveIntervalP95Ms: optionalMeasurement(
+                timing.receiveIntervalP95Ms,
+                60_000,
+              ),
+              mediaIntervalP95Ms: optionalMeasurement(
+                timing.mediaIntervalP95Ms,
+                60_000,
+              ),
+              decodeP95Ms: optionalMeasurement(timing.decodeP95Ms, 60_000),
+              receiveToPresentationP95Ms: optionalMeasurement(
+                timing.receiveToPresentationP95Ms,
+                60_000,
+              ),
+              presentationLeadP95Ms: optionalMeasurement(
+                timing.presentationLeadP95Ms,
+                60_000,
+                -60_000,
+              ),
+              callbackLatenessP95Ms: optionalMeasurement(
+                timing.callbackLatenessP95Ms,
+                60_000,
+              ),
+            }
+          : undefined,
       playbackWindow: this.snapshot.playbackWindow,
       documentVisible:
         typeof telemetry.documentVisible === "boolean"
@@ -1035,8 +1064,9 @@ function isNetworkQuality(
 function optionalMeasurement(
   value: unknown,
   maximum: number,
+  minimum = 0,
 ): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
+  return typeof value === "number" && Number.isFinite(value) && value >= minimum
     ? Math.min(value, maximum)
     : undefined;
 }

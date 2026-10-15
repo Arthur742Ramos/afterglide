@@ -70,7 +70,7 @@ Choose **Settings → Stream smoothness → Smooth**, or switch in Quick setting
 
 F3 shows measured **BUFFER**, requested **REQUEST**, and retransmitted video packets per second (**RTX**). Health and exported reports also retain cumulative retransmitted bytes/packets, NACK/PLI/FIR feedback counts, receiver frame drops, receiver target/minimum buffer delays, and whether the browser accepted the hint. Acceptance is not achieved delay. Missing counters remain “Not reported”; totals may reset when a receiver is replaced. Reports group Automatic and Smooth samples separately.
 
-For comparison, play the same scene on the same connection in each mode, then export from Health before quitting. Compare freezes, displayed FPS, frame intervals and actual buffering as well as the feel of controller response. Automated tests validate policy and reporting behavior, not improved live gameplay.
+For comparison, play the same scene on the same connection in each mode, then export from Health before quitting. Each export saves a uniquely named JSON file to Downloads and shows its full path; previous reports are preserved. Compare freezes, displayed FPS, frame intervals and actual buffering as well as the feel of controller response. Automated tests validate policy and reporting behavior, not improved live gameplay.
 
 Cloud sessions retain Xbox’s default region (or the first offered region if none is marked default). HTTPS service probes remain diagnostics only: live comparisons showed that their DNS/TLS/HTTP timing could select a more distant route with substantially worse gameplay RTT. Even complete scans and large service-time differences do not override the default without validated media-route evidence.
 

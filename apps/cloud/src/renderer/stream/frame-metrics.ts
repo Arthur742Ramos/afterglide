@@ -2,8 +2,11 @@ import type { StreamTelemetry } from "../../shared/contracts";
 import type { MediaCounters } from "./media-metrics";
 import { intervalFrameRate } from "./frame-rates";
 
+import { FrameTimingTracker } from "./frame-timing";
+
 type FrameMetrics = Pick<
   StreamTelemetry,
+  | "frameTiming"
   | "frameIntervalSource"
   | "frameIntervalP95Ms"
   | "frameIntervalP99Ms"
@@ -40,6 +43,7 @@ class SessionCounter {
 
 /** Browser presentation cadence, not display/photon or input-to-photon latency. */
 export class FrameMetricsTracker {
+  private timing = new FrameTimingTracker();
   private intervals: number[] = [];
   private intervalSource?: "expected-display" | "presentation";
   private skipDropDelta = false;
@@ -71,6 +75,7 @@ export class FrameMetricsTracker {
   setVisible(visible: boolean): void {
     if (visible === this.visible) return;
     this.visible = visible;
+    this.timing.reset();
     this.intervals = [];
     this.intervalSource = undefined;
     this.skipDropDelta = true;
@@ -85,6 +90,7 @@ export class FrameMetricsTracker {
 
   stop(): void {
     this.stopped = true;
+    this.timing.reset();
     if (this.callbackId !== undefined)
       this.video.cancelVideoFrameCallback?.(this.callbackId);
     this.callbackId = undefined;
@@ -151,6 +157,7 @@ export class FrameMetricsTracker {
         ? { frames: this.lastPresentedFrames, at: observedAt }
         : undefined;
     const result: FrameMetrics = {
+      frameTiming: this.visible ? this.timing.snapshot() : undefined,
       displayedFramesPerSecond,
       displayedFpsSource:
         displayedFramesPerSecond === undefined
@@ -212,6 +219,7 @@ export class FrameMetricsTracker {
     this.callbackId = this.video.requestVideoFrameCallback((_now, metadata) => {
       if (this.stopped) return;
       if (this.visible) {
+        this.timing.add(_now, metadata);
         const source = Number.isFinite(metadata.expectedDisplayTime)
           ? "expected-display"
           : "presentation";

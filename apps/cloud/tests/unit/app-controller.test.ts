@@ -218,6 +218,14 @@ describe("AppController", () => {
         rawButtons: "private",
       } as typeof inputPolling,
       powerEfficientDecoder: false,
+      frameTiming: {
+        observedFrames: 30,
+        decodeP95Ms: 0,
+        presentationLeadP95Ms: -10,
+        receiveIntervalP95Ms: Number.NaN,
+        callbackLatenessP95Ms: -1,
+        privateField: "not retained",
+      } as NonNullable<typeof emptyTelemetry.frameTiming>,
       powerContext: { onBattery: true },
     });
     const first = controller.exportPerformanceReport();
@@ -227,6 +235,14 @@ describe("AppController", () => {
       powerContext: { onBattery: false, speedLimitPercent: 0 },
     });
     expect(JSON.stringify(first)).not.toContain("rawButtons");
+    expect(first.samples[0].telemetry.frameTiming).toMatchObject({
+      observedFrames: 30,
+      decodeP95Ms: 0,
+      presentationLeadP95Ms: -10,
+      receiveIntervalP95Ms: undefined,
+      callbackLatenessP95Ms: undefined,
+    });
+    expect(JSON.stringify(first)).not.toContain("privateField");
     expect(first.summaries[0].inputPollMeanJitterMs?.median).toBe(0);
     controller.updateTelemetry({
       ...emptyTelemetry,

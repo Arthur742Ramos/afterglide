@@ -5,13 +5,12 @@ import {
   ipcMain,
   shell,
   session,
-  dialog,
   powerMonitor,
   powerSaveBlocker,
   Menu,
   screen,
 } from "electron";
-import { writeFile } from "node:fs/promises";
+import { savePerformanceReport } from "./save-performance-report";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
@@ -442,16 +441,7 @@ function registerIpc(appController: AppController): void {
     exporting = true;
     try {
       const report = appController.exportPerformanceReport();
-      const selected = await dialog.showSaveDialog(mainWindow, {
-        title: "Export stream performance",
-        defaultPath: "afterglide-cloud-performance.json",
-        filters: [{ name: "Performance report", extensions: ["json"] }],
-      });
-      if (selected.canceled || !selected.filePath) return false;
-      await writeFile(selected.filePath, JSON.stringify(report, null, 2), {
-        mode: 0o600,
-      });
-      return true;
+      return await savePerformanceReport(app.getPath("downloads"), report);
     } finally {
       exporting = false;
     }

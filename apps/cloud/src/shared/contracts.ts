@@ -85,7 +85,18 @@ export interface PlaybackWindowState {
   backgroundThrottling: boolean;
 }
 
+export interface FrameTiming {
+  observedFrames: number;
+  receiveIntervalP95Ms?: number;
+  mediaIntervalP95Ms?: number;
+  decodeP95Ms?: number;
+  receiveToPresentationP95Ms?: number;
+  presentationLeadP95Ms?: number;
+  callbackLatenessP95Ms?: number;
+}
+
 export interface StreamTelemetry {
+  frameTiming?: FrameTiming;
   playbackWindow?: PlaybackWindowState;
   documentVisible?: boolean;
   frameIntervalSource?: "expected-display" | "presentation";
@@ -302,7 +313,7 @@ export interface StreamApi {
   updateTelemetry(telemetry: StreamTelemetry): void;
   updateSettings(settings: Partial<AppSettings>): Promise<void>;
   checkForUpdates(): Promise<void>;
-  exportPerformanceReport(): Promise<boolean>;
+  exportPerformanceReport(): Promise<string>;
   setFullscreen(fullscreen: boolean): Promise<void>;
   quit(): Promise<void>;
   onSnapshot(listener: (snapshot: SnapshotUpdate) => void): () => void;

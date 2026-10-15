@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   _electron as electron,
@@ -58,6 +65,48 @@ test.afterEach(async () => {
   if (app) await app.close();
   if (directory) rmSync(directory, { recursive: true, force: true });
   expect(errors).toEqual([]);
+});
+
+test("Health exports complete reports without a native dialog and recovers from write failure", async () => {
+  const page = await launch();
+  const downloads = join(directory, "Downloads");
+  mkdirSync(downloads);
+  await app.evaluate(
+    ({ app }, path) => app.setPath("downloads", path),
+    downloads,
+  );
+  await page.getByRole("button", { name: "Health", exact: true }).click();
+  const exportButton = page.getByRole("button", {
+    name: "Export performance report",
+    exact: true,
+  });
+  for (let count = 1; count <= 2; count++) {
+    await exportButton.click();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "Performance report saved to" }),
+    ).toContainText("Performance report saved to");
+    const files = readdirSync(downloads);
+    expect(files).toHaveLength(count);
+    for (const file of files) {
+      const report = JSON.parse(readFileSync(join(downloads, file), "utf8"));
+      expect(report.application.environment).toBe("test");
+      expect(report.retainedSamples).toBe(report.samples.length);
+    }
+  }
+  rmSync(downloads, { recursive: true });
+  await exportButton.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Couldn’t save to Downloads",
+  );
+  await expect(exportButton).toBeEnabled();
+  mkdirSync(downloads);
+  await exportButton.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Performance report saved to" }),
+  ).toContainText("Performance report saved to");
+  expect(readdirSync(downloads)).toHaveLength(1);
 });
 
 test("Health distinguishes optional decoder, polling and power readings at desktop and 200 percent zoom", async () => {
