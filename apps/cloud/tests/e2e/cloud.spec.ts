@@ -111,6 +111,9 @@ test("Health exports complete reports without a native dialog and recovers from 
 
 test("Health distinguishes optional decoder, polling and power readings at desktop and 200 percent zoom", async () => {
   const page = await launch();
+  // Snapshot fixtures must start after restoration, or their higher revision
+  // can replay the boot state over the already visible Health page.
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
   if (process.platform === "win32" || process.platform === "darwin") {
     await app.evaluate(({ powerMonitor }) => {
       powerMonitor.emit("on-ac");
@@ -125,6 +128,7 @@ test("Health distinguishes optional decoder, polling and power readings at deskt
   const baseline = await page.evaluate(() =>
     window.afterglideCloud.getSnapshot(),
   );
+  expect(baseline.auth.status).toBe("signed-in");
   const row = (label: string) =>
     page.getByText(label, { exact: true }).locator("..");
   await page.getByRole("button", { name: "Health", exact: true }).click();
@@ -633,6 +637,33 @@ test("failed artwork keeps a usable fallback and retries a replacement URL", asy
     "https://images.xboxlive.com/e2e-cover.svg",
   );
   await expect(fallback).toHaveCount(0);
+});
+
+test("Settings handles Back as soon as its heading is committed", async () => {
+  const page = await launch();
+  const search = page.getByRole("textbox", { name: "Search cloud games" });
+  await search.fill("Sea");
+  await search.focus();
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (
+        document.querySelector(".settings-page h1")?.textContent !== "Settings"
+      )
+        return;
+      observer.disconnect();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      document.body.dataset.settingsBackDispatched = "true";
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  await nativeCommand("desktop-settings");
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-settings-back-dispatched",
+    "true",
+  );
+  await expect(search).toHaveValue("Sea");
+  await expect(search).toBeFocused();
+  await expect(page.locator(".game-grid button")).toHaveCount(1);
 });
 
 test("Settings returns to the same Library search, filter, page and focus", async () => {

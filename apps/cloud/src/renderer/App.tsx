@@ -280,7 +280,8 @@ export function App() {
     snapshot?.settings.preferredControllerId,
   );
 
-  useEffect(() => {
+  // Keep Back aligned with the committed screen before it can receive input.
+  useLayoutEffect(() => {
     const onBack = (event: KeyboardEvent) => {
       if (
         event.key !== "Escape" ||
