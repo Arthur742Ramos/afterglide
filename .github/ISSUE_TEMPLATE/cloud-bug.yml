@@ -1,0 +1,63 @@
+name: Afterglide Cloud bug
+description: Windows or macOS Xbox Cloud Gaming client problem
+title: "[Cloud bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form is for Afterglide Cloud. Check apps/cloud/KNOWN-ISSUES.md first.
+        Reports are public. Never attach passwords, device codes, tokens or app-data folders.
+        Report security flaws privately through the repository's Security page.
+  - type: input
+    id: version
+    attributes:
+      label: Cloud version and exact source/candidate commit
+      description: Find the version in About; candidate.json records the source commit.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows x64
+        - macOS Apple Silicon
+        - macOS Intel (unqualified)
+        - Other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Build type
+      options:
+        - Source build
+        - Unsigned test candidate
+        - Local development-signed build
+        - Public Cloud release (include download URL)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps, expected result and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: OS version, game, network and controller
+      description: Include controller model and USB/Bluetooth, if relevant. Exclude account names, IP addresses and serials.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence (optional)
+      description: Review exported reports and screenshots before sharing; hardware strings and timestamps remain in reports. State whether the issue occurred in real Xbox play or simulated/demo mode.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, account details, device codes, network addresses and other private data.
+          required: true

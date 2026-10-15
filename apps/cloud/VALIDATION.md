@@ -1,4 +1,14 @@
-# Local validation — 2026-10-09
+# Validation records
+
+The [release qualification record](docs/RELEASE-QUALIFICATION.md) summarizes
+subsequent source/native/live evidence and the remaining public-release checks.
+The owner reports successful ongoing use. That feedback does not qualify every
+OS, device or network. Candidate builds carry their own exact source identity.
+
+The record below describes the initial Windows preview only. Its counts and
+then-unverified Mac/live statements are historical, not the current status.
+
+## Initial local validation, 2026-10-09
 
 This records the initial standalone preview. Its generated logs, screenshots and
 installer are local evidence and are not committed or published. The integrated

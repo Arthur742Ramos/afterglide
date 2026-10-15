@@ -1,0 +1,16 @@
+name: Afterglide Cloud suggestion
+description: Suggest a Windows/macOS Cloud experience improvement
+title: "[Cloud]: "
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would you like to do?
+      description: Describe the current friction and the user-visible outcome. Do not include account information.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Platform and context
+      description: Windows/macOS, input device and whether you mean the Library, streaming or a local setting. Xbox controls stream availability and server quality.

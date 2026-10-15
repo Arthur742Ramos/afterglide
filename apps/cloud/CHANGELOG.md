@@ -2,14 +2,22 @@
 
 ## Unreleased
 
+- Prepare a manual unsigned Cloud candidate workflow for Windows x64 and Mac
+  arm64, with exact-source manifests and SHA-256 checksums. No release is
+  published and signing/notarization remain required before distribution.
+- Add Cloud release status, qualification criteria, privacy, support, known
+  issues and separate Windows/macOS bug and feature forms.
+
 - Create an independent xCloud-only alpha for Windows and macOS, with a
   controller-first library, search, recent games, bounded recovery and measured
   stream diagnostics. Remove console remote play and Steam Deck navigation.
 - Keep a separate encrypted credential store, desktop menus/window lifecycle,
   accessible fullscreen controls and honest Xbox-negotiated quality.
 - Configure Windows NSIS and separate Intel/Apple Silicon DMG/ZIP targets.
-  Mac execution, signing, notarization, clean-machine installation, physical
-  controllers and real Xbox streaming remain unverified.
+  Signing, notarization, clean-machine installation and physical controllers
+  remain unqualified. Apple Silicon source/native execution and live Xbox smoke
+  tests are recorded in the release qualification document; Intel execution and
+  sustained packaged Windows streaming still need evidence.
 
 ## Inherited Afterglide history
 
