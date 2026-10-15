@@ -47,8 +47,8 @@ service. Electron and the operating system may produce local logs or crash
 files. Review any diagnostic material before attaching it to a public issue.
 Never attach credential stores, device codes, tokens or an entire app-data folder.
 
-At launch, the client makes bounded, unauthenticated HTTPS probes to official
-regional Xbox services for diagnostics. Probes carry no authentication tokens
+When launching a cloud game, the client makes bounded, unauthenticated HTTPS
+probes to official regional Xbox services for diagnostics. Probes carry no authentication tokens
 and do not override Xbox's default region. Streaming and catalog connections
 still use the credentials required by Xbox.
 
