@@ -7,6 +7,7 @@ a desktop app for Windows and macOS. Recent games, search and local stream
 controls stay within reach.
 
 [Download and release status](docs/RELEASE-STATUS.md) ·
+[Getting started on Mac or Windows](docs/INSTALL.md) ·
 [Run from source](#run) · [Known issues](KNOWN-ISSUES.md) · [Get help](SUPPORT.md)
 
 Cloud is an alpha source preview. Public Windows/Mac installers are in

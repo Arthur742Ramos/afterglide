@@ -1,14 +1,22 @@
 # Cloud overview captures
 
-These are unaltered PNG captures of the actual Cloud Electron app on Windows,
-at 1280×800. The app ran hidden/offscreen through existing deterministic E2E
+These are unaltered PNG captures of the actual Cloud Electron app at 1280×800.
+The Library and controls captures are from Windows; the refreshed welcome is
+from this Linux cloud environment. The app ran hidden/offscreen through existing deterministic E2E
 fixtures, with separate temporary data and no Microsoft credentials or Xbox
 connection. Each selected image visibly labels demo/simulated data.
 
-Capture source: `aeb9d9e3bc1d5fdfe7f058284abe2bfd4b804127` (2026-10-15).
+Library and controls capture source: `aeb9d9e3bc1d5fdfe7f058284abe2bfd4b804127` (2026-10-15).
 Subsequent PR #40 changes concern the packaging guard and have no UI/runtime
 source changes. Electron 43.7.7, Node 24.14.0. No pixel editing or compositing was
 performed. These images do not establish Mac rendering or live streaming.
+
+The welcome capture was refreshed on 2026-10-15 from source
+`3c28ab12775b20a9131bf3767c0b686530117ba5` using the same first-sign-in
+journey, Electron 43.7.7 and Node 24.19.0 under Xvfb on Linux. It shows the
+account/region eligibility copy. It was inspected before inclusion, with no
+pixel editing or compositing. The existing Windows Library and controls
+captures are preserved.
 
 | File                | Existing journey                                                   | What it shows                                                    |
 | ------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
