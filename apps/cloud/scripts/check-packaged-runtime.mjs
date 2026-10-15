@@ -7,17 +7,17 @@ import { pathToFileURL } from "node:url";
 export const packagedRuntimeProbe = `
 const Module=require('node:module');
 const {createRequire,isBuiltin}=Module;
-const {readFileSync}=require('node:fs');
+const {readFileSync,realpathSync}=require('node:fs');
 const {join,relative,isAbsolute}=require('node:path');
 const {strict:assert}=require('node:assert');
-const archive=process.argv[1];
-const source=process.argv[2];
+const archive=realpathSync(process.argv[1]);
+const source=realpathSync(process.argv[2]);
 // Reject upward/global fallback, including dependencies loaded inside the SDK.
 const originalResolve=Module._resolveFilename;
 Module._resolveFilename=function(request,...args) {
   const resolved=originalResolve.call(this,request,...args);
   if(!isBuiltin(request)&&!isBuiltin(resolved)) {
-    const local=relative(archive,resolved);
+    const local=relative(archive,realpathSync(resolved));
     if(local==='..'||local.startsWith('../')||local.startsWith('..\\\\')||isAbsolute(local))
       throw new Error('Dependency escaped packaged archive: '+request);
   }

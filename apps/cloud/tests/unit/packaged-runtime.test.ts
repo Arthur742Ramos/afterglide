@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -40,10 +40,10 @@ it("rejects source dependency fallback and accepts a complete packaged graph", a
     await moduleFile(archive, "xal-node", "module.exports=require('jose')");
     // The missing packaged dependency is still available to normal upward lookup.
     await moduleFile(source, "jose");
-    const run = () =>
+    const run = (archivePath = archive) =>
       spawnSync(
         process.execPath,
-        ["-e", packagedRuntimeProbe, archive, source],
+        ["-e", packagedRuntimeProbe, archivePath, source],
         { encoding: "utf8" },
       );
     const missing = run();
@@ -58,6 +58,13 @@ it("rejects source dependency fallback and accepts a complete packaged graph", a
       libraries: "loadable",
       attribution: "byte-identical",
     });
+    const alias = join(source, "alias.asar");
+    await symlink(
+      archive,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    expect(run(alias).status).toBe(0);
     await writeFile(join(archive, "LICENSE"), "different attribution");
     expect(run().status).not.toBe(0);
   } finally {
