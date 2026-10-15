@@ -246,6 +246,45 @@ function actuator() {
 }
 
 describe("real stream engine input lifecycle", () => {
+  it("releases input and suspends metrics on native hide even when Chromium remains visible", async () => {
+    ready();
+    const state = {
+      visible: true,
+      focused: true,
+      minimized: false,
+      screenLocked: false,
+      suspended: false,
+      backgroundThrottling: false,
+    };
+    engine.setPlaybackWindow(state);
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+    engine.setPlaybackWindow({ ...state, visible: false });
+    expect(a(frames().at(-1)!)).toBe(false);
+    const poll = vi.spyOn(navigator, "getGamepads");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(poll).not.toHaveBeenCalled();
+    expect(onTelemetry.mock.lastCall?.[0]).toMatchObject({
+      playbackVisible: false,
+      documentVisible: true,
+    });
+    engine.setPlaybackWindow(state);
+    // A held controller button must not be replayed on restore.
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(false);
+    button = 0;
+    vi.advanceTimersByTime(4);
+    button = 1;
+    vi.advanceTimersByTime(4);
+    expect(a(frames().at(-1)!)).toBe(true);
+    engine.setPlaybackWindow({ ...state, focused: false });
+    expect(a(frames().at(-1)!)).toBe(false);
+    engine.setPlaybackWindow(state);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onTelemetry.mock.lastCall?.[0].playbackVisible).toBe(true);
+  });
+
   it("reports periodic cadence only while active and resets on capture, mode, hidden and removal", async () => {
     const started = Date.now();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now() - started);

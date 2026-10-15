@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type {
   AppSettings,
+  PlaybackWindowState,
   StreamDescriptor,
   StreamTelemetry,
 } from "../../shared/contracts";
@@ -12,6 +13,7 @@ import {
 } from "./stream-engine";
 
 interface Props {
+  playbackWindow?: PlaybackWindowState;
   descriptor: StreamDescriptor;
   reducedMotion: boolean;
   keyboardControls: boolean;
@@ -61,6 +63,7 @@ export function StreamSurface(props: Props) {
       onControlsShortcut,
     });
     engine.current = streamEngine;
+    streamEngine.setPlaybackWindow(props.playbackWindow);
     streamEngine.setInputSuspended(props.inputSuspended);
     void streamEngine.connect();
     return () => {
@@ -78,6 +81,10 @@ export function StreamSurface(props: Props) {
     onControllerStatus,
     onControlsShortcut,
   ]);
+
+  useEffect(() => {
+    engine.current?.setPlaybackWindow(props.playbackWindow);
+  }, [props.playbackWindow, props.descriptor]);
 
   useEffect(() => {
     engine.current?.setInputSuspended(props.inputSuspended);

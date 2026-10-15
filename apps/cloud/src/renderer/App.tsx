@@ -1774,6 +1774,7 @@ function StreamView({
       } ${hideCursor ? "cursor-hidden" : ""} ${snapshot.settings.reducedMotion ? "reduced-motion" : ""}`}
     >
       <StreamSurface
+        playbackWindow={snapshot.playbackWindow}
         descriptor={descriptor}
         reducedMotion={snapshot.settings.reducedMotion}
         keyboardControls={snapshot.settings.keyboardControls}

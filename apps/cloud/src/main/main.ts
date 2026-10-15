@@ -31,6 +31,7 @@ import {
 } from "./secure-token-store";
 import { SettingsStore } from "./settings-store";
 import { readDeviceMetrics } from "./device-metrics";
+import { observePlaybackWindow } from "./playback-window";
 import { observePowerContext } from "./power-context";
 import {
   desktopMenuTemplate,
@@ -72,12 +73,14 @@ let shutdownComplete = false;
 let gpuInfoReady = false;
 let refreshingHardware = false;
 let displaySleepBlockerId: number | undefined;
+let playbackWindow: ReturnType<typeof observePlaybackWindow> | undefined;
 
 function syncPowerSave(phase = controller?.getSessionPhase() ?? "idle"): void {
   const activePhase =
     quitting || !mainWindow || mainWindow.isDestroyed() || !controller
       ? "idle"
       : phase;
+  playbackWindow?.setPhase(activePhase);
   displaySleepBlockerId = syncDisplaySleepBlocker(
     activePhase,
     displaySleepBlockerId,
@@ -236,10 +239,20 @@ function openMainWindow(): void {
   const window = createWindow(preferences.settings.launchFullscreen);
   mainWindow = window;
   controller.attachWindow(window);
+  const observation = observePlaybackWindow(
+    window,
+    powerMonitor,
+    (state) => controller?.updatePlaybackWindow(state),
+    isBackgroundTest,
+  );
+  playbackWindow = observation;
+  observation.setPhase(controller.getSessionPhase());
   controller.setFullscreenState(window.isFullScreen());
   window.on("enter-full-screen", () => controller?.setFullscreenState(true));
   window.on("leave-full-screen", () => controller?.setFullscreenState(false));
   window.on("closed", () => {
+    observation.dispose();
+    if (playbackWindow === observation) playbackWindow = undefined;
     if (mainWindow === window) mainWindow = undefined;
     syncPowerSave();
     if (process.platform === "darwin" && !quitting && !isTest) {

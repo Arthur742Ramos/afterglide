@@ -75,7 +75,21 @@ export interface PowerContext {
   speedLimitObservedAt?: number;
 }
 
+/** Native window state, independent of Chromium's occlusion/visibility heuristics. */
+export interface PlaybackWindowState {
+  visible: boolean;
+  minimized: boolean;
+  focused: boolean;
+  screenLocked: boolean;
+  suspended: boolean;
+  backgroundThrottling: boolean;
+}
+
 export interface StreamTelemetry {
+  playbackWindow?: PlaybackWindowState;
+  documentVisible?: boolean;
+  frameIntervalSource?: "expected-display" | "presentation";
+
   resolution: string;
   framesPerSecond?: number;
   incomingFramesPerSecond?: number;
@@ -211,6 +225,7 @@ export interface RegionSelection {
 }
 
 export interface AppSnapshot {
+  playbackWindow?: PlaybackWindowState;
   regionSelection?: RegionSelection;
   powerContext?: PowerContext;
   revision: number;

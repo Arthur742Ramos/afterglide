@@ -77,6 +77,43 @@ test("native Mac fullscreen hides the idle stream cursor, exits and preserves wi
     await page.getByRole("button", { name: /Play again/ }).click();
     const surface = page.getByTestId("mock-stream");
     await expect(surface).toBeVisible();
+    // Exercise the real BrowserWindow lifecycle, independently of mock FPS.
+    await expect
+      .poll(() =>
+        app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].webContents.getBackgroundThrottling(),
+        ),
+      )
+      .toBe(false);
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].hide(),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          async () =>
+            (await window.afterglideCloud.getSnapshot()).playbackWindow,
+        ),
+      )
+      .toMatchObject({ visible: false, backgroundThrottling: true });
+    await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.show();
+      window.focus();
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          async () =>
+            (await window.afterglideCloud.getSnapshot()).playbackWindow,
+        ),
+      )
+      .toMatchObject({
+        visible: true,
+        focused: true,
+        backgroundThrottling: false,
+      });
+
     await surface.hover({ position: { x: 200, y: 200 } });
     await expect(page.locator(".stream-view")).not.toHaveClass(
       /overlay-visible/,

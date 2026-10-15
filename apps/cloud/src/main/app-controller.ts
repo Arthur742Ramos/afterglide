@@ -9,6 +9,7 @@ import type {
   StreamTelemetry,
   InputPollingTelemetry,
   PowerContext,
+  PlaybackWindowState,
 } from "../shared/contracts";
 import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
 import { sanitizeSettingsUpdate } from "../shared/controller-settings";
@@ -689,6 +690,10 @@ export class AppController {
     };
   }
 
+  updatePlaybackWindow(playbackWindow: PlaybackWindowState): void {
+    this.patch({ playbackWindow });
+  }
+
   updatePowerContext(context: PowerContext): void {
     this.patch({ powerContext: { ...context } });
   }
@@ -703,6 +708,16 @@ export class AppController {
 
   updateTelemetry(telemetry: StreamTelemetry): void {
     const sanitized: StreamTelemetry = {
+      playbackWindow: this.snapshot.playbackWindow,
+      documentVisible:
+        typeof telemetry.documentVisible === "boolean"
+          ? telemetry.documentVisible
+          : undefined,
+      frameIntervalSource:
+        telemetry.frameIntervalSource === "expected-display" ||
+        telemetry.frameIntervalSource === "presentation"
+          ? telemetry.frameIntervalSource
+          : undefined,
       resolution: String(telemetry.resolution).slice(0, 32),
       framesPerSecond: optionalMeasurement(telemetry.framesPerSecond, 240),
       incomingFramesPerSecond: optionalMeasurement(

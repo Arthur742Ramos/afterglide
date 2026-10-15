@@ -3,6 +3,7 @@ import { preferredVideoCodecs } from "./video-codecs";
 import { extractStreamStats, type StreamStatsSample } from "./telemetry";
 import type {
   AppSettings,
+  PlaybackWindowState,
   IceCandidatePayload,
   StreamTelemetry,
 } from "../../shared/contracts";
@@ -86,6 +87,7 @@ export class XboxStreamEngine {
   private readonly inputPollingMetrics = new InputPollingMetrics();
   private readonly sampledFrame = emptyXboxInputFrame();
   private playbackSettings?: PlaybackSettings;
+  private playbackWindow?: PlaybackWindowState;
   private readonly localCandidates: IceCandidatePayload[] = [];
   private readonly localCandidateKeys = new Set<string>();
   private readonly pressedKeys = new Set<string>();
@@ -175,7 +177,7 @@ export class XboxStreamEngine {
       options.playbackSettings ?? defaultPlaybackSettings,
     );
     this.frameMetrics = new FrameMetricsTracker(this.video);
-    this.frameMetrics.start(document.visibilityState === "visible");
+    this.frameMetrics.start(this.isPlaybackVisible());
 
     this.peer.addTransceiver("audio", { direction: "sendrecv" });
     const videoTransceiver = this.peer.addTransceiver("video", {
@@ -206,9 +208,7 @@ export class XboxStreamEngine {
     for (const event of ["waiting", "pause", "ended"]) {
       this.video.addEventListener(event, () => {
         this.videoPlaying = false;
-        this.suspendPlayout(
-          event === "waiting" && document.visibilityState === "visible",
-        );
+        this.suspendPlayout(event === "waiting" && this.isPlaybackVisible());
       });
     }
 
@@ -366,8 +366,8 @@ export class XboxStreamEngine {
       !this.terminal &&
       !this.inputSuspended &&
       !this.transportDisconnected &&
-      document.hasFocus() &&
-      document.visibilityState === "visible";
+      this.hasPlaybackFocus() &&
+      this.isPlaybackVisible();
     // Paused/hidden streams only retry neutral. Wake promptly on focus/visibility.
     if (!active && !this.neutralPending) {
       this.inputPollingMetrics.reset();
@@ -601,7 +601,7 @@ export class XboxStreamEngine {
     this.channels.input.send(packet);
     this.inputActive = true;
     // Seed while startup controls are still held, before the first input tick.
-    if (document.hasFocus() && document.visibilityState === "visible") {
+    if (this.hasPlaybackFocus() && this.isPlaybackVisible()) {
       const gamepad = this.resolveGamepad();
       if (gamepad)
         this.gamepadRelease.prime(
@@ -677,8 +677,8 @@ export class XboxStreamEngine {
       this.inputActive &&
       !this.inputSuspended &&
       !this.transportDisconnected &&
-      document.hasFocus() &&
-      document.visibilityState === "visible"
+      this.hasPlaybackFocus() &&
+      this.isPlaybackVisible()
     ) {
       this.sendCurrentInput(
         performance.now() - this.lastInputAt >= NETWORK_POLICY.inputHeartbeatMs,
@@ -695,8 +695,8 @@ export class XboxStreamEngine {
       this.terminal ||
       this.destroyed ||
       this.neutralPending ||
-      !document.hasFocus() ||
-      document.visibilityState !== "visible"
+      !this.hasPlaybackFocus() ||
+      !this.isPlaybackVisible()
     )
       return;
     if (fromTimer) this.inputPollingMetrics.observe(performance.now());
@@ -783,8 +783,8 @@ export class XboxStreamEngine {
       !this.transportDisconnected &&
       !this.destroyed &&
       !this.terminal &&
-      document.hasFocus() &&
-      document.visibilityState === "visible"
+      this.hasPlaybackFocus() &&
+      this.isPlaybackVisible()
     ) {
       const gamepad = selectController(
         navigator.getGamepads(),
@@ -799,13 +799,38 @@ export class XboxStreamEngine {
     }
   }
 
+  private hasPlaybackFocus(): boolean {
+    return document.hasFocus() && this.playbackWindow?.focused !== false;
+  }
+
+  private isPlaybackVisible(): boolean {
+    const state = this.playbackWindow;
+    return (
+      document.visibilityState === "visible" &&
+      (!state ||
+        (state.visible &&
+          !state.minimized &&
+          !state.screenLocked &&
+          !state.suspended))
+    );
+  }
+
+  setPlaybackWindow(state: PlaybackWindowState | undefined): void {
+    const wasVisible = this.isPlaybackVisible();
+    const wasFocused = this.playbackWindow?.focused;
+    this.playbackWindow = state;
+    if (wasVisible !== this.isPlaybackVisible()) this.onVisibilityChange();
+    if (state?.focused === false && wasFocused !== false) this.onBlur();
+    else if (state?.focused === true && wasFocused === false) this.onFocus();
+  }
+
   private onVisibilityChange = (): void => {
-    if (document.visibilityState !== "visible") {
+    if (!this.isPlaybackVisible()) {
       this.suspendPlayout();
       this.controlsShortcut.reset();
       this.releaseInput();
     } else this.primeControllerRelease();
-    this.frameMetrics.setVisible(document.visibilityState === "visible");
+    this.frameMetrics.setVisible(this.isPlaybackVisible());
     this.updateInputPolling();
   };
 
@@ -815,7 +840,8 @@ export class XboxStreamEngine {
       this.inputSuspended ||
       this.transportDisconnected ||
       !isKeyboardControlCode(event.code) ||
-      !document.hasFocus()
+      !this.isPlaybackVisible() ||
+      !this.hasPlaybackFocus()
     )
       return;
     if (event.repeat) {
@@ -845,8 +871,8 @@ export class XboxStreamEngine {
       this.inputSuspended ||
       this.transportDisconnected ||
       !this.inputActive ||
-      !document.hasFocus() ||
-      document.visibilityState !== "visible"
+      !this.hasPlaybackFocus() ||
+      !this.isPlaybackVisible()
     )
       return;
     if (!(event.data instanceof ArrayBuffer)) return;
@@ -970,8 +996,8 @@ export class XboxStreamEngine {
       this.terminal ||
       this.inputSuspended ||
       !this.options.reserveControlChord ||
-      !document.hasFocus() ||
-      document.visibilityState !== "visible"
+      !this.hasPlaybackFocus() ||
+      !this.isPlaybackVisible()
     ) {
       this.controlsShortcut.reset();
       return;
@@ -1002,7 +1028,7 @@ export class XboxStreamEngine {
       if (
         this.videoPlaying &&
         !this.transportDisconnected &&
-        document.visibilityState === "visible"
+        this.isPlaybackVisible()
       )
         this.playout.update(sample.video, telemetry, sample.observedAt);
       else this.playout.suspend();
@@ -1023,8 +1049,9 @@ export class XboxStreamEngine {
         playoutTargetAccepted: videoTargetAccepted,
         inputQueueBytes: this.channels.input.bufferedAmount,
         inputPolling: this.inputPollingMetrics.snapshot(),
-        playbackVisible: document.visibilityState === "visible",
-        playbackFocused: document.hasFocus(),
+        playbackVisible: this.isPlaybackVisible(),
+        documentVisible: document.visibilityState === "visible",
+        playbackFocused: this.hasPlaybackFocus(),
         updatedAt: Date.now(),
       });
       this.previousStats = sample;
