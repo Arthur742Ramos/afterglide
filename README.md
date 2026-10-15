@@ -11,16 +11,19 @@ share WebRTC video/audio, controller input, rumble, telemetry, and recovery UI.
 > Afterglide is an independent project. It is not affiliated with or endorsed by
 > Microsoft, Xbox, Valve, or Steam.
 
-![Afterglide home screen](docs/images/home.png)
+## Choose your app
 
-## Optional Cloud app
+| App                                      | Focus                                                             | Current install route                                                                 |
+| ---------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Original Afterglide                      | Xbox console remote play and cloud streaming on Steam Deck/Linux  | Linux AppImage and installer below                                                    |
+| [Afterglide Cloud](apps/cloud/README.md) | A focused desktop home for Xbox Cloud Gaming on Windows and macOS | [Cloud source alpha and candidate/download status](apps/cloud/docs/RELEASE-STATUS.md) |
 
-[Afterglide Cloud](apps/cloud/README.md) is a separate xCloud-only alpha for
-Windows and macOS, with controller-first library/search and its own installer,
-settings and encrypted sign-in storage. Run its commands from `apps/cloud`.
-The existing Afterglide app, console remote play, installer and updater remain
-available through the commands below. Mac execution, signing/notarization,
-physical controllers and live Xbox gameplay remain Cloud validation gates.
+Cloud has its own settings and encrypted sign-in storage. Run Cloud commands from
+`apps/cloud`; the root commands and Linux release below belong to the original
+app. Cloud's signing, installation and device checks remain explicit in its
+[release qualification](apps/cloud/docs/RELEASE-QUALIFICATION.md).
+
+![Original Afterglide console remote-play home screen](docs/images/home.png)
 
 ## Install
 

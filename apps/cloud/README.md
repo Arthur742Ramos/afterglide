@@ -1,99 +1,129 @@
 # Afterglide Cloud
 
-An optional Xbox Cloud Gaming app for Windows and macOS inside [Afterglide](../../README.md), derived from its base at be70e1d62182522c787312dbd8e0b62e6a4534a1. The original app remains separate. Cloud shares unchanged controller/input, network, recovery and performance modules with the root app; its interface, authentication, storage and packaging are isolated.
+**A focused desktop home for Xbox Cloud Gaming.**
 
-The first version opens directly to your cloud library: recent games, search, controller navigation, cloud launch, stream controls, bounded reconnect and diagnostics. Console remote play and Steam Deck setup are absent. The priorities are easy installation, a short sign-in-to-play path, dependable controller input and minimal client overhead.
+Find a game in your Xbox cloud library, browse with your controller, and play in
+a desktop app for Windows and macOS. Recent games, search and local stream
+controls stay within reach.
+
+[Download and release status](docs/RELEASE-STATUS.md) ·
+[Run from source](#run) · [Known issues](KNOWN-ISSUES.md) · [Get help](SUPPORT.md)
+
+Cloud is an alpha source preview. Public Windows/Mac installers are in
+preparation; unsigned test candidates are for qualification. The original
+Afterglide Linux download installs a different app.
+
+![Afterglide Cloud Library with recent games, search and controller navigation, using clearly labeled simulated data](docs/images/library-demo.png)
+
+_Actual desktop capture in demo mode. Games, account state, video and network
+measurements are simulated. This image is not a live Xbox performance result._
+
+## Make the desktop your place to play
+
+- Open a recent title or search the cloud games available to your account.
+- Browse with a controller, keyboard or mouse. Adjust local deadzones, trigger
+  travel, button mappings and supported rumble in Settings.
+- Use fullscreen and change volume, picture fit and stream preferences in
+  Quick settings without restarting the stream.
+- Check received stream quality in Health and deliberately save a local
+  performance report when you need to understand a problem.
+
+Xbox controls game availability, account/region eligibility and negotiated
+resolution, frame rate and bitrate. Automatic and experimental Smooth playback
+are local receiver choices; Smooth can add input delay. Reconnect starts a new
+Xbox session and may not preserve game progress.
+
+![Local stream controls for fullscreen, audio, picture, smoothness and input polling, over a labeled simulated stream](docs/images/controls-demo.png)
+
+_Quick settings in a simulated stream. Local controls pause game input while
+open. Physical controller and rumble support depend on OS, connection and the
+standard mapping exposed by Chromium; see the [tested-status matrix](docs/CONTROLLER-COMPATIBILITY.md)._
+
+## Choose the right app
+
+|                       | Afterglide Cloud                                                 | Original Afterglide                                                |
+| --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Focus                 | Xbox Cloud Gaming                                                | Xbox console remote play and cloud streaming                       |
+| Target desktop        | Windows and macOS                                                | Steam Deck/Linux                                                   |
+| Current install route | [Source alpha and test-candidate status](docs/RELEASE-STATUS.md) | [Original Linux release and installation](../../README.md#install) |
+| Console connection    | No console discovery or remote-play setup                        | Console discovery, wake and remote play                            |
+
+Cloud has its own settings, window state and encrypted sign-in storage. It does
+not read the original app's saved account. It shares source modules inside this
+repository, so source builds need the complete checkout.
+
+## Before your first game
+
+1. Check [release status](docs/RELEASE-STATUS.md) for your platform and build type.
+2. Sign in through Microsoft's device-code page in your browser. Your Microsoft
+   password is never entered into this app.
+3. Choose an eligible game. Connect or wake a controller, or use supported
+   keyboard controls. Availability and subscription requirements come from Xbox.
+
+![Cloud welcome screen with Microsoft sign-in, a three-step introduction and a visible demo notice](docs/images/welcome-demo.png)
+
+_Demo welcome screen. Packaged apps use live sign-in and ignore demo flags._
+
+The first-run check explains cloud availability, sign-in storage and controller
+readiness. If a stream is interrupted, recovery offers bounded retry and a path
+back to Library. For setup and troubleshooting, use [support](SUPPORT.md).
 
 ## Run
 
-Use Node 24 or newer. From the repository root, change to `apps/cloud` before running these commands. Install dependencies separately from the root app.
+The current source route requires Node 24 or newer and the complete repository.
+Install Cloud's dependencies separately from the original app:
 
 ```sh
+cd apps/cloud
 npm ci
 npm run build
 npm start
 ```
 
-Sign in through Microsoft's device-code page. A new sign-in is required because this app uses a separate encrypted credential store. Xbox determines available games, subscription requirements and region eligibility.
-
-To explore without login or a subscription:
+To explore without a Microsoft login or subscription, after building:
 
 ```sh
-npm run build
 npm run start:demo
 ```
 
-Demo mode is labeled and uses simulated games, video and network measurements. It does not connect to Xbox. The development demo is npm run dev:demo. Packaged builds ignore demo flags.
+Demo mode uses simulated data and never connects to Xbox. On Windows,
+`./Start-Demo.ps1` is an optional convenience launcher after building. On Mac,
+use native Node for your architecture and install dependencies on the Mac;
+follow [Mac setup and evidence](docs/MAC-TESTING.md). Never copy Windows
+`node_modules` or credential stores to a Mac.
 
-On Windows, after building, `./Start-Demo.ps1` starts the demo using installed Node. It stores demo preferences separately from the live client. Cloud development uses port 5174; the original app retains port 5173.
+Cloud currently has no release feed or automatic installer update.
+[Release status](docs/RELEASE-STATUS.md) will identify the approved download and
+upgrade path before public distribution. Keep OS security protections enabled.
 
-### Test from source on a Mac
+## Controls and compatibility
 
-These commands need validation on your Mac; automated macOS source/mock CI is separate from signed distribution. Use a clean source copy and native Mac Node 24.14.0/npm. That Node release requires macOS 13.5 or newer on both Intel and Apple Silicon ([Node platform requirements](https://github.com/nodejs/node/blob/v24.14.0/BUILDING.md#platform-list)). In Terminal:
+D-pad, stick, arrow keys or Tab move through the interface; A/Enter selects.
+B/Escape returns to Library from Settings or Health. During play, Escape or
+L3 + R3 opens local controls and suspends game input. F3 toggles diagnostics.
+Ctrl/Cmd+F opens search; Ctrl/Cmd+, opens Settings. Native fullscreen controls
+and keyboard shortcuts remain available.
 
-```sh
-cd afterglide/apps/cloud
-node --version
-node -p "process.arch"
-npm ci
-npm run build
-npm run start:demo
-```
+Local prompts can follow a recognized PlayStation controller; streamed Xbox
+games retain their own prompts. Physical USB/Bluetooth combinations remain
+qualification work. Advanced haptics, adaptive triggers, gyro, touchpad and
+controller audio/microphone routing are not implemented. Check
+[controller compatibility](docs/CONTROLLER-COMPATIBILITY.md) and
+[known issues](KNOWN-ISSUES.md) before relying on a particular setup.
 
-Use `arm64` Node on Apple Silicon and `x64` Node on Intel. Install dependencies on the Mac; do not copy Windows `node_modules` or `.runtime`. `Start-Demo.ps1` is a Windows convenience launcher. The npm demo is configured for ordinary Mac Terminal, uses simulated data and needs no Microsoft sign-in or subscription. Packaged apps ignore demo flags and use the live sign-in flow.
+## Privacy, support and development
 
-The smallest configured drag-to-Applications build is one DMG, built on a Mac:
+[Privacy and local data](PRIVACY.md) explains encrypted sign-in storage,
+preferences and optional report exports. Reports are not uploaded automatically;
+review them before sharing. Use [support](SUPPORT.md) for client problems and
+[private security reporting](SECURITY.md) for suspected credential exposure.
 
-```sh
-npm run package:mac:local
-```
+[Development and implementation details](docs/DEVELOPMENT.md) contains build/test
+commands, full controls, packaging notes and receiver/region behavior.
+[Release qualification](docs/RELEASE-QUALIFICATION.md) separates automated tests,
+historical live sessions and outstanding platform checks. The owner's successful
+use is valuable feedback; no universal performance or controller claim is made.
 
-This builds one development DMG for the native Node architecture and never notarizes or publishes. On macOS 27+ it uses the supported folder-to-image command after Electron Builder packaging/signing. The existing `npm run package:mac` builds separate DMG and ZIP files for both architectures. A successful build does not establish that the app launches: the current configuration retains hardened runtime, and normal distribution needs Developer ID signing and notarization. No public Mac binary release is available yet. See [Mac test details and remaining gates](docs/MAC-TESTING.md).
-
-## Controls
-
-See the [DualSense/Xbox compatibility matrix and hands-on gates](docs/CONTROLLER-COMPATIBILITY.md). Local PlayStation prompts describe physical controls; Xbox games retain their own button prompts. Input requires Chromium's standard mapping, and rumble depends on the exposed browser capability. Physical USB/Bluetooth validation remains outstanding.
-
-- Browse with D-pad, left stick, arrows or Tab. A/Enter selects; activate the selected game again to launch it. The featured Play button launches immediately.
-- B/Escape returns from Settings or Health to Library, and exits fullscreen from Library or Welcome.
-- Ctrl/Cmd+F opens Library search; Ctrl/Cmd+, opens Settings, including before login. During play, the Settings menu opens local stream controls. Native Edit and zoom commands remain available.
-- F11 toggles fullscreen on Windows; Control+Command+F does so on macOS. Outside a stream, the fullscreen bar always offers an exit button.
-- During play, L3 + R3 or Escape opens local controls and suspends game input. Menu + View sends Xbox guide. Local controls include fullscreen, audio, fit/fill and leaving the stream.
-- F3 toggles measured diagnostics, hidden by default. Settings support per-controller deadzone, trigger, button mapping and rumble preferences.
-- Recovery attempts are bounded and pause while offline. Reconnect starts a new Xbox session; game state preservation is not guaranteed.
-
-Xbox negotiates quality. There are no forced bitrate, resolution or latency promises, and no alternate-device impersonation for a quality preset. The overlay reports received resolution, FPS, RTT, loss, bitrate, decoder and frame pacing where available. RTT is a network measure, not input-to-photon latency.
-
-### Smooth mode and repair diagnostics
-
-Choose **Settings → Stream smoothness → Smooth**, or switch in Quick settings during play. The choice persists and applies without reconnecting. Smooth is the default for new or unmigrated preferences; an explicit Automatic choice is preserved. Defaults retain 1080p, responsive 4 ms input polling, fit-to-window video and a hidden performance overlay. Smooth is experimental: it starts with a 33 ms receiver hint, raises it to 67 or 100 ms after sustained packet loss, receiver drops, freezes or jitter of at least 30 ms, and steps down through 67/33/16 ms after each 15 stable seconds. Stability allows up to 20 ms jitter and 0.5% packet loss with advancing decoded frames and no new receiver drops/freezes. Jitter between 20 and 30 ms holds the level and restarts trend timing. Local presentation drops and high RTT alone do not raise buffering. Unknown measurements and suspended playback return control to the browser. Extra buffering can increase input delay; it cannot restore frames never supplied by the server.
-
-F3 shows measured **BUFFER**, requested **REQUEST**, and retransmitted video packets per second (**RTX**). Health and exported reports also retain cumulative retransmitted bytes/packets, NACK/PLI/FIR feedback counts, receiver frame drops, receiver target/minimum buffer delays, and whether the browser accepted the hint. Acceptance is not achieved delay. Missing counters remain “Not reported”; totals may reset when a receiver is replaced. Reports group Automatic and Smooth samples separately.
-
-For comparison, play the same scene on the same connection in each mode, then export from Health before quitting. Each export saves a uniquely named JSON file to Downloads and shows its full path; previous reports are preserved. Compare freezes, displayed FPS, frame intervals and actual buffering as well as the feel of controller response. Automated tests validate policy and reporting behavior, not improved live gameplay.
-
-Cloud sessions retain Xbox’s default region (or the first offered region if none is marked default). HTTPS service probes remain diagnostics only: live comparisons showed that their DNS/TLS/HTTP timing could select a more distant route with substantially worse gameplay RTT. Even complete scans and large service-time differences do not override the default without validated media-route evidence.
-
-Every launch refreshes three unauthenticated HTTPS HEAD probes per offered region, with six workers, a 1.2-second request limit and a six-second overall limit, for at most 32 distinct regions. Incomplete and unsupported results remain explicit. The probe median in Health belongs to the requested default region. Exported reports retain candidate medians and partial-scan status. Only official regional HTTPS origins are probed, without credentials or redirects.
-
-Session creation is sent only once, avoiding duplicate game sessions after ambiguous failures. Xbox may still assign a different hosting region through fallback. Active-stream ping is the gameplay-route measurement; no claim of globally optimal region selection is made.
-
-See the [performance measurement procedure](docs/PERFORMANCE-CAMPAIGN.md), [operation budgets and cancellation limits](docs/OPERATION-LIMITS.md) and [native/live-stream qualification gates](docs/NATIVE-QUALIFICATION.md) for the evidence required before performance or distribution claims.
-
-## Verify and package
-
-```sh
-npm run verify
-npm run test:e2e
-npm run package:win
-# On a Mac:
-npm run package:mac
-```
-
-Windows uses a per-user NSIS installer with a Start menu shortcut and no elevation request or automatic desktop shortcut. macOS uses DMG/ZIP for Intel and Apple Silicon, with a configured drag-to-Applications layout. Package commands never publish. Signing, notarization, clean-machine install and native macOS behavior remain release gates. See [implementation boundaries](docs/CLOUD-FIRST.md), [desktop polish and platform gates](docs/DESKTOP-POLISH.md) and [local validation](VALIDATION.md).
-
-This is an alpha source preview. The reviewed dependency changes produce zero npm audit findings; exact advisory paths, exposure and compatibility review are recorded in [dependency triage](docs/DEPENDENCY-TRIAGE.md). Live authentication, hardware and platform distribution gates still require validation.
-
-This independent client is not affiliated with Microsoft or Xbox. Upstream MIT copyright and permission text remain in [LICENSE](LICENSE); attribution remains in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-Focused streaming disables Electron background throttling to avoid macOS occlusion interrupting presentation. Throttling returns on blur, hide, minimize, screen lock, suspend, or session exit. Native window state independently gates real-stream input and presentation metrics, even if Chromium still reports the document visible. Reports preserve both signals; visibility means rendering eligibility, not proof of physical display output. Frame cadence uses expected display timestamps when available, labels submission-time fallback, resets its rolling window across visibility changes, and excludes hidden/boundary intervals from local drop counts.
+This independent client is not affiliated with Microsoft or Xbox. MIT license
+and upstream attribution remain in [LICENSE](LICENSE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
