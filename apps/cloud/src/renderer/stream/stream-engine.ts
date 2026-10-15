@@ -456,7 +456,11 @@ export class XboxStreamEngine {
   private attachTrack(event: RTCTrackEvent): void {
     this.mediaReceivers.add(event.receiver);
     applyPlayoutTarget(event.receiver, this.playout.target);
-    const stream = event.streams[0] ?? new MediaStream([event.track]);
+    // The server can bundle audio and video in the same stream. Chromium
+    // creates a video renderer even for <audio> when its stream has video,
+    // and a muted <video> still creates an audio renderer. Give each sink
+    // only its own track; do not mutate the receiver's shared stream.
+    const stream = new MediaStream([event.track]);
     if (event.track.kind === "video") this.video.srcObject = stream;
     if (event.track.kind === "audio") this.audio.srcObject = stream;
   }

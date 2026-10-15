@@ -59,6 +59,7 @@ class Peer extends EventTarget {
   }
 }
 class Media extends EventTarget {
+  srcObject: MediaStream | null = null;
   style = { objectFit: "" };
   volume = 1;
   muted = false;
@@ -175,6 +176,15 @@ beforeEach(async () => {
     },
   );
   vi.stubGlobal("RTCRtpReceiver", { getCapabilities: () => ({ codecs: [] }) });
+  vi.stubGlobal(
+    "MediaStream",
+    class {
+      constructor(private tracks: MediaStreamTrack[]) {}
+      getTracks() {
+        return [...this.tracks];
+      }
+    },
+  );
   engine = new XboxStreamEngine({
     sessionId: "test",
     container: { replaceChildren() {} } as unknown as HTMLElement,
@@ -200,6 +210,37 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
+it.each([false, true])(
+  "isolates bundled tracks in their media sinks (video first: %s)",
+  (videoFirst) => {
+    const video = {
+      kind: "video",
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
+    const audio = {
+      kind: "audio",
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
+    const bundled = new MediaStream([video, audio]);
+    for (const track of videoFirst ? [video, audio] : [audio, video]) {
+      peer.dispatchEvent(
+        Object.assign(new Event("track"), {
+          track,
+          streams: [bundled],
+          receiver: { track },
+        }),
+      );
+    }
+    expect(media[0].srcObject?.getTracks()).toEqual([video]);
+    expect(media[1].srcObject?.getTracks()).toEqual([audio]);
+    expect(media[0].srcObject).not.toBe(bundled);
+    expect(media[1].srcObject).not.toBe(bundled);
+    expect(bundled.getTracks()).toEqual([video, audio]);
+    expect(video.stop).not.toHaveBeenCalled();
+    expect(audio.stop).not.toHaveBeenCalled();
+  },
+);
 function ack() {
   peer.channels.message.dispatchEvent(
     new MessageEvent("message", {
