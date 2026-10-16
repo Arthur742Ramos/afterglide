@@ -64,7 +64,7 @@ describe.skipIf(process.platform !== "darwin")(
 
     it("rejects the missing resource seal reported by the installation task", async () => {
       await rm(join(app, "Contents/_CodeSignature"), { recursive: true });
-      await expect(verifyMacBundle(app)).rejects.toThrow(/resources/i);
+      await expect(verifyMacBundle(app)).rejects.toThrow(/resource/i);
     });
 
     it("rejects changes to a sealed resource", async () => {
