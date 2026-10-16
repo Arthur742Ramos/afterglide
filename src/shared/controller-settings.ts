@@ -82,10 +82,6 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       typeof candidate.keyboardControls === "boolean"
         ? candidate.keyboardControls
         : defaultSettings.keyboardControls,
-    controllerMenuShortcut:
-      candidate.controllerMenuShortcut === "steam-input"
-        ? "steam-input"
-        : "stick-chord",
     preferredControllerId,
     controllerDefaults: tuning(
       candidate.controllerDefaults,
@@ -121,11 +117,6 @@ export function sanitizeSettingsUpdate(
   const allowed: Partial<AppSettings> = {};
   if (update.resolution === 720 || update.resolution === 1080)
     allowed.resolution = update.resolution;
-  if (
-    update.controllerMenuShortcut === "stick-chord" ||
-    update.controllerMenuShortcut === "steam-input"
-  )
-    allowed.controllerMenuShortcut = update.controllerMenuShortcut;
   for (const key of [
     "reducedMotion",
     "showPerformance",

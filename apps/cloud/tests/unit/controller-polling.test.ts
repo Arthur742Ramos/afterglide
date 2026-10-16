@@ -4,7 +4,6 @@ import {
   createControllerPolling,
 } from "../../src/renderer/hooks/controller-polling";
 import type { GamepadLike } from "../../src/renderer/stream/controller-input";
-import { ControllerChordInput } from "../../src/renderer/stream/controller-chord";
 
 function clock() {
   return {
@@ -207,40 +206,6 @@ describe("controller polling scheduling", () => {
     vi.advanceTimersByTime(1000);
     expect(sample).not.toHaveBeenCalled();
     polling.dispose();
-  });
-});
-
-describe("physical local-controls chord", () => {
-  it("ignores raw layouts even when the raw stick-button indices are held", () => {
-    const chord = new ControllerChordInput();
-    const raw = { ...gamepad(), mapping: "" };
-    expect(chord.consume(raw)).toBe(false);
-    expect(chord.consume({ ...gamepad([10, 11]), mapping: "" })).toBe(false);
-    expect(chord.consume(gamepad([10, 11]))).toBe(false);
-    chord.consume(gamepad());
-    expect(chord.consume(gamepad([10, 11]))).toBe(true);
-  });
-  it("requires release after mount, resume, disconnect and same-index replacement", () => {
-    const chord = new ControllerChordInput();
-    expect(chord.consume(gamepad([10, 11]))).toBe(false);
-    expect(chord.consume(gamepad())).toBe(false);
-    expect(chord.consume(gamepad([10, 11]))).toBe(true);
-    expect(chord.consume(gamepad([10, 11]))).toBe(false);
-    chord.reset();
-    expect(chord.consume(gamepad([10, 11]))).toBe(false);
-    chord.consume(gamepad());
-    expect(chord.consume(gamepad([10, 11], "Replacement controller"))).toBe(
-      false,
-    );
-    chord.consume(gamepad([], "Replacement controller"));
-    chord.consume(undefined);
-    expect(chord.consume(gamepad([10, 11], "Replacement controller"))).toBe(
-      false,
-    );
-    chord.consume(gamepad([], "Replacement controller"));
-    expect(chord.consume(gamepad([10, 11], "Replacement controller"))).toBe(
-      true,
-    );
   });
 });
 

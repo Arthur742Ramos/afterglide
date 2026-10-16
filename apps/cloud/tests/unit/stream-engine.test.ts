@@ -90,9 +90,8 @@ let padConnected: boolean;
 let vibrationActuator: GamepadHapticActuator | undefined;
 let axis: number;
 let trigger: number;
-let controlsShortcut: boolean;
+let stickClicks: boolean;
 let onTelemetry = vi.fn<(telemetry: StreamTelemetry) => void>();
-let onControlsShortcut = vi.fn<() => void>();
 let onControllerStatus = vi.fn<(status: ControllerStatus) => void>();
 let win: EventTarget;
 let doc: EventTarget & { visibilityState: string };
@@ -108,14 +107,13 @@ beforeEach(async () => {
   vibrationActuator = undefined;
   axis = 0;
   trigger = 0;
-  controlsShortcut = false;
+  stickClicks = false;
   peer = new Peer();
   media = [];
   onConnected = vi.fn();
   onInterrupted = vi.fn();
   onError = vi.fn();
   onTelemetry = vi.fn();
-  onControlsShortcut = vi.fn();
   onControllerStatus = vi.fn();
   win = Object.assign(new EventTarget(), {
     setInterval,
@@ -155,13 +153,13 @@ beforeEach(async () => {
                     ? button
                     : i === 7
                       ? trigger
-                      : controlsShortcut && (i === 10 || i === 11)
+                      : stickClicks && (i === 10 || i === 11)
                         ? 1
                         : 0,
                 pressed:
                   (i === 0 && button > 0) ||
                   (i === 7 && trigger > 0) ||
-                  (controlsShortcut && (i === 10 || i === 11)),
+                  (stickClicks && (i === 10 || i === 11)),
               })),
             },
           ]
@@ -189,7 +187,6 @@ beforeEach(async () => {
     sessionId: "test",
     container: { replaceChildren() {} } as unknown as HTMLElement,
     keyboardControls: true,
-    reserveControlChord: true,
     // These transport tests exercise Automatic's low-delay transitions explicitly.
     playbackSettings: {
       volume: 1,
@@ -208,7 +205,6 @@ beforeEach(async () => {
     onError,
     onTelemetry,
     onControllerStatus,
-    onControlsShortcut,
   });
   await engine.connect();
 });
@@ -809,7 +805,6 @@ describe("real stream engine input lifecycle", () => {
     });
     win.dispatchEvent(Object.assign(new Event("keydown"), { code: "Space" }));
     expect(a(frames().at(-1)!)).toBe(true);
-    expect(onControlsShortcut).not.toHaveBeenCalled();
     padConnected = false;
     win.dispatchEvent(new Event("gamepaddisconnected"));
     expect(onControllerStatus).toHaveBeenLastCalledWith({
@@ -1196,71 +1191,29 @@ describe("real stream engine input lifecycle", () => {
     vi.advanceTimersByTime(4);
     expect(frames().map(a)).toEqual([true, false]);
   });
-  it("owns the controls chord edge without forwarding stick clicks", () => {
+  it("forwards both stick clicks and their release through the live input channel", () => {
     ready();
-    vi.advanceTimersByTime(4); // discover the controller with a neutral chord
-    controlsShortcut = true;
     vi.advanceTimersByTime(4);
-    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
+    peer.channels.input.sent = [];
+    stickClicks = true;
+    vi.advanceTimersByTime(4);
     expect(frames()).toHaveLength(1);
-    expect(frames()[0].getUint16(16, true) & (16_384 | 32_768)).toBe(0);
-    vi.advanceTimersByTime(8);
-    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
-    controlsShortcut = false;
+    expect(frames()[0].getUint16(16, true) & (16_384 | 32_768)).toBe(
+      16_384 | 32_768,
+    );
+    // Holding the gameplay combination does not interrupt input delivery.
+    button = 1;
+    vi.advanceTimersByTime(100);
+    expect(a(frames().at(-1)!)).toBe(true);
+    expect(frames().at(-1)!.getUint16(16, true) & (16_384 | 32_768)).toBe(
+      16_384 | 32_768,
+    );
+    stickClicks = false;
     vi.advanceTimersByTime(4);
-    controlsShortcut = true;
-    vi.advanceTimersByTime(4);
-    expect(onControlsShortcut).toHaveBeenCalledTimes(2);
+    expect(frames().at(-1)!.getUint16(16, true) & (16_384 | 32_768)).toBe(0);
+    expect(a(frames().at(-1)!)).toBe(true);
   });
-  it.each(["blur", "hidden", "suspend"])(
-    "requires chord release after %s before opening local controls",
-    (reason) => {
-      ready();
-      vi.advanceTimersByTime(4);
-      if (reason === "blur") {
-        focused = false;
-        win.dispatchEvent(new Event("blur"));
-      } else if (reason === "hidden") {
-        doc.visibilityState = "hidden";
-        doc.dispatchEvent(new Event("visibilitychange"));
-      } else engine.setInputSuspended(true);
-      controlsShortcut = true;
-      vi.advanceTimersByTime(100);
-      expect(onControlsShortcut).not.toHaveBeenCalled();
-      if (reason === "blur") {
-        focused = true;
-        win.dispatchEvent(new Event("focus"));
-      } else if (reason === "hidden") {
-        doc.visibilityState = "visible";
-        doc.dispatchEvent(new Event("visibilitychange"));
-      } else engine.setInputSuspended(false);
-      vi.advanceTimersByTime(8);
-      expect(onControlsShortcut).not.toHaveBeenCalled();
-      controlsShortcut = false;
-      vi.advanceTimersByTime(4);
-      controlsShortcut = true;
-      vi.advanceTimersByTime(4);
-      expect(onControlsShortcut).toHaveBeenCalledTimes(1);
-    },
-  );
-  it("suppresses a chord held on first discovery or same-index controller replacement", () => {
-    ready();
-    controlsShortcut = true;
-    vi.advanceTimersByTime(4);
-    expect(onControlsShortcut).not.toHaveBeenCalled();
-    controlsShortcut = false;
-    vi.advanceTimersByTime(4);
-    padId = "Replacement pad";
-    controlsShortcut = true;
-    win.dispatchEvent(new Event("gamepadconnected"));
-    vi.advanceTimersByTime(4);
-    expect(onControlsShortcut).not.toHaveBeenCalled();
-    controlsShortcut = false;
-    vi.advanceTimersByTime(4);
-    controlsShortcut = true;
-    vi.advanceTimersByTime(4);
-    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
-  });
+
   it("does not queue stale state, and retries a focus-loss release while unfocused", () => {
     ready();
     button = 1;

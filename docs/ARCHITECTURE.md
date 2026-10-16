@@ -81,10 +81,11 @@ validates controller IDs and every enumerated profile value before persisting th
 settings. The renderer's diagnostics panel reads the browser Gamepad API directly;
 controller identity and live input data never cross the preload boundary.
 
-The default input schema reserves L3 + R3 for Afterglide's in-stream controls.
-Users can instead select Steam Input mode, which passes the chord to Xbox and
-uses the always-local F10 shortcut that a Deck button or paddle can emit. F9 is
-the corresponding local performance shortcut. Opening Afterglide's controls
+L3 + R3 is ordinary game input, including simultaneous stick clicks. Local
+controls use F10, Escape or Tab and a named pointer button; spare controller
+buttons/paddles can emit F10 through Steam Input or controller software. Legacy
+controllerMenuShortcut preferences are ignored during normalization; there is no
+chord interception setting. F9 remains a local performance shortcut. Opening Afterglide's controls
 sends a neutral frame and suspends game input until the controls close;
 D-pad or left stick, A, and B then navigate the application. Menu + View emits
 the Xbox button. Optional keyboard emulation covers both sticks, D-pad, face

@@ -199,7 +199,6 @@ export interface AppSettings {
   reducedMotion: boolean;
   showPerformance: boolean;
   keyboardControls: boolean;
-  controllerMenuShortcut: "stick-chord" | "steam-input";
   preferredControllerId: string;
   controllerDefaults: ControllerTuning;
   controllerProfiles: ControllerProfile[];
@@ -339,7 +338,6 @@ export const defaultSettings: AppSettings = {
   reducedMotion: false,
   showPerformance: false,
   keyboardControls: false,
-  controllerMenuShortcut: "stick-chord",
   preferredControllerId: "",
   controllerDefaults: { ...defaultControllerTuning },
   controllerProfiles: [],

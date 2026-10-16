@@ -100,8 +100,12 @@ upgrade path before public distribution. Keep OS security protections enabled.
 ## Controls and compatibility
 
 D-pad, stick, arrow keys or Tab move through the interface; A/Enter selects.
-B/Escape returns to Library from Settings or Health. During play, Escape or
-L3 + R3 opens local controls and suspends game input. F3 toggles diagnostics.
+B/Escape returns to Library from Settings or Health. During play, F10, Escape or Tab opens local controls and suspends game input.
+Move the pointer and select **Controls** for mouse access. L3 + R3 always goes
+to the game. For controller-only access, map a spare button or paddle to F10
+in Steam Input or your controller software. Some keyboards require Fn+F10.
+Old saved shortcut modes retire automatically without resetting other preferences.
+F3 toggles diagnostics.
 Ctrl/Cmd+F opens search; Ctrl/Cmd+, opens Settings. Native fullscreen controls
 and keyboard shortcuts remain available.
 

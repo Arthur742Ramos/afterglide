@@ -12,9 +12,8 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   end-to-end improvement. An optional 8 ms mode allows power/latency comparison.
   With no controller, polling slows to 50 ms; hidden, unfocused, or captured input
   stops polling except for a 50 ms pending-neutral retry. Keyboard transitions
-  are sampled directly from events. The active stream engine also owns the local
-  L3 + R3 edge, so the UI only polls separately while captured controls need a
-  release-and-repress close gesture.
+  are sampled directly from events. L3 + R3 remains ordinary game input; local
+  controls use F10, Escape, Tab or the pointer instead of a gameplay chord.
 - Input uses the established Xbox ordered/reliable channel contract. While the
   channel has queued bytes, fresh stick samples replace historical movement.
   Button and trigger rest/press edges share an ordered buffer of 32 transitions;

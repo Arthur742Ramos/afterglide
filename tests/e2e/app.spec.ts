@@ -762,14 +762,10 @@ test("controller semantics navigate to health and settings persist in the shell"
       page.getByRole("switch", { name: "Performance overlay" }),
     ).toHaveAttribute("aria-checked", "true");
     await page.getByRole("switch", { name: "Keyboard controls" }).click();
-    await expect(page.getByRole("button", { name: "L3 + R3" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await page.getByRole("button", { name: "Steam Input" }).click();
+    await expect(page.getByRole("button", { name: "L3 + R3" })).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Steam Input" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      page.getByText("L3 + R3 passes through to the Xbox.", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByLabel("Active controller")).toHaveValue("");
     await expect(
       page.getByLabel("Connected controller diagnostics"),
@@ -1122,74 +1118,58 @@ test("quick settings support controller focus, compact windows, and persisted li
   }
 });
 
-test("captured stream controls close on a released and re-pressed stick chord", async () => {
+test("stick clicks leave controls unchanged and F10 owns overlay entry", async () => {
   const { app, page } = await launch({ signedIn: true });
   try {
+    await page.getByRole("button", { name: /Play now/ }).click();
+    const stream = page.getByTestId("mock-stream");
+    await expect(stream).toBeVisible();
     await page.evaluate(() => {
-      const buttons = Array.from({ length: 17 }, () => ({
-        pressed: false,
-        touched: false,
-        value: 0,
-      }));
+      const pad = {
+        id: "Standard pad",
+        index: 0,
+        connected: true,
+        mapping: "standard",
+        axes: [0, 0, 0, 0],
+        buttons: Array.from({ length: 17 }, () => ({
+          pressed: false,
+          value: 0,
+        })),
+      };
       Object.defineProperty(navigator, "getGamepads", {
         configurable: true,
-        value: () => [
-          {
-            id: "Steam Virtual Gamepad",
-            index: 0,
-            connected: true,
-            mapping: "standard",
-            axes: [0, 0, 0, 0],
-            buttons,
-            timestamp: 1,
-          },
-        ],
+        value: () => [pad],
       });
     });
-    await page.getByRole("button", { name: /Play now/ }).click();
-    await expect(page.getByTestId("mock-stream")).toBeVisible();
-    await page.evaluate(() => {
-      const gamepad = navigator.getGamepads()[0]!;
-      for (const index of [10, 11])
-        Object.assign(gamepad.buttons[index], {
-          pressed: true,
-          touched: true,
-          value: 1,
+    const sticks = async (pressed: boolean) =>
+      page.evaluate(async (pressed) => {
+        const pad = navigator.getGamepads()[0]!;
+        for (const index of [10, 11])
+          Object.assign(pad.buttons[index], { pressed, value: +pressed });
+        // Sample enough frames to exercise the former captured-overlay poll.
+        await new Promise<void>((resolve) => {
+          let count = 0;
+          const tick = () =>
+            ++count === 12 ? resolve() : requestAnimationFrame(tick);
+          requestAnimationFrame(tick);
         });
-    });
+      }, pressed);
+    await sticks(true);
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
+    await page.keyboard.down("F10");
+    await expect(stream).toHaveAttribute("data-input-suspended", "true");
+    await page.keyboard.down("F10");
+    await page.keyboard.up("F10");
+    await sticks(false);
+    await sticks(true);
+    await expect(stream).toHaveAttribute("data-input-suspended", "true");
     await page.keyboard.press("F10");
-    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
-      "data-input-suspended",
-      "true",
-    );
-    await page.waitForTimeout(50);
-    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
-      "data-input-suspended",
-      "true",
-    );
-    await page.evaluate(() => {
-      const gamepad = navigator.getGamepads()[0]!;
-      for (const index of [10, 11])
-        Object.assign(gamepad.buttons[index], {
-          pressed: false,
-          touched: false,
-          value: 0,
-        });
-    });
-    await page.waitForTimeout(50);
-    await page.evaluate(() => {
-      const gamepad = navigator.getGamepads()[0]!;
-      for (const index of [10, 11])
-        Object.assign(gamepad.buttons[index], {
-          pressed: true,
-          touched: true,
-          value: 1,
-        });
-    });
-    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
-      "data-input-suspended",
-      "false",
-    );
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
+    await page.mouse.move(100, 30);
+    await page.getByRole("button", { name: "Open local controls" }).click();
+    await expect(stream).toHaveAttribute("data-input-suspended", "true");
+    await page.keyboard.press("Escape");
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
   } finally {
     await app.close();
   }
@@ -1677,7 +1657,6 @@ test("renderer boundaries reject invalid settings and external navigation", asyn
       reducedMotion: false,
       showPerformance: false,
       keyboardControls: false,
-      controllerMenuShortcut: "stick-chord",
       preferredControllerId: "",
       controllerDefaults: {
         rumble: "full",

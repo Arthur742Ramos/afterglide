@@ -52,7 +52,6 @@ interface StreamEngineOptions {
   sessionId: string;
   container: HTMLElement;
   keyboardControls: boolean;
-  reserveControlChord: boolean;
   playbackSettings?: PlaybackSettings;
   controllerSettings: Pick<
     AppSettings,
@@ -63,7 +62,6 @@ interface StreamEngineOptions {
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
   onControllerStatus: (status: ControllerStatus) => void;
-  onControlsShortcut: () => void;
 }
 
 /**
@@ -111,7 +109,6 @@ export class XboxStreamEngine {
   private activeGamepadId = "";
   private activeGamepadLabel = "";
   private sampledInput = false;
-  private controlsShortcutPressed = false;
 
   constructor(private readonly options: StreamEngineOptions) {
     this.channels = {
@@ -583,7 +580,6 @@ export class XboxStreamEngine {
     )
       return;
     const gamepad = this.resolveGamepad();
-    this.updateControlsShortcut(gamepad);
     if (!this.sampledInput) {
       this.sampledInput = true;
       this.updateInputPolling();
@@ -596,7 +592,6 @@ export class XboxStreamEngine {
         gamepad
           ? tuningForGamepad(this.options.controllerSettings, gamepad)
           : undefined,
-        this.options.reserveControlChord,
         this.sampledFrame,
       ) ?? resetXboxInputFrame(this.sampledFrame);
     const now = performance.now();
@@ -750,15 +745,6 @@ export class XboxStreamEngine {
       });
     }
     return gamepad;
-  }
-
-  private updateControlsShortcut(gamepad: GamepadLike | undefined): void {
-    const pressed =
-      this.options.reserveControlChord &&
-      Boolean(gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed);
-    if (pressed && !this.controlsShortcutPressed)
-      this.options.onControlsShortcut();
-    this.controlsShortcutPressed = pressed;
   }
 
   private async collectTelemetry(): Promise<void> {
@@ -981,7 +967,6 @@ function readInputFrame(
   gamepad: GamepadLike | undefined,
   keys: ReadonlySet<string>,
   tuning: ReturnType<typeof tuningForGamepad> | undefined,
-  reserveControlChord = true,
   target = emptyXboxInputFrame(),
 ): InputFrame | undefined {
   if (!gamepad && keys.size === 0) return undefined;
@@ -990,19 +975,11 @@ function readInputFrame(
       ? controllerInputFrame(gamepad, tuning, target)
       : resetXboxInputFrame(target);
   applyKeyboardInput(frame, keys);
-  normalizeInputChords(frame, reserveControlChord);
+  normalizeInputChords(frame);
   return frame;
 }
 
-function normalizeInputChords(
-  frame: InputFrame,
-  reserveControlChord = true,
-): void {
-  // In the built-in mode, prevent Afterglide's L3 + R3 shortcut from leaking.
-  if (reserveControlChord && frame.LeftThumb > 0 && frame.RightThumb > 0) {
-    frame.LeftThumb = 0;
-    frame.RightThumb = 0;
-  }
+function normalizeInputChords(frame: InputFrame): void {
   if (frame.View > 0 && frame.Menu > 0) {
     frame.View = 0;
     frame.Menu = 0;
@@ -1167,9 +1144,9 @@ export const streamProtocolTestUtils = {
     applyKeyboardInput(frame, new Set(codes));
     return frame;
   },
-  normalizedInput: (input: Partial<InputFrame>, reserveControlChord = true) => {
+  normalizedInput: (input: Partial<InputFrame>) => {
     const frame = { ...emptyXboxInputFrame(), ...input };
-    normalizeInputChords(frame, reserveControlChord);
+    normalizeInputChords(frame);
     return frame;
   },
 };

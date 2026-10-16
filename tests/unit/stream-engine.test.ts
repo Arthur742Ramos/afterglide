@@ -73,9 +73,8 @@ let button: number;
 let padIndex: number;
 let axis: number;
 let trigger: number;
-let controlsShortcut: boolean;
+let stickClicks: boolean;
 let onTelemetry = vi.fn<(telemetry: StreamTelemetry) => void>();
-let onControlsShortcut = vi.fn<() => void>();
 let win: EventTarget;
 let doc: EventTarget & { visibilityState: string };
 
@@ -86,14 +85,13 @@ beforeEach(async () => {
   padIndex = 0;
   axis = 0;
   trigger = 0;
-  controlsShortcut = false;
+  stickClicks = false;
   peer = new Peer();
   media = [];
   onConnected = vi.fn();
   onInterrupted = vi.fn();
   onError = vi.fn();
   onTelemetry = vi.fn();
-  onControlsShortcut = vi.fn();
   win = Object.assign(new EventTarget(), {
     setInterval,
     setTimeout,
@@ -129,13 +127,13 @@ beforeEach(async () => {
               ? button
               : i === 7
                 ? trigger
-                : controlsShortcut && (i === 10 || i === 11)
+                : stickClicks && (i === 10 || i === 11)
                   ? 1
                   : 0,
           pressed:
             (i === 0 && button > 0) ||
             (i === 7 && trigger > 0) ||
-            (controlsShortcut && (i === 10 || i === 11)),
+            (stickClicks && (i === 10 || i === 11)),
         })),
       },
     ],
@@ -153,7 +151,6 @@ beforeEach(async () => {
     sessionId: "test",
     container: { replaceChildren() {} } as unknown as HTMLElement,
     keyboardControls: true,
-    reserveControlChord: true,
     controllerSettings: {
       preferredControllerId: "",
       controllerDefaults: defaultControllerTuning,
@@ -164,7 +161,6 @@ beforeEach(async () => {
     onError,
     onTelemetry,
     onControllerStatus() {},
-    onControlsShortcut,
   });
   await engine.connect();
 });
@@ -254,21 +250,29 @@ describe("real stream engine input lifecycle", () => {
     vi.advanceTimersByTime(4);
     expect(frames().map(a)).toEqual([true, false]);
   });
-  it("owns the controls chord edge without forwarding stick clicks", () => {
+  it("forwards both stick clicks and their release through the live input channel", () => {
     ready();
-    controlsShortcut = true;
     vi.advanceTimersByTime(4);
-    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
+    peer.channels.input.sent = [];
+    stickClicks = true;
+    vi.advanceTimersByTime(4);
     expect(frames()).toHaveLength(1);
-    expect(frames()[0].getUint16(16, true) & (16_384 | 32_768)).toBe(0);
-    vi.advanceTimersByTime(8);
-    expect(onControlsShortcut).toHaveBeenCalledTimes(1);
-    controlsShortcut = false;
+    expect(frames()[0].getUint16(16, true) & (16_384 | 32_768)).toBe(
+      16_384 | 32_768,
+    );
+    // Holding the gameplay combination does not interrupt input delivery.
+    button = 1;
+    vi.advanceTimersByTime(100);
+    expect(a(frames().at(-1)!)).toBe(true);
+    expect(frames().at(-1)!.getUint16(16, true) & (16_384 | 32_768)).toBe(
+      16_384 | 32_768,
+    );
+    stickClicks = false;
     vi.advanceTimersByTime(4);
-    controlsShortcut = true;
-    vi.advanceTimersByTime(4);
-    expect(onControlsShortcut).toHaveBeenCalledTimes(2);
+    expect(frames().at(-1)!.getUint16(16, true) & (16_384 | 32_768)).toBe(0);
+    expect(a(frames().at(-1)!)).toBe(true);
   });
+
   it("does not queue stale state, and retries a focus-loss release while unfocused", () => {
     ready();
     button = 1;
