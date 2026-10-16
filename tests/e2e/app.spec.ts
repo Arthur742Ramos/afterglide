@@ -1579,7 +1579,6 @@ test("preferences and the selected console survive a complete restart", async ()
     await first.page.getByRole("button", { name: /Den Series X/ }).click();
     await first.page.getByRole("button", { name: "Settings" }).click();
     await first.page.getByRole("button", { name: "720p" }).click();
-    await first.page.getByRole("button", { name: "Steam Input" }).click();
     for (const name of [
       "Performance overlay",
       "Keyboard controls",
@@ -1609,8 +1608,12 @@ test("preferences and the selected console survive a complete restart", async ()
       restarted.page.getByRole("button", { name: "720p" }),
     ).toHaveClass(/active/);
     await expect(
-      restarted.page.getByRole("button", { name: "Steam Input" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      restarted.page.getByRole("button", { name: "L3 + R3" }),
+    ).toHaveCount(0);
+    expect(
+      (await restarted.page.evaluate(() => window.afterglide.getSnapshot()))
+        .settings,
+    ).not.toHaveProperty("controllerMenuShortcut");
     for (const name of [
       "Performance overlay",
       "Keyboard controls",
