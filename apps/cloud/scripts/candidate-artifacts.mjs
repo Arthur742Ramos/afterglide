@@ -67,7 +67,10 @@ export async function prepareCandidate({
     target: { platform, arch },
     distribution: {
       kind: "unsigned-test-candidate",
-      signing: "not qualified",
+      signing:
+        platform === "mac"
+          ? "ad-hoc; publisher identity not qualified"
+          : "not qualified",
       notarization: "not qualified",
       cleanInstallation: "not qualified",
       publicRelease: false,

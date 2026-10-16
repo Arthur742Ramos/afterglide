@@ -60,7 +60,11 @@ jobs:
           Write-Output "Unsigned test installer confirmed. Clean-machine installation remains unqualified."
       - name: Build Mac test images
         if: runner.os == 'macOS'
-        run: npx electron-builder --mac dmg zip --arm64 --publish never --config.mac.identity=null --config.mac.notarize=false
+        # Re-seal the modified Electron bundle; no certificate or Apple submission.
+        run: npx electron-builder --mac dmg zip --arm64 --publish never --config.mac.identity=- --config.mac.notarize=false
+      - name: Verify native Mac signatures in both images
+        if: runner.os == 'macOS'
+        run: node scripts/check-mac-signatures.mjs --artifacts
       - name: Check packaged libraries and attribution
         # Packaging can succeed with incomplete dependencies; load the archive first.
         run: node scripts/check-packaged-runtime.mjs
@@ -83,3 +87,11 @@ jobs:
             apps/cloud/playwright-report
           if-no-files-found: ignore
           retention-days: 7
+      - name: Retain native Mac signature evidence
+        if: runner.os == 'macOS' && always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: cloud-mac-signature-evidence-${{ github.sha }}
+          path: apps/cloud/release/mac-signatures.json
+          if-no-files-found: error
+          retention-days: 14
