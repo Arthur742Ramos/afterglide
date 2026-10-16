@@ -17,7 +17,6 @@ interface Props {
   descriptor: StreamDescriptor;
   reducedMotion: boolean;
   keyboardControls: boolean;
-  reserveControlChord: boolean;
   playbackSettings: PlaybackSettings;
   controllerSettings: Pick<
     AppSettings,
@@ -29,7 +28,6 @@ interface Props {
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
   onControllerStatus: (status: ControllerStatus) => void;
-  onControlsShortcut: () => void;
 }
 
 export function StreamSurface(props: Props) {
@@ -42,9 +40,6 @@ export function StreamSurface(props: Props) {
   const onControllerStatus = useCallback(props.onControllerStatus, [
     props.onControllerStatus,
   ]);
-  const onControlsShortcut = useCallback(props.onControlsShortcut, [
-    props.onControlsShortcut,
-  ]);
 
   useEffect(() => {
     if (props.descriptor.mock || !container.current) return;
@@ -52,7 +47,7 @@ export function StreamSurface(props: Props) {
       sessionId: props.descriptor.sessionId,
       container: container.current,
       keyboardControls: props.keyboardControls,
-      reserveControlChord: props.reserveControlChord,
+
       controllerSettings: props.controllerSettings,
       playbackSettings: props.playbackSettings,
       onConnected,
@@ -60,7 +55,6 @@ export function StreamSurface(props: Props) {
       onError,
       onTelemetry,
       onControllerStatus,
-      onControlsShortcut,
     });
     engine.current = streamEngine;
     streamEngine.setPlaybackWindow(props.playbackWindow);
@@ -73,13 +67,12 @@ export function StreamSurface(props: Props) {
   }, [
     props.descriptor,
     props.keyboardControls,
-    props.reserveControlChord,
+
     onConnected,
     onInterrupted,
     onError,
     onTelemetry,
     onControllerStatus,
-    onControlsShortcut,
   ]);
 
   useEffect(() => {

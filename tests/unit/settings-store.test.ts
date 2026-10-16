@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,11 +16,10 @@ describe("SettingsStore", () => {
     const path = join(directory, "preferences.json");
     const store = new SettingsStore(path);
     expect(store.settings.resolution).toBe(1080);
-    expect(store.settings.controllerMenuShortcut).toBe("stick-chord");
+    expect(store.settings).not.toHaveProperty("controllerMenuShortcut");
     store.updateSettings({
       resolution: 720,
       reducedMotion: true,
-      controllerMenuShortcut: "steam-input",
       preferredControllerId: "Xbox Wireless Controller",
       controllerProfiles: [
         {
@@ -39,7 +38,6 @@ describe("SettingsStore", () => {
       resolution: 720,
       reducedMotion: true,
       showPerformance: false,
-      controllerMenuShortcut: "steam-input",
       preferredControllerId: "Xbox Wireless Controller",
       controllerProfiles: [
         expect.objectContaining({
@@ -52,6 +50,45 @@ describe("SettingsStore", () => {
     expect(restored.selectedConsoleId).toBe("den");
     expect(readFileSync(path, "utf8")).toContain('"resolution": 720');
   });
+
+  it.each(["stick-chord", "steam-input"])(
+    "retires saved %s shortcuts without resetting other preferences",
+    (controllerMenuShortcut) => {
+      directory = mkdtempSync(join(tmpdir(), "afterglide-shortcut-"));
+      const path = join(directory, "preferences.json");
+      writeFileSync(
+        path,
+        JSON.stringify({
+          settings: {
+            controllerMenuShortcut,
+            volume: 0.4,
+            reducedMotion: true,
+            preferredControllerId: "My controller",
+            controllerDefaults: { buttonLayout: "swap-ab" },
+          },
+        }),
+      );
+      const store = new SettingsStore(path);
+      expect(store.settings).not.toHaveProperty("controllerMenuShortcut");
+      expect(store.settings).toMatchObject({
+        volume: 0.4,
+        reducedMotion: true,
+        preferredControllerId: "My controller",
+        controllerDefaults: { buttonLayout: "swap-ab" },
+      });
+      store.updateSettings({
+        controllerMenuShortcut: "stick-chord",
+        muted: true,
+      } as never);
+      expect(new SettingsStore(path).settings).not.toHaveProperty(
+        "controllerMenuShortcut",
+      );
+      expect(
+        JSON.parse(readFileSync(path, "utf8")).settings,
+      ).not.toHaveProperty("controllerMenuShortcut");
+      expect(new SettingsStore(path).settings.volume).toBe(0.4);
+    },
+  );
 
   it("repairs malformed controller preferences from disk", () => {
     directory = mkdtempSync(join(tmpdir(), "afterglide-settings-"));

@@ -81,16 +81,19 @@ Settings and encrypted sign-in storage belong to Afterglide Cloud, separately
 from the original app. If secure storage is unavailable, follow the readiness
 message; sign-in may need repeating after restart. See [privacy](../PRIVACY.md).
 
-| Action                          | Keyboard                | Controller            |
-| ------------------------------- | ----------------------- | --------------------- |
-| Move through the app            | Arrow keys or Tab       | D-pad or stick        |
-| Select                          | Enter                   | A                     |
-| Return from Settings or Health  | Escape                  | B                     |
-| Open local controls during play | Escape                  | L3 + R3 by default    |
-| Search / Settings               | Ctrl/Cmd+F / Ctrl/Cmd+, | Navigate from Library |
+| Action                          | Keyboard                | Controller                 |
+| ------------------------------- | ----------------------- | -------------------------- |
+| Move through the app            | Arrow keys or Tab       | D-pad or stick             |
+| Select                          | Enter                   | A                          |
+| Return from Settings or Health  | Escape                  | B                          |
+| Open local controls during play | F10 / Escape / Tab      | Spare button mapped to F10 |
+| Search / Settings               | Ctrl/Cmd+F / Ctrl/Cmd+, | Navigate from Library      |
 
-Local controls pause game input while open. The overlay shortcut can be changed
-in Settings. See [controller compatibility](CONTROLLER-COMPATIBILITY.md) for
+Local controls pause game input while open. Move the pointer and select
+**Controls**, or press **F10** (some keyboards need **Fn+F10**), **Escape** or
+**Tab**. For controller-only access, map a spare button/paddle to F10 in Steam
+Input or your controller software. L3 + R3 always reaches the game normally; old
+saved shortcut modes retire automatically without resetting other preferences. See [controller compatibility](CONTROLLER-COMPATIBILITY.md) for
 device and transport limits.
 
 ## Update or remove

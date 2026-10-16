@@ -113,19 +113,20 @@ describe("Xbox input protocol", () => {
     });
   });
 
-  it("reserves L3 plus R3 for Afterglide and maps Menu plus View to Xbox", () => {
-    expect(
-      streamProtocolTestUtils.normalizedInput({
-        LeftThumb: 1,
-        RightThumb: 1,
-      }),
-    ).toMatchObject({ LeftThumb: 0, RightThumb: 0 });
-    expect(
-      streamProtocolTestUtils.normalizedInput(
-        { LeftThumb: 1, RightThumb: 1 },
-        false,
-      ),
-    ).toMatchObject({ LeftThumb: 1, RightThumb: 1 });
+  it.each([
+    { LeftThumb: 1, RightThumb: 0 },
+    { LeftThumb: 0, RightThumb: 1 },
+    { LeftThumb: 1, RightThumb: 1 },
+  ])("preserves gameplay stick clicks: %j", (input) => {
+    const frame = streamProtocolTestUtils.normalizedInput(input);
+    expect(frame).toMatchObject(input);
+    const packet = new DataView(encodeGamepadPacketForTest(frame).buffer);
+    expect(packet.getUint16(16, true) & (16_384 | 32_768)).toBe(
+      (input.LeftThumb * 16_384) | (input.RightThumb * 32_768),
+    );
+  });
+
+  it("keeps the existing Menu plus View Xbox guide mapping", () => {
     expect(
       streamProtocolTestUtils.normalizedInput({ Menu: 1, View: 1 }),
     ).toMatchObject({ Menu: 0, View: 0, Nexus: 1 });

@@ -55,7 +55,7 @@ to validate end-to-end compatibility and performance.
 - Last-active or explicitly selected gamepad input with matching controller rumble
 - Per-controller vibration, deadzone, trigger-travel, and face-button profiles
 - Live controller identity, button, axis, mapping, and rumble diagnostics
-- L3 + R3 access to stream controls with game input paused while they are open
+- F10 or a mapped spare button opens stream controls and pauses game input
 - Live volume, mute, fit/fill, and input-polling preferences without reconnecting
 - Frame-pacing diagnostics and local performance reports with Linux battery/thermal readings
 - Controller-first home, setup, settings, diagnostics, error, and recovery flows
@@ -108,9 +108,12 @@ keys:
 - **R4 → F9** shows and hides performance stats.
 
 Both keys remain local to Afterglide and work even when keyboard game controls
-are disabled. In Afterglide's settings, **L3 + R3** keeps the built-in controller
-shortcut; **Steam Input** passes that chord through to the Xbox and relies on the
-user's F10 binding. Steam's controller configurator supports these keyboard and
+are disabled. L3 + R3 always reaches the game normally; no gameplay button
+combination is reserved for local controls. Use **F10** (or **Fn+F10** if your
+keyboard needs it), **Escape**, **Tab**, or move the pointer and select **Controls**.
+A controller-only setup needs a spare button/paddle mapped to F10. Old saved
+shortcut modes retire automatically without resetting other preferences.
+Steam's controller configurator supports these keyboard and
 XInput mappings through [legacy mode bindings](https://partner.steamgames.com/doc/features/steam_controller/legacy_mode).
 
 ### Controller selection and profiles

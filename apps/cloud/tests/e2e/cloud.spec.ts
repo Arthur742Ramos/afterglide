@@ -1811,99 +1811,94 @@ test("background physical navigation is inert and held Accept is released on ref
   ).toBeVisible();
 });
 
-test("captured controller chord stops on blur and requires release after refocus and hotplug", async () => {
-  const page = await launch();
-  await play(page);
-  await page.evaluate(() =>
-    window.afterglideCloudTest!.injectGamepad("controls"),
-  );
-  const settings = page.getByText("Quick settings", { exact: true });
-  await expect(settings).toBeVisible();
-  await page.evaluate(async () => {
-    const state = {
-      focused: false,
-      reads: 0,
-      pad: {
-        id: "Simulated chord controller",
+for (const savedShortcut of [undefined, "stick-chord", "steam-input"]) {
+  test(`stick clicks pass through with F10 and pointer controls (${savedShortcut ?? "new profile"})`, async () => {
+    let profile: string | undefined;
+    if (savedShortcut) {
+      mkdirSync(join(root, "artifacts/e2e"), { recursive: true });
+      profile = mkdtempSync(join(root, "artifacts/e2e/shortcut-"));
+      writeFileSync(
+        join(profile, "preferences.json"),
+        JSON.stringify({
+          settings: {
+            controllerMenuShortcut: savedShortcut,
+            volume: 0.4,
+          },
+        }),
+      );
+    }
+    const page = await launch("happy", true, false, profile);
+    await play(page);
+    const stream = page.getByTestId("mock-stream");
+    expect(
+      (await page.evaluate(() => window.afterglideCloud.getSnapshot()))
+        .settings,
+    ).not.toHaveProperty("controllerMenuShortcut");
+    if (savedShortcut)
+      expect(
+        (await page.evaluate(() => window.afterglideCloud.getSnapshot()))
+          .settings.volume,
+      ).toBe(0.4);
+    await page.evaluate(() => {
+      const pad = {
+        id: "Standard pad",
         index: 0,
         connected: true,
         mapping: "standard",
-        axes: [0, 0],
+        axes: [0, 0, 0, 0],
         buttons: Array.from({ length: 17 }, () => ({
           pressed: false,
           value: 0,
         })),
-      },
-    };
-    Object.defineProperty(document, "hasFocus", {
-      configurable: true,
-      value: () => state.focused,
-    });
-    Object.defineProperty(navigator, "getGamepads", {
-      configurable: true,
-      value: () => {
-        state.reads += 1;
-        return [state.pad];
-      },
-    });
-    (window as unknown as { chordPad: typeof state }).chordPad = state;
-    window.dispatchEvent(new Event("blur"));
-    window.dispatchEvent(new Event("gamepadconnected"));
-    state.pad.buttons[10] = state.pad.buttons[11] = { pressed: true, value: 1 };
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-    if (state.reads !== 0)
-      throw new Error("Controller was sampled in background");
-  });
-  await expect(settings).toBeVisible();
-  await page.evaluate(async () => {
-    const state = (window as unknown as { chordPad: { focused: boolean } })
-      .chordPad;
-    state.focused = true;
-    window.dispatchEvent(new Event("focus"));
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-  });
-  await expect(settings).toBeVisible();
-  const setChord = async (pressed: boolean) => {
-    await page.evaluate(async (pressed) => {
-      const state = (
-        window as unknown as {
-          chordPad: { pad: { buttons: { pressed: boolean; value: number }[] } };
-        }
-      ).chordPad;
-      state.pad.buttons[10] = state.pad.buttons[11] = {
-        pressed,
-        value: pressed ? 1 : 0,
       };
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
-    }, pressed);
-  };
-  await setChord(false);
-  await setChord(true);
-  await expect(settings).toHaveCount(0);
-  await page.evaluate(() =>
-    window.afterglideCloudTest!.injectGamepad("controls"),
-  );
-  await expect(settings).toBeVisible();
-  await page.evaluate(async () => {
-    const state = (window as unknown as { chordPad: { pad: { id: string } } })
-      .chordPad;
-    state.pad.id = "Replacement at the same index";
-    window.dispatchEvent(new Event("gamepadconnected"));
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      Object.defineProperty(document, "hasFocus", {
+        configurable: true,
+        value: () => true,
+      });
+      Object.defineProperty(navigator, "getGamepads", {
+        configurable: true,
+        value: () => [pad],
+      });
+    });
+    const sticks = async (pressed: boolean) =>
+      page.evaluate(async (pressed) => {
+        const pad = navigator.getGamepads()[0]!;
+        for (const index of [10, 11])
+          Object.assign(pad.buttons[index], { pressed, value: +pressed });
+        await new Promise<void>((resolve) => {
+          let count = 0;
+          const tick = () =>
+            ++count === 12 ? resolve() : requestAnimationFrame(tick);
+          requestAnimationFrame(tick);
+        });
+      }, pressed);
+    await sticks(true);
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
+    await page.keyboard.down("F10");
+    await expect(stream).toHaveAttribute("data-input-suspended", "true");
+    await page.keyboard.down("F10");
+    await page.keyboard.up("F10");
+    await sticks(false);
+    await sticks(true);
+    await expect(stream).toHaveAttribute("data-input-suspended", "true");
+    await page.keyboard.press("F10");
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
+    await page.mouse.move(100, 30);
+    await page.getByRole("button", { name: "Open local controls" }).click();
+    await expect(stream).toHaveAttribute("data-input-suspended", "true");
+    await page.keyboard.press("Escape");
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
+    await page.keyboard.press("Tab");
+    await expect(stream).toHaveAttribute("data-input-suspended", "true");
+    await page.evaluate(() =>
+      window.afterglideCloudTest!.injectGamepad("back"),
     );
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
+    await sticks(false);
+    await sticks(true);
+    await expect(stream).toHaveAttribute("data-input-suspended", "false");
   });
-  await expect(settings).toBeVisible();
-  await setChord(false);
-  await setChord(true);
-  await expect(settings).toHaveCount(0);
-});
+}
 
 test("welcome, sign-in and readiness remain reachable at 150 and 200 percent zoom", async () => {
   let page = await launch("auth-wait", false, true);

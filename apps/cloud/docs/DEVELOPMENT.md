@@ -60,7 +60,7 @@ See the [DualSense/Xbox compatibility matrix and hands-on gates](CONTROLLER-COMP
 - B/Escape returns from Settings or Health to Library, and exits fullscreen from Library or Welcome.
 - Ctrl/Cmd+F opens Library search; Ctrl/Cmd+, opens Settings, including before login. During play, the Settings menu opens local stream controls. Native Edit and zoom commands remain available.
 - F11 toggles fullscreen on Windows; Control+Command+F does so on macOS. Outside a stream, the fullscreen bar always offers an exit button.
-- During play, L3 + R3 or Escape opens local controls and suspends game input. Menu + View sends Xbox guide. Local controls include fullscreen, audio, fit/fill and leaving the stream.
+- During play, F10, Escape, Tab or the pointer Controls button opens local controls and suspends game input. L3 + R3 always goes to the game; map a spare controller button or paddle to F10 for controller-only access. Menu + View sends Xbox guide. Local controls include fullscreen, audio, fit/fill and leaving the stream.
 - F3 toggles measured diagnostics, hidden by default. Settings support per-controller deadzone, trigger, button mapping and rumble preferences.
 - Recovery attempts are bounded and pause while offline. Reconnect starts a new Xbox session; game state preservation is not guaranteed.
 

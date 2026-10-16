@@ -52,10 +52,10 @@ test("the real Cloud engine offers browser-supported video repair codecs in Chro
           const capabilities = RTCRtpReceiver.getCapabilities('video').codecs.map(codec => codec.mimeType.toLowerCase());
           const engine = new CloudStream.XboxStreamEngine({
             sessionId: 'isolated-offer-check', container: document.body,
-            keyboardControls: false, reserveControlChord: true,
+            keyboardControls: false,
             controllerSettings: { preferredControllerId: '', controllerDefaults: {}, controllerProfiles: [] },
             onConnected() {}, onInterrupted() {}, onError(message) { throw new Error(message); },
-            onTelemetry() {}, onControllerStatus() {}, onControlsShortcut() {}
+            onTelemetry() {}, onControllerStatus() {}
           });
           try {
             void engine.connect();

@@ -17,10 +17,7 @@ import {
   isLocalControlShortcut,
 } from "./stream/input-schema";
 import { StreamSurface } from "./stream/StreamSurface";
-import {
-  friendlyControllerName,
-  selectController,
-} from "./stream/controller-input";
+import { friendlyControllerName } from "./stream/controller-input";
 import type { ControllerStatus } from "./stream/stream-engine";
 import { QuickSettings } from "./components/QuickSettings";
 import { StreamRecovery, type RecoveryState } from "./recovery";
@@ -1334,42 +1331,10 @@ function StreamView({
       if ((event as CustomEvent<string>).detail === "controls")
         toggleControls();
     };
-    let chordReleased = false;
-    let activeGamepadIndex: number | undefined;
-    let frame = 0;
-    const poll = () => {
-      const gamepad = selectController(
-        navigator.getGamepads(),
-        snapshot.settings.preferredControllerId,
-        activeGamepadIndex,
-      );
-      activeGamepadIndex = gamepad?.index;
-      const pressed = Boolean(
-        gamepad?.buttons[10]?.pressed && gamepad.buttons[11]?.pressed,
-      );
-      if (!pressed) chordReleased = true;
-      else if (chordReleased) {
-        toggleControls();
-        return;
-      }
-      frame = requestAnimationFrame(poll);
-    };
     window.addEventListener("afterglide-gamepad", onGamepadAction);
-    if (
-      controlsCaptured &&
-      snapshot.settings.controllerMenuShortcut === "stick-chord"
-    )
-      frame = requestAnimationFrame(poll);
-    return () => {
-      cancelAnimationFrame(frame);
+    return () =>
       window.removeEventListener("afterglide-gamepad", onGamepadAction);
-    };
-  }, [
-    snapshot.settings.controllerMenuShortcut,
-    snapshot.settings.preferredControllerId,
-    controlsCaptured,
-    toggleControls,
-  ]);
+  }, [toggleControls]);
 
   useEffect(() => {
     streamEventsEnabled.current = true;
@@ -1430,10 +1395,6 @@ function StreamView({
       status.state === "disconnected" ? 5_000 : 3_000,
     );
   }, []);
-  const onControlsShortcut = useCallback(
-    () => toggleControls(),
-    [toggleControls],
-  );
 
   useEffect(() => () => clearTimeout(controllerNoticeTimer.current), []);
 
@@ -1455,9 +1416,6 @@ function StreamView({
         descriptor={descriptor}
         reducedMotion={snapshot.settings.reducedMotion}
         keyboardControls={snapshot.settings.keyboardControls}
-        reserveControlChord={
-          snapshot.settings.controllerMenuShortcut === "stick-chord"
-        }
         controllerSettings={snapshot.settings}
         playbackSettings={snapshot.settings}
         inputSuspended={
@@ -1468,7 +1426,6 @@ function StreamView({
         onError={onError}
         onTelemetry={onTelemetry}
         onControllerStatus={onControllerStatus}
-        onControlsShortcut={onControlsShortcut}
       />
       <div className="stream-vignette" />
       {controllerNotice && (
@@ -1488,6 +1445,15 @@ function StreamView({
           <span className="live-dot" /> {descriptor.displayName}
         </div>
         <div className="stream-header-actions">
+          <button
+            data-focusable
+            aria-label="Open local controls"
+            aria-keyshortcuts={LOCAL_CONTROL_SHORTCUTS.controls.join(" ")}
+            tabIndex={overlay ? 0 : -1}
+            onClick={() => captureControls(true)}
+          >
+            <Icon name="settings" /> Controls
+          </button>
           <button
             data-focusable
             data-autofocus
@@ -1567,16 +1533,7 @@ function StreamView({
           </span>
         ) : (
           <span>
-            {snapshot.settings.controllerMenuShortcut === "stick-chord" ? (
-              <>
-                <ControllerHint label="L3" wide /> +{" "}
-                <ControllerHint label="R3" wide /> Controls
-              </>
-            ) : (
-              <>
-                <ControllerHint label="F10" wide /> Steam Input controls
-              </>
-            )}
+            <ControllerHint label="F10" wide /> Controls
           </span>
         )}
         <div className="stream-shortcuts">
@@ -1598,15 +1555,7 @@ function StreamView({
                 Xbox
               </span>
               <span>
-                <ControllerHint
-                  label={
-                    snapshot.settings.controllerMenuShortcut === "steam-input"
-                      ? "F9"
-                      : "F3"
-                  }
-                  wide
-                />{" "}
-                Stats
+                <ControllerHint label="F3 / F9" wide /> Stats
               </span>
               <span>
                 <ControllerHint label="Esc" wide /> Controls
@@ -1992,36 +1941,9 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
         <SettingRow
           icon="controller"
           title="In-stream controls"
-          detail="Choose whether L3 + R3 opens Afterglide or passes through to Xbox."
+          detail="Open Controls with F10, Escape or Tab, or move the pointer and select Controls. Map a spare button or paddle to F10 in Steam Input or your controller software."
         >
-          <div
-            className="segmented controller-shortcut"
-            role="group"
-            aria-label="In-stream controller shortcut"
-          >
-            {(
-              [
-                ["stick-chord", "L3 + R3"],
-                ["steam-input", "Steam Input"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                data-focusable
-                aria-pressed={
-                  snapshot.settings.controllerMenuShortcut === value
-                }
-                className={
-                  snapshot.settings.controllerMenuShortcut === value
-                    ? "active"
-                    : ""
-                }
-                onClick={() => update({ controllerMenuShortcut: value })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <span>L3 + R3 passes through to the Xbox.</span>
         </SettingRow>
         <SettingRow
           icon="controller"
@@ -2192,7 +2114,7 @@ function SettingsPage({ snapshot }: { snapshot: AppSnapshot }) {
             preferredId && hasDeviceProfile ? resetControllerProfile : undefined
           }
         />
-        <ControllerGuide shortcut={snapshot.settings.controllerMenuShortcut} />
+        <ControllerGuide />
         {snapshot.settings.keyboardControls && <KeyboardGuide />}
         <SettingRow
           icon="settings"
@@ -2404,16 +2326,10 @@ function KeyboardGuide() {
   );
 }
 
-function ControllerGuide({
-  shortcut,
-}: {
-  shortcut: AppSettings["controllerMenuShortcut"];
-}) {
+function ControllerGuide() {
   const controls = [
     ...CONTROLLER_CONTROL_GUIDE.slice(0, 2),
-    shortcut === "stick-chord"
-      ? { keys: "L3 + R3", action: "Afterglide controls" }
-      : { keys: "F10", action: "Afterglide controls" },
+    { keys: "F10", action: "Afterglide controls" },
     ...CONTROLLER_CONTROL_GUIDE.slice(2),
   ];
   return (
@@ -2449,9 +2365,7 @@ function ControllerGuide({
           ))}
         </div>
         <small>
-          {shortcut === "steam-input"
-            ? "L3 + R3 passes through to the Xbox in this mode."
-            : "F9 and F10 stay local and never reach the Xbox."}
+          L3 + R3 passes through to the Xbox. F9 and F10 stay local.
         </small>
       </div>
     </aside>
