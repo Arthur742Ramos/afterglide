@@ -84,7 +84,12 @@ describe("unsigned candidate payload", () => {
     await expect(prepareCandidate(options)).rejects.toThrow("nonempty regular");
     await rm(zip);
     await writeFile(zip, "archive");
-    expect((await prepareCandidate(options)).artifacts).toHaveLength(2);
+    const manifest = await prepareCandidate(options);
+    expect(manifest.artifacts).toHaveLength(2);
+    expect(manifest.distribution.signing).toBe(
+      "ad-hoc; publisher identity not qualified",
+    );
+    expect(manifest.distribution.notarization).toBe("not qualified");
   });
 
   it("rejects missing source identity, path-like versions and unqualified targets", async () => {
