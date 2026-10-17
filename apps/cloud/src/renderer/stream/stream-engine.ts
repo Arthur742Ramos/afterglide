@@ -73,6 +73,7 @@ interface StreamEngineOptions {
  */
 export class XboxStreamEngine {
   private readonly peer = new RTCPeerConnection({});
+  private readonly lifetime = new AbortController();
   private readonly channels: Record<
     "chat" | "control" | "input" | "message",
     RTCDataChannel
@@ -251,6 +252,7 @@ export class XboxStreamEngine {
       await waitForIceGathering(
         this.peer,
         NETWORK_POLICY.iceGatheringTimeoutMs,
+        this.lifetime.signal,
       );
 
       if (this.destroyed || this.terminal) return;
@@ -413,6 +415,7 @@ export class XboxStreamEngine {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.lifetime.abort();
     this.inputPollingMetrics.reset();
     clearInterval(this.inputTimer);
     clearInterval(this.telemetryTimer);
@@ -1126,17 +1129,21 @@ function candidatePayload(candidate: RTCIceCandidate): IceCandidatePayload {
 function waitForIceGathering(
   peer: RTCPeerConnection,
   timeoutMs: number,
+  signal: AbortSignal,
 ): Promise<void> {
-  if (peer.iceGatheringState === "complete") return Promise.resolve();
+  if (signal.aborted || peer.iceGatheringState === "complete")
+    return Promise.resolve();
   return new Promise((resolve) => {
     const timeout = window.setTimeout(done, timeoutMs);
     peer.addEventListener("icegatheringstatechange", onChange);
+    signal.addEventListener("abort", done, { once: true });
     function onChange(): void {
       if (peer.iceGatheringState === "complete") done();
     }
     function done(): void {
       clearTimeout(timeout);
       peer.removeEventListener("icegatheringstatechange", onChange);
+      signal.removeEventListener("abort", done);
       resolve();
     }
   });

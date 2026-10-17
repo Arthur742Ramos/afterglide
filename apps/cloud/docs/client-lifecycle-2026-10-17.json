@@ -1,0 +1,4838 @@
+{
+  "schemaVersion": 1,
+  "comparison": "Serial Linux source/Playwright fixture observations; no CPU/startup speedup claim. Runtime patch and compiled inventories identify source. Frozen harness equal across both runs; final profiler adds reporting-only corrections documented in CLIENT-PROFILING.md.",
+  "runs": {
+    "baseline": {
+      "rawSha256": "8412d07c9fb85c393d2e9c5b8938e55267a0dfbc768a08fdc91bc48949631fd9",
+      "sourceCommit": "8fbc80dff5efbf1f10c9cdc7fcd046b4e4d7034a",
+      "runtimeDiff": "",
+      "compiledRuntimeSha256": {
+        "main/main.cjs": "1b116673bccb27d59a4dd4a1097baddaa8009df2ec2a933832a08a213b139ec8",
+        "main/main.cjs.map": "9f38842c7e5e2886cc8f12b1c54eee6f1e80a6ead55180adec5bcb5d3e88bbb7",
+        "main/preload.cjs": "e9b17c062aa54c3bc19892ae444eae4a2f8ac598a3a69bf284cef561070012d1",
+        "main/preload.cjs.map": "bda63d19bdfc655fb9b15067fb5687c0c33b9d3ad9eebb7b3d8c7849bcf66386",
+        "renderer/assets/index-Bfogm8OE.css": "2bd19569034b76f904b60a294bcf124d53df2ffd6e70d22d5ab0072209d10913",
+        "renderer/assets/index-DxKvzt3F.js": "052e178713b6af54bd5e7d1be1167f9a06b69bfd347ceb652e85e0d97563e405",
+        "renderer/assets/index-DxKvzt3F.js.map": "08240c8ece990c1120d60c9c92fd8e3cf8292f0d2c9a966f5c90fffa40c60133",
+        "renderer/index.html": "e9652f4d49dc648b80cfef50f8dc8e8664084e9cf436378708636879d8e861c0"
+      },
+      "bundledEngineProbeSha256": "8286daef26bef46986772952d03a786b82fe4ffe4fbab9dac392a6a131bd3f0f",
+      "harnessSha256": "f3b9713bbcf769406624a931550f5d681a8e5adfa603e697827fc21c9076ccb0",
+      "host": {
+        "platform": "linux",
+        "release": "6.18.55",
+        "architecture": "x64",
+        "availableParallelism": 4,
+        "logicalCpus": 5
+      },
+      "electron": {
+        "node": "24.21.0",
+        "acorn": "8.18.0",
+        "ada": "4.0.0",
+        "amaro": "1.1.11",
+        "ares": "1.34.8",
+        "brotli": "1.2.0",
+        "cldr": "48.0",
+        "icu": "78.2",
+        "llhttp": "9.4.3",
+        "merve": "1.2.2",
+        "modules": "148",
+        "napi": "10",
+        "nbytes": "0.1.4",
+        "ncrypto": "0.0.1",
+        "nghttp2": "1.70.0",
+        "nghttp3": "",
+        "ngtcp2": "",
+        "openssl": "0.0.0",
+        "simdjson": "4.6.7",
+        "simdutf": "7.7.0",
+        "sqlite": "3.53.4",
+        "tz": "2025c",
+        "undici": "7.29.1",
+        "unicode": "17.0",
+        "uv": "1.52.1",
+        "uvwasi": "0.0.23",
+        "v8": "15.0.245.31-electron.0",
+        "zlib": "1.3.2.1-motley",
+        "zstd": "1.6.0",
+        "electron": "43.7.7",
+        "chrome": "150.0.7871.250"
+      },
+      "workload": {
+        "durationMs": 6000,
+        "repetitions": 3,
+        "cycles": 20,
+        "viewport": "1280x800",
+        "catalogTitles": 80,
+        "sourceLaunch": true,
+        "simulatedAccounts": true
+      },
+      "gpuFeatureStatus": {
+        "2d_canvas": "unavailable_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "enabled_on",
+        "opengl": "unavailable_off",
+        "rasterization": "unavailable_off",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "unavailable_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "unavailable_off",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "unavailable_off",
+        "webgpu": "unavailable_software",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "startup": [
+        {
+          "kind": "fresh-profile",
+          "sample": 1,
+          "elapsedMs": 430.2493129999999,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0.40000000000000036,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 2,
+          "elapsedMs": 424.601584,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 3,
+          "elapsedMs": 426.8063059999995,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 4,
+          "elapsedMs": 512.1161400000001,
+          "hostCpuBefore": 0.3984063745019917,
+          "hostCpuAfter": 0.3984063745019917,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 5,
+          "elapsedMs": 479.76823200000035,
+          "hostCpuBefore": 0.3968253968253954,
+          "hostCpuAfter": 0.7936507936507908,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 1,
+          "elapsedMs": 408.47527699999955,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 1.2048192771084376,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 2,
+          "elapsedMs": 401.41411700000026,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 3,
+          "elapsedMs": 426.40162000000055,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 4,
+          "elapsedMs": 403.26897499999905,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0.3984063745019917,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 5,
+          "elapsedMs": 405.716212000003,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        }
+      ],
+      "ui": {
+        "idle-signed-out": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 2.8310588568729775,
+            "median": 2.997686758072504,
+            "max": 3.4951594267191446
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 459.06640625,
+            "median": 460.390625,
+            "max": 464.8671875
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 260.9130859375,
+            "median": 261.83642578125,
+            "max": 265.87109375
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 163.98828125,
+            "median": 164.689453125,
+            "max": 169.33984375
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 113.5859375,
+            "median": 113.58984375,
+            "max": 115.2890625
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3117752,
+            "median": 3119260,
+            "max": 3127536
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.799999999999272,
+            "median": 16.799999999999272,
+            "max": 16.800000000000182
+          },
+          "windows": [
+            {
+              "label": "idle-signed-out-1",
+              "seconds": 6.008309617999999,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.988935832500902,
+                "timerTicks": 7.988935832500902,
+                "frames": 0,
+                "gamepads": 7.988935832500902
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.699999999999818,
+                "p95Ms": 16.800000000000182,
+                "maxMs": 16.80000000000109
+              },
+              "matchedProcessCpuPercentOneCore": 3.4951594267191446,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 116,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3117752,
+                "resources": {
+                  "calls": {
+                    "timers": 79,
+                    "timerTicks": 77,
+                    "frames": 0,
+                    "gamepads": 78
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 74
+                }
+              }
+            },
+            {
+              "label": "idle-signed-out-2",
+              "seconds": 6.0046300540000015,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.993831354860015,
+                "timerTicks": 7.993831354860015,
+                "frames": 0,
+                "gamepads": 7.993831354860015
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999891,
+                "p95Ms": 16.799999999999272,
+                "maxMs": 16.80000000000109
+              },
+              "matchedProcessCpuPercentOneCore": 2.997686758072504,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 116,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3119260,
+                "resources": {
+                  "calls": {
+                    "timers": 139,
+                    "timerTicks": 137,
+                    "frames": 0,
+                    "gamepads": 138
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 74
+                }
+              }
+            },
+            {
+              "label": "idle-signed-out-3",
+              "seconds": 6.004820408,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.9935779488178165,
+                "timerTicks": 7.9935779488178165,
+                "frames": 0,
+                "gamepads": 7.9935779488178165
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.799999999999272,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 2.8310588568729775,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 116,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3127536,
+                "resources": {
+                  "calls": {
+                    "timers": 199,
+                    "timerTicks": 197,
+                    "frames": 0,
+                    "gamepads": 198
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 74
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6657446527084091,
+              "median": 0.6661314957348187,
+              "max": 0.8326907661312505
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.49961445967875096,
+              "median": 0.6661314957348187,
+              "max": 0.9986169790626127
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 1.49879586540334,
+              "median": 1.665381532262503,
+              "max": 1.8307977949481231
+            }
+          }
+        },
+        "library-controller-false": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 3.1630750481945347,
+            "median": 3.496992625974244,
+            "max": 3.829878408956996
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 465.30859375,
+            "median": 465.912109375,
+            "max": 486.69921875
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 267.943359375,
+            "median": 268.55078125,
+            "max": 280.90625
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 172.265625,
+            "median": 172.873046875,
+            "max": 178.37890625
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 111.3125,
+            "median": 111.3125,
+            "max": 120.09765625
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3799156,
+            "median": 3800392,
+            "max": 3801592
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.700000000000728,
+            "median": 16.700000000004366,
+            "max": 16.700000000004366
+          },
+          "windows": [
+            {
+              "label": "library-controller-false-1",
+              "seconds": 6.0054125859999985,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.99278972304069,
+                "timerTicks": 7.99278972304069,
+                "frames": 0,
+                "gamepads": 7.99278972304069
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000000728,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.829878408956996,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3799156,
+                "resources": {
+                  "calls": {
+                    "timers": 277,
+                    "timerTicks": 266,
+                    "frames": 0,
+                    "gamepads": 270
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-false-2",
+              "seconds": 6.005159932000002,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.993126002226843,
+                "timerTicks": 7.993126002226843,
+                "frames": 0,
+                "gamepads": 7.993126002226843
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000004366,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.496992625974244,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3800392,
+                "resources": {
+                  "calls": {
+                    "timers": 337,
+                    "timerTicks": 326,
+                    "frames": 0,
+                    "gamepads": 330
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-false-3",
+              "seconds": 6.006812899000004,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.990926437544092,
+                "timerTicks": 7.990926437544092,
+                "frames": 0,
+                "gamepads": 7.990926437544092
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000004366,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.1630750481945347,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3801592,
+                "resources": {
+                  "calls": {
+                    "timers": 397,
+                    "timerTicks": 386,
+                    "frames": 0,
+                    "gamepads": 390
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.8323881705775102,
+              "median": 0.8326172918986283,
+              "max": 1.165615167943435
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.6659105364620074,
+              "median": 0.6660658102533905,
+              "max": 0.8326172918986293
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 1.6647763411550167,
+              "median": 1.8317580421769866,
+              "max": 1.9981974307601706
+            }
+          }
+        },
+        "library-controller-true": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 3.163213960636377,
+            "median": 3.496504029187678,
+            "max": 3.4968659740846855
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 460.26171875,
+            "median": 462.23828125,
+            "max": 466.6875
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 262.7177734375,
+            "median": 264.6904296875,
+            "max": 269.326171875
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 166.95703125,
+            "median": 168.92578125,
+            "max": 173.6484375
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 110.11328125,
+            "median": 110.12109375,
+            "max": 111.3125
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3824144,
+            "median": 3844752,
+            "max": 3855772
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.700000000004366,
+            "median": 16.799999999995634,
+            "max": 16.80000000000291
+          },
+          "windows": [
+            {
+              "label": "library-controller-true-1",
+              "seconds": 6.005377431000001,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.9928365121935645,
+                "timerTicks": 7.9928365121935645,
+                "frames": 59.946273841451735,
+                "gamepads": 67.9391103536453
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.799999999995634,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.4968659740846855,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3824144,
+                "resources": {
+                  "calls": {
+                    "timers": 458,
+                    "timerTicks": 446,
+                    "frames": 453,
+                    "gamepads": 904
+                  },
+                  "timers": {
+                    "timeout:125ms": 1
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-true-2",
+              "seconds": 6.005999085000003,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.992009209571829,
+                "timerTicks": 7.992009209571829,
+                "frames": 60.1065692636548,
+                "gamepads": 68.09857847322662
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000004366,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.496504029187678,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3844752,
+                "resources": {
+                  "calls": {
+                    "timers": 518,
+                    "timerTicks": 506,
+                    "frames": 905,
+                    "gamepads": 1416
+                  },
+                  "timers": {
+                    "timeout:125ms": 1
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-true-3",
+              "seconds": 6.006549109999993,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.991277374239275,
+                "timerTicks": 7.991277374239275,
+                "frames": 60.10106525209122,
+                "gamepads": 68.09234262633049
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.80000000000291,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.163213960636377,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3855772,
+                "resources": {
+                  "calls": {
+                    "timers": 578,
+                    "timerTicks": 566,
+                    "frames": 1357,
+                    "gamepads": 1928
+                  },
+                  "timers": {
+                    "timeout:125ms": 1
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6660007674643197,
+              "median": 0.8324247264832586,
+              "max": 0.8325871366868285
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.6660007674643197,
+              "median": 0.6660697093494643,
+              "max": 0.8324247264832567
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 1.4983645076698617,
+              "median": 1.998209128048393,
+              "max": 2.1645024942590387
+            }
+          }
+        },
+        "mock-stream-overlay-closed": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 62.92780658780256,
+            "median": 64.5956269476768,
+            "max": 70.93777540514111
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 474.52734375,
+            "median": 476.203125,
+            "max": 532.765625
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 270.5517578125,
+            "median": 272.0283203125,
+            "max": 305.6650390625
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 168.4453125,
+            "median": 169.921875,
+            "max": 182.9296875
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 118.2734375,
+            "median": 118.37109375,
+            "max": 141.2109375
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3984632,
+            "median": 3995056,
+            "max": 4008076
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.70000000001164,
+            "median": 16.70000000001164,
+            "max": 16.80000000000291
+          },
+          "windows": [
+            {
+              "label": "mock-stream-overlay-closed-1",
+              "seconds": 6.005263029000009,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 4.163014988564619,
+                "timerTicks": 5.162138585820127,
+                "frames": 0,
+                "gamepads": 4.163014988564619
+              },
+              "rendererRaf": {
+                "samples": 358,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.80000000000291,
+                "maxMs": 33.39999999999418
+              },
+              "matchedProcessCpuPercentOneCore": 70.93777540514111,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 785,
+                "jsEventListeners": 241,
+                "jsHeapUsedBytes": 3984632,
+                "resources": {
+                  "calls": {
+                    "timers": 625,
+                    "timerTicks": 613,
+                    "frames": 1358,
+                    "gamepads": 1970
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 2,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": true,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": true,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 54
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-closed-2",
+              "seconds": 6.006883451000001,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 3.9954162912890507,
+                "timerTicks": 4.994270364111314,
+                "frames": 0,
+                "gamepads": 3.9954162912890507
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 62.92780658780256,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 785,
+                "jsEventListeners": 241,
+                "jsHeapUsedBytes": 3995056,
+                "resources": {
+                  "calls": {
+                    "timers": 655,
+                    "timerTicks": 651,
+                    "frames": 1358,
+                    "gamepads": 2000
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 2,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": true,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": true,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 54
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-closed-3",
+              "seconds": 6.006598563000007,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 3.9956057905779465,
+                "timerTicks": 4.994507238222433,
+                "frames": 0,
+                "gamepads": 3.9956057905779465
+              },
+              "rendererRaf": {
+                "samples": 358,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 33.39999999999418
+              },
+              "matchedProcessCpuPercentOneCore": 64.5956269476768,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 785,
+                "jsEventListeners": 241,
+                "jsHeapUsedBytes": 4008076,
+                "resources": {
+                  "calls": {
+                    "timers": 685,
+                    "timerTicks": 689,
+                    "frames": 1358,
+                    "gamepads": 2030
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 2,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": true,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": true,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 54
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.8323783940185531,
+              "median": 0.8324178730370729,
+              "max": 0.9991235972555094
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 53.60516857479477,
+              "median": 55.272546769661595,
+              "max": 59.94741583533051
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 8.490259618989237,
+              "median": 8.490662304978132,
+              "max": 9.991235972555087
+            }
+          }
+        },
+        "mock-stream-overlay-open": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 61.71073236421718,
+            "median": 62.93382719947197,
+            "max": 67.81921671029434
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 488.2265625,
+            "median": 490.142578125,
+            "max": 513.84765625
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 277.9189453125,
+            "median": 279.7138671875,
+            "max": 297.0673828125
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 169.87109375,
+            "median": 171.666015625,
+            "max": 181.83203125
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 124.47265625,
+            "median": 124.673828125,
+            "max": 138.44140625
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 4016188,
+            "median": 4019548,
+            "max": 4030476
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.70000000001164,
+            "median": 16.79999999998836,
+            "max": 16.80000000000291
+          },
+          "windows": [
+            {
+              "label": "mock-stream-overlay-open-1",
+              "seconds": 6.006308797999998,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.9915971046948515,
+                "timerTicks": 8.990546742781708,
+                "frames": 0,
+                "gamepads": 7.9915971046948515
+              },
+              "rendererRaf": {
+                "samples": 358,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.79999999998836,
+                "maxMs": 33.39999999999418
+              },
+              "matchedProcessCpuPercentOneCore": 62.93382719947197,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 783,
+                "jsEventListeners": 248,
+                "jsHeapUsedBytes": 4016188,
+                "resources": {
+                  "calls": {
+                    "timers": 747,
+                    "timerTicks": 757,
+                    "frames": 1359,
+                    "gamepads": 2091
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": true,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 98
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-open-2",
+              "seconds": 6.015993988000002,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.978731377681687,
+                "timerTicks": 8.976072799891897,
+                "frames": 0,
+                "gamepads": 7.978731377681687
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 67.81921671029434,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 783,
+                "jsEventListeners": 248,
+                "jsHeapUsedBytes": 4019548,
+                "resources": {
+                  "calls": {
+                    "timers": 807,
+                    "timerTicks": 825,
+                    "frames": 1359,
+                    "gamepads": 2151
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": true,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 98
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-open-3",
+              "seconds": 6.011920225000009,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.984137880006538,
+                "timerTicks": 8.982155115007355,
+                "frames": 0,
+                "gamepads": 7.984137880006538
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.80000000000291,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 61.71073236421718,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 783,
+                "jsEventListeners": 248,
+                "jsHeapUsedBytes": 4030476,
+                "resources": {
+                  "calls": {
+                    "timers": 867,
+                    "timerTicks": 892,
+                    "frames": 1359,
+                    "gamepads": 2211
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": true,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 98
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6653448233338788,
+              "median": 0.6659664253912345,
+              "max": 1.1635649925785805
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 52.063232425875945,
+              "median": 53.27731403129903,
+              "max": 57.01468463635039
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 8.982155115007355,
+              "median": 8.990546742781708,
+              "max": 9.640967081365373
+            }
+          }
+        },
+        "settings-controller": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 3.330494709396085,
+            "median": 3.4968038699763637,
+            "max": 3.829022051697791
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 471.80078125,
+            "median": 472.51953125,
+            "max": 511.95703125
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 269.9013671875,
+            "median": 270.4619140625,
+            "max": 292.3466796875
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 170.55078125,
+            "median": 171.111328125,
+            "max": 176.23046875
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 112.953125,
+            "median": 112.953125,
+            "max": 130.52734375
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 4666004,
+            "median": 4674952,
+            "max": 4677352
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.70000000001164,
+            "median": 16.70000000001164,
+            "max": 16.70000000001164
+          },
+          "windows": [
+            {
+              "label": "settings-controller-1",
+              "seconds": 6.005113878000004,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 15.986374605101192,
+                "timerTicks": 15.986374605101192,
+                "frames": 59.94890476912947,
+                "gamepads": 75.93527937423066
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.699999999982538,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.800000000017462
+              },
+              "matchedProcessCpuPercentOneCore": 3.330494709396085,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 389,
+                "jsEventListeners": 202,
+                "jsHeapUsedBytes": 4666004,
+                "resources": {
+                  "calls": {
+                    "timers": 1339,
+                    "timerTicks": 1229,
+                    "frames": 1812,
+                    "gamepads": 3010
+                  },
+                  "timers": {
+                    "timeout:125ms": 2
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 17,
+                  "documentListeners": 4,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 246
+                }
+              }
+            },
+            {
+              "label": "settings-controller-2",
+              "seconds": 6.0054840879999976,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 15.985389119892051,
+                "timerTicks": 15.985389119892051,
+                "frames": 60.11172366959407,
+                "gamepads": 76.09711278948612
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.699999999982538,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.800000000017462
+              },
+              "matchedProcessCpuPercentOneCore": 3.4968038699763637,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 389,
+                "jsEventListeners": 202,
+                "jsHeapUsedBytes": 4674952,
+                "resources": {
+                  "calls": {
+                    "timers": 1459,
+                    "timerTicks": 1349,
+                    "frames": 2264,
+                    "gamepads": 3582
+                  },
+                  "timers": {
+                    "timeout:125ms": 2
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 17,
+                  "documentListeners": 4,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 246
+                }
+              }
+            },
+            {
+              "label": "settings-controller-3",
+              "seconds": 6.006755691000028,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 15.982005085347087,
+                "timerTicks": 15.982005085347087,
+                "frames": 60.098998289690606,
+                "gamepads": 76.0810033750377
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.699999999982538,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.800000000017462
+              },
+              "matchedProcessCpuPercentOneCore": 3.829022051697791,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 389,
+                "jsEventListeners": 202,
+                "jsHeapUsedBytes": 4677352,
+                "resources": {
+                  "calls": {
+                    "timers": 1579,
+                    "timerTicks": 1469,
+                    "frames": 2716,
+                    "gamepads": 4154
+                  },
+                  "timers": {
+                    "timeout:125ms": 2
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 17,
+                  "documentListeners": 4,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 246
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6659168785561292,
+              "median": 0.6660989418792169,
+              "max": 0.9990868199932541
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.6660578799954879,
+              "median": 0.6660989418792022,
+              "max": 0.8323960981952317
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 1.8316591699876215,
+              "median": 1.9982968256376656,
+              "max": 2.33070907494643
+            }
+          }
+        },
+        "local-engine-includes-source": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 21.30992097200658,
+            "median": 21.81456628377392,
+            "max": 22.818777740828644
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 679.83984375,
+            "median": 686.318359375,
+            "max": 690.06640625
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 326.736328125,
+            "median": 332.53857421875,
+            "max": 335.03515625
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 192.203125,
+            "median": 197.69921875,
+            "max": 200.0703125
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 121.94140625,
+            "median": 122.0078125,
+            "max": 122.08203125
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 2875192,
+            "median": 2915176,
+            "max": 2937452
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.700000000000728,
+            "median": 16.799999999999272,
+            "max": 16.799999999999272
+          },
+          "windows": [
+            {
+              "label": "local-engine-includes-source-1",
+              "seconds": 6.005161794000014,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 0,
+                "timerTicks": 251.45034418701232,
+                "frames": 0,
+                "gamepads": 278.2606126731772
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.699999999999818,
+                "p95Ms": 16.799999999999272,
+                "maxMs": 16.800000000000182
+              },
+              "matchedProcessCpuPercentOneCore": 21.81456628377392,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 290,
+                "jsEventListeners": 55,
+                "jsHeapUsedBytes": 2875192,
+                "resources": {
+                  "calls": {
+                    "timers": 9,
+                    "timerTicks": 1892,
+                    "frames": 0,
+                    "gamepads": 2102
+                  },
+                  "timers": {
+                    "interval:25000ms": 1,
+                    "interval:1000ms": 1,
+                    "interval:4ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 1,
+                  "peerWrappers": 1,
+                  "openPeers": 1,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 2,
+                  "openChannels": 4,
+                  "mediaSinks": 2,
+                  "observedElements": {},
+                  "attachedElements": 7
+                }
+              }
+            },
+            {
+              "label": "local-engine-includes-source-2",
+              "seconds": 6.006591960999998,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 0,
+                "timerTicks": 251.22399020904635,
+                "frames": 0,
+                "gamepads": 278.02787518164837
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999891,
+                "p95Ms": 16.700000000000728,
+                "maxMs": 16.80000000000109
+              },
+              "matchedProcessCpuPercentOneCore": 21.30992097200658,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 290,
+                "jsEventListeners": 55,
+                "jsHeapUsedBytes": 2915176,
+                "resources": {
+                  "calls": {
+                    "timers": 9,
+                    "timerTicks": 3780,
+                    "frames": 0,
+                    "gamepads": 4191
+                  },
+                  "timers": {
+                    "interval:25000ms": 1,
+                    "interval:1000ms": 1,
+                    "interval:4ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 1,
+                  "peerWrappers": 1,
+                  "openPeers": 1,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 2,
+                  "openChannels": 4,
+                  "mediaSinks": 2,
+                  "observedElements": {},
+                  "attachedElements": 7
+                }
+              }
+            },
+            {
+              "label": "local-engine-includes-source-3",
+              "seconds": 6.003827267000015,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 0,
+                "timerTicks": 251.33967599204686,
+                "frames": 0,
+                "gamepads": 278.15590384805716
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.700000000000728,
+                "p95Ms": 16.799999999999272,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 22.818777740828644,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 290,
+                "jsEventListeners": 55,
+                "jsHeapUsedBytes": 2937452,
+                "resources": {
+                  "calls": {
+                    "timers": 9,
+                    "timerTicks": 5667,
+                    "frames": 0,
+                    "gamepads": 6280
+                  },
+                  "timers": {
+                    "interval:25000ms": 1,
+                    "interval:1000ms": 1,
+                    "interval:4ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 1,
+                  "peerWrappers": 1,
+                  "openPeers": 1,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 2,
+                  "openChannels": 4,
+                  "mediaSinks": 2,
+                  "observedElements": {},
+                  "attachedElements": 7
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6659350303752044,
+              "median": 0.6662416858636105,
+              "max": 0.8326170337318296
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 2.6637401215008234,
+              "median": 2.8308979146882183,
+              "max": 2.9980875863862435
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 1.9982808809563894,
+              "median": 2.1642888487194187,
+              "max": 2.331845900522635
+            },
+            "Receiver profile": {
+              "samples": 3,
+              "min": 7.325285334127261,
+              "median": 7.493553303586461,
+              "max": 7.6617793874315145
+            },
+            "Local source fixture": {
+              "samples": 3,
+              "min": 8.49067163728387,
+              "median": 8.65921715081102,
+              "max": 9.160823180624638
+            }
+          }
+        }
+      },
+      "lifecycle": [
+        {
+          "kind": "mock-ui",
+          "cycle": 5,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4536304,
+            "resources": {
+              "calls": {
+                "timers": 942,
+                "timerTicks": 939,
+                "frames": 1359,
+                "gamepads": 2259
+              },
+              "timers": {
+                "timeout:250ms": 2
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui",
+          "cycle": 10,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4670012,
+            "resources": {
+              "calls": {
+                "timers": 1035,
+                "timerTicks": 995,
+                "frames": 1359,
+                "gamepads": 2318
+              },
+              "timers": {
+                "timeout:250ms": 2
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui",
+          "cycle": 15,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4726712,
+            "resources": {
+              "calls": {
+                "timers": 1126,
+                "timerTicks": 1051,
+                "frames": 1359,
+                "gamepads": 2376
+              },
+              "timers": {
+                "timeout:250ms": 2,
+                "timeout:40ms": 1
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui",
+          "cycle": 20,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4756052,
+            "resources": {
+              "calls": {
+                "timers": 1214,
+                "timerTicks": 1107,
+                "frames": 1359,
+                "gamepads": 2433
+              },
+              "timers": {
+                "timeout:250ms": 2,
+                "timeout:40ms": 1
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui-baseline",
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 3833964,
+            "resources": {
+              "calls": {
+                "timers": 580,
+                "timerTicks": 566,
+                "frames": 1357,
+                "gamepads": 1930
+              },
+              "timers": {
+                "timeout:250ms": 2
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "native-engine-baseline",
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 2501156,
+            "resources": {
+              "calls": {
+                "timers": 0,
+                "timerTicks": 0,
+                "frames": 0,
+                "gamepads": 0
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 5,
+          "retention": {
+            "documents": 1,
+            "nodes": 290,
+            "jsEventListeners": 48,
+            "jsHeapUsedBytes": 2954592,
+            "resources": {
+              "calls": {
+                "timers": 42,
+                "timerTicks": 6151,
+                "frames": 0,
+                "gamepads": 6863
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 1,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 10,
+          "retention": {
+            "documents": 1,
+            "nodes": 290,
+            "jsEventListeners": 48,
+            "jsHeapUsedBytes": 3012072,
+            "resources": {
+              "calls": {
+                "timers": 72,
+                "timerTicks": 6186,
+                "frames": 0,
+                "gamepads": 6948
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 1,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 15,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3010860,
+            "resources": {
+              "calls": {
+                "timers": 104,
+                "timerTicks": 6221,
+                "frames": 0,
+                "gamepads": 7033
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 20,
+          "retention": {
+            "documents": 1,
+            "nodes": 290,
+            "jsEventListeners": 48,
+            "jsHeapUsedBytes": 3026184,
+            "resources": {
+              "calls": {
+                "timers": 135,
+                "timerTicks": 6256,
+                "frames": 0,
+                "gamepads": 7118
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 1,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "pending-ice-baseline",
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 2997400,
+            "resources": {
+              "calls": {
+                "timers": 135,
+                "timerTicks": 6256,
+                "frames": 0,
+                "gamepads": 7118
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 5,
+          "settledBefore": 20,
+          "pending": 5,
+          "retention": {
+            "documents": 1,
+            "nodes": 1410,
+            "jsEventListeners": 137,
+            "jsHeapUsedBytes": 3081928,
+            "resources": {
+              "calls": {
+                "timers": 145,
+                "timerTicks": 6256,
+                "frames": 0,
+                "gamepads": 7118
+              },
+              "timers": {
+                "timeout:4000ms": 5
+              },
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 5,
+              "openPeers": 0,
+              "iceListeners": 5,
+              "latestPeerIceListeners": 1,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 10,
+          "settledBefore": 20,
+          "pending": 10,
+          "retention": {
+            "documents": 1,
+            "nodes": 2810,
+            "jsEventListeners": 247,
+            "jsHeapUsedBytes": 3160376,
+            "resources": {
+              "calls": {
+                "timers": 155,
+                "timerTicks": 6256,
+                "frames": 0,
+                "gamepads": 7118
+              },
+              "timers": {
+                "timeout:4000ms": 10
+              },
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 10,
+              "openPeers": 0,
+              "iceListeners": 10,
+              "latestPeerIceListeners": 1,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 15,
+          "settledBefore": 20,
+          "pending": 15,
+          "retention": {
+            "documents": 1,
+            "nodes": 4210,
+            "jsEventListeners": 357,
+            "jsHeapUsedBytes": 3225916,
+            "resources": {
+              "calls": {
+                "timers": 165,
+                "timerTicks": 6256,
+                "frames": 0,
+                "gamepads": 7118
+              },
+              "timers": {
+                "timeout:4000ms": 15
+              },
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 15,
+              "openPeers": 0,
+              "iceListeners": 15,
+              "latestPeerIceListeners": 1,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 20,
+          "settledBefore": 20,
+          "pending": 20,
+          "retention": {
+            "documents": 1,
+            "nodes": 5610,
+            "jsEventListeners": 467,
+            "jsHeapUsedBytes": 3292108,
+            "resources": {
+              "calls": {
+                "timers": 175,
+                "timerTicks": 6256,
+                "frames": 0,
+                "gamepads": 7118
+              },
+              "timers": {
+                "timeout:4000ms": 20
+              },
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 20,
+              "openPeers": 0,
+              "iceListeners": 20,
+              "latestPeerIceListeners": 1,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-expired",
+          "pending": 0,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3026868,
+            "resources": {
+              "calls": {
+                "timers": 175,
+                "timerTicks": 6276,
+                "frames": 0,
+                "gamepads": 7118
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        }
+      ],
+      "syntheticInputSamplingDelayMs": [
+        3.1000000000931323, 2.7999999998137355, 0.10000000009313226,
+        2.199999999953434, 1.8000000000465661, 2.699999999953434,
+        1.1000000000931323, 1.5, 3, 3
+      ],
+      "localStreamTelemetryLast": {
+        "resolution": "640 x 360",
+        "framesPerSecond": 30,
+        "incomingFramesPerSecond": 29.998623110072096,
+        "decodedFramesPerSecond": 29.998623110072096,
+        "roundTripMs": 1,
+        "packetLossPercent": 0,
+        "bitrateMbps": 0.2553615361535797,
+        "codec": "H264",
+        "connection": "local",
+        "jitterMs": 0,
+        "decodeMs": 0.2562666666666667,
+        "jitterBufferMs": 8.175466666666656,
+        "retransmittedPacketsReceived": 14,
+        "retransmittedBytesReceived": 8798,
+        "nackCount": 0,
+        "pliCount": 0,
+        "firCount": 0,
+        "receiverFramesDropped": 0,
+        "retransmittedPacketsPerSecond": 0,
+        "jitterBufferTargetMs": 11.038533333333334,
+        "jitterBufferMinimumMs": 11.038533333333334,
+        "networkQuality": "excellent",
+        "frameTiming": {
+          "observedFrames": 30,
+          "receiveIntervalP95Ms": 33.69999999999709,
+          "mediaIntervalP95Ms": 33.00000000000125,
+          "decodeP95Ms": 0.4,
+          "receiveToPresentationP95Ms": 27.799999999999272,
+          "presentationLeadP95Ms": -0.2999999999992724,
+          "callbackLatenessP95Ms": 16.700000000000728
+        },
+        "displayedFramesPerSecond": 30.00300030002581,
+        "displayedFpsSource": "video-callback",
+        "presentationCallbacksSkipped": 55,
+        "presentationIntervalSamples": 600,
+        "frameIntervalSource": "expected-display",
+        "frameIntervalP95Ms": 50,
+        "frameIntervalP99Ms": 50.100000000000364,
+        "framesDropped": 0,
+        "freezeCount": 0,
+        "freezeDurationMs": 0,
+        "playoutMode": "low-delay",
+        "playoutTargetMs": 0,
+        "playoutTargetAccepted": true,
+        "inputQueueBytes": 0,
+        "inputPolling": {
+          "targetMs": 4,
+          "samples": 250,
+          "windowMs": 999.9000000001397,
+          "meanIntervalMs": 3.9996000000005587,
+          "p95UpperMs": 5,
+          "maxIntervalMs": 5,
+          "meanJitterMs": 0.05879999994579703,
+          "longGaps": 0
+        },
+        "playbackVisible": true,
+        "documentVisible": true,
+        "playbackFocused": true,
+        "updatedAt": 1792277491810
+      },
+      "engineErrors": []
+    },
+    "after": {
+      "rawSha256": "b23f2c212ad9a488da2d9c87057bda016ddbff859fdac7bb9a6eca08df3326b9",
+      "sourceCommit": "8fbc80dff5efbf1f10c9cdc7fcd046b4e4d7034a",
+      "runtimeDiff": "diff --git a/apps/cloud/src/renderer/hooks/use-controller-navigation.ts b/apps/cloud/src/renderer/hooks/use-controller-navigation.ts\nindex 81641bd..cd83eb1 100644\n--- a/apps/cloud/src/renderer/hooks/use-controller-navigation.ts\n+++ b/apps/cloud/src/renderer/hooks/use-controller-navigation.ts\n@@ -71,7 +71,12 @@ export function useControllerNavigation(\n   const previousScope = useRef<string | undefined>(undefined);\n   const previousFocusables = useRef<HTMLElement[]>([]);\n   useEffect(() => {\n-    if (!enabled) return;\n+    if (!enabled) {\n+      // Disabled navigation must not retain detached Library/overlay controls.\n+      // Keep identities across enabled scope changes for focus restoration.\n+      previousFocusables.current = [];\n+      return;\n+    }\n     const scopeChanged =\n       previousScope.current !== undefined &&\n       previousScope.current !== focusScope;\ndiff --git a/apps/cloud/src/renderer/stream/stream-engine.ts b/apps/cloud/src/renderer/stream/stream-engine.ts\nindex 672edfc..a198b7e 100644\n--- a/apps/cloud/src/renderer/stream/stream-engine.ts\n+++ b/apps/cloud/src/renderer/stream/stream-engine.ts\n@@ -73,6 +73,7 @@ interface StreamEngineOptions {\n  */\n export class XboxStreamEngine {\n   private readonly peer = new RTCPeerConnection({});\n+  private readonly lifetime = new AbortController();\n   private readonly channels: Record<\n     \"chat\" | \"control\" | \"input\" | \"message\",\n     RTCDataChannel\n@@ -251,6 +252,7 @@ export class XboxStreamEngine {\n       await waitForIceGathering(\n         this.peer,\n         NETWORK_POLICY.iceGatheringTimeoutMs,\n+        this.lifetime.signal,\n       );\n \n       if (this.destroyed || this.terminal) return;\n@@ -413,6 +415,7 @@ export class XboxStreamEngine {\n   destroy(): void {\n     if (this.destroyed) return;\n     this.destroyed = true;\n+    this.lifetime.abort();\n     this.inputPollingMetrics.reset();\n     clearInterval(this.inputTimer);\n     clearInterval(this.telemetryTimer);\n@@ -1126,17 +1129,21 @@ function candidatePayload(candidate: RTCIceCandidate): IceCandidatePayload {\n function waitForIceGathering(\n   peer: RTCPeerConnection,\n   timeoutMs: number,\n+  signal: AbortSignal,\n ): Promise<void> {\n-  if (peer.iceGatheringState === \"complete\") return Promise.resolve();\n+  if (signal.aborted || peer.iceGatheringState === \"complete\")\n+    return Promise.resolve();\n   return new Promise((resolve) => {\n     const timeout = window.setTimeout(done, timeoutMs);\n     peer.addEventListener(\"icegatheringstatechange\", onChange);\n+    signal.addEventListener(\"abort\", done, { once: true });\n     function onChange(): void {\n       if (peer.iceGatheringState === \"complete\") done();\n     }\n     function done(): void {\n       clearTimeout(timeout);\n       peer.removeEventListener(\"icegatheringstatechange\", onChange);\n+      signal.removeEventListener(\"abort\", done);\n       resolve();\n     }\n   });",
+      "compiledRuntimeSha256": {
+        "main/main.cjs": "1b116673bccb27d59a4dd4a1097baddaa8009df2ec2a933832a08a213b139ec8",
+        "main/main.cjs.map": "9f38842c7e5e2886cc8f12b1c54eee6f1e80a6ead55180adec5bcb5d3e88bbb7",
+        "main/preload.cjs": "e9b17c062aa54c3bc19892ae444eae4a2f8ac598a3a69bf284cef561070012d1",
+        "main/preload.cjs.map": "bda63d19bdfc655fb9b15067fb5687c0c33b9d3ad9eebb7b3d8c7849bcf66386",
+        "renderer/assets/index-Bfogm8OE.css": "2bd19569034b76f904b60a294bcf124d53df2ffd6e70d22d5ab0072209d10913",
+        "renderer/assets/index-Bykxnp8o.js": "2db16df16d6e8b263b97755c57e1a16079ec13afa18a352bc5ffc4e3945d3dce",
+        "renderer/assets/index-Bykxnp8o.js.map": "b640971d1efd0102dbd51d2e5b8ac80365fe9c0a3a0ec8614649bbbb567e8ea7",
+        "renderer/index.html": "65207501b14abe1379d3390bc128d10692edff75b4eae9bf0ca5738147f29b65"
+      },
+      "bundledEngineProbeSha256": "122f12b700d8ca57f049ecc9630ca622e8312f20d4148490301833c0c9ee16c5",
+      "harnessSha256": "f3b9713bbcf769406624a931550f5d681a8e5adfa603e697827fc21c9076ccb0",
+      "host": {
+        "platform": "linux",
+        "release": "6.18.55",
+        "architecture": "x64",
+        "availableParallelism": 4,
+        "logicalCpus": 5
+      },
+      "electron": {
+        "node": "24.21.0",
+        "acorn": "8.18.0",
+        "ada": "4.0.0",
+        "amaro": "1.1.11",
+        "ares": "1.34.8",
+        "brotli": "1.2.0",
+        "cldr": "48.0",
+        "icu": "78.2",
+        "llhttp": "9.4.3",
+        "merve": "1.2.2",
+        "modules": "148",
+        "napi": "10",
+        "nbytes": "0.1.4",
+        "ncrypto": "0.0.1",
+        "nghttp2": "1.70.0",
+        "nghttp3": "",
+        "ngtcp2": "",
+        "openssl": "0.0.0",
+        "simdjson": "4.6.7",
+        "simdutf": "7.7.0",
+        "sqlite": "3.53.4",
+        "tz": "2025c",
+        "undici": "7.29.1",
+        "unicode": "17.0",
+        "uv": "1.52.1",
+        "uvwasi": "0.0.23",
+        "v8": "15.0.245.31-electron.0",
+        "zlib": "1.3.2.1-motley",
+        "zstd": "1.6.0",
+        "electron": "43.7.7",
+        "chrome": "150.0.7871.250"
+      },
+      "workload": {
+        "durationMs": 6000,
+        "repetitions": 3,
+        "cycles": 20,
+        "viewport": "1280x800",
+        "catalogTitles": 80,
+        "sourceLaunch": true,
+        "simulatedAccounts": true
+      },
+      "gpuFeatureStatus": {
+        "2d_canvas": "unavailable_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "enabled_on",
+        "opengl": "unavailable_off",
+        "rasterization": "unavailable_off",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "unavailable_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "unavailable_off",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "unavailable_off",
+        "webgpu": "unavailable_software",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "startup": [
+        {
+          "kind": "fresh-profile",
+          "sample": 1,
+          "elapsedMs": 420.361538,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 2,
+          "elapsedMs": 424.3314559999999,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0.3984063745019917,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 3,
+          "elapsedMs": 422.51662899999974,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 4,
+          "elapsedMs": 463.95811499999945,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 1.200000000000001,
+          "accepted": true
+        },
+        {
+          "kind": "fresh-profile",
+          "sample": 5,
+          "elapsedMs": 431.73207400000047,
+          "hostCpuBefore": 1.195219123505975,
+          "hostCpuAfter": 1.6000000000000014,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 1,
+          "elapsedMs": 435.2542290000001,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 2,
+          "elapsedMs": 412.7691340000001,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 3,
+          "elapsedMs": 434.82357500000035,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 4,
+          "elapsedMs": 462.7912120000001,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        },
+        {
+          "kind": "repeat-profile",
+          "sample": 5,
+          "elapsedMs": 396.1613989999969,
+          "hostCpuBefore": 0,
+          "hostCpuAfter": 0,
+          "accepted": true
+        }
+      ],
+      "ui": {
+        "idle-signed-out": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 2.784728949929428,
+            "median": 3.3305020718567935,
+            "max": 3.8280753805623347
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 459.9921875,
+            "median": 461.44921875,
+            "max": 464.6328125
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 260.0947265625,
+            "median": 261.1533203125,
+            "max": 264.1513671875
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 162.3203125,
+            "median": 163.169921875,
+            "max": 166.734375
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 113.71484375,
+            "median": 113.71875,
+            "max": 115.02734375
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3134940,
+            "median": 3136448,
+            "max": 3145400
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.700000000000728,
+            "median": 16.700000000000728,
+            "max": 16.700000000000728
+          },
+          "windows": [
+            {
+              "label": "idle-signed-out-1",
+              "seconds": 6.0051006030000025,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.993204972456309,
+                "timerTicks": 7.993204972456309,
+                "frames": 0,
+                "gamepads": 7.993204972456309
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.699999999999818,
+                "p95Ms": 16.700000000000728,
+                "maxMs": 16.80000000000109
+              },
+              "matchedProcessCpuPercentOneCore": 3.3305020718567935,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 116,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3134940,
+                "resources": {
+                  "calls": {
+                    "timers": 79,
+                    "timerTicks": 77,
+                    "frames": 0,
+                    "gamepads": 78
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 74
+                }
+              }
+            },
+            {
+              "label": "idle-signed-out-2",
+              "seconds": 6.008241142999999,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.989026881173569,
+                "timerTicks": 7.989026881173569,
+                "frames": 0,
+                "gamepads": 7.989026881173569
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999891,
+                "p95Ms": 16.700000000000728,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.8280753805623347,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 116,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3136448,
+                "resources": {
+                  "calls": {
+                    "timers": 139,
+                    "timerTicks": 137,
+                    "frames": 0,
+                    "gamepads": 138
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 74
+                }
+              }
+            },
+            {
+              "label": "idle-signed-out-3",
+              "seconds": 6.104723406000004,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.862764093918388,
+                "timerTicks": 7.862764093918388,
+                "frames": 0,
+                "gamepads": 7.862764093918388
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000000728,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 2.784728949929428,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 116,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3145400,
+                "resources": {
+                  "calls": {
+                    "timers": 201,
+                    "timerTicks": 199,
+                    "frames": 0,
+                    "gamepads": 200
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 74
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6661004143713578,
+              "median": 0.819037926449831,
+              "max": 0.8321903001222475
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.4914227558698997,
+              "median": 0.8321903001222466,
+              "max": 0.9991506215570386
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 1.4742682676096972,
+              "median": 1.6652510359283974,
+              "max": 2.1636947803178406
+            }
+          }
+        },
+        "library-controller-false": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 2.66417998412175,
+            "median": 2.995933763407064,
+            "max": 3.662934513069609
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 465.2890625,
+            "median": 465.8984375,
+            "max": 487.71484375
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 265.9619140625,
+            "median": 266.5751953125,
+            "max": 280.0947265625
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 169.15625,
+            "median": 169.76953125,
+            "max": 176.484375
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 111.5703125,
+            "median": 111.5703125,
+            "max": 120.30859375
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3797208,
+            "median": 3798444,
+            "max": 3799644
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.700000000004366,
+            "median": 16.799999999995634,
+            "max": 16.799999999999272
+          },
+          "windows": [
+            {
+              "label": "library-controller-false-1",
+              "seconds": 6.006113383000003,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.991857119424609,
+                "timerTicks": 7.991857119424609,
+                "frames": 0,
+                "gamepads": 7.991857119424609
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.799999999999272,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.662934513069609,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3797208,
+                "resources": {
+                  "calls": {
+                    "timers": 279,
+                    "timerTicks": 268,
+                    "frames": 0,
+                    "gamepads": 272
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-false-2",
+              "seconds": 6.0056002579999985,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.992539952365243,
+                "timerTicks": 7.992539952365243,
+                "frames": 0,
+                "gamepads": 7.992539952365243
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.799999999995634,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 2.66417998412175,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3798444,
+                "resources": {
+                  "calls": {
+                    "timers": 339,
+                    "timerTicks": 328,
+                    "frames": 0,
+                    "gamepads": 332
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-false-3",
+              "seconds": 6.008143511000009,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.989156702418843,
+                "timerTicks": 7.989156702418843,
+                "frames": 0,
+                "gamepads": 7.989156702418843
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000004366,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 2.995933763407064,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3799644,
+                "resources": {
+                  "calls": {
+                    "timers": 399,
+                    "timerTicks": 388,
+                    "frames": 0,
+                    "gamepads": 392
+                  },
+                  "timers": {
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6657630585349041,
+              "median": 0.6660449960304375,
+              "max": 1.1654791632494212
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.33302249801521877,
+              "median": 0.4993222939011772,
+              "max": 0.83248511660673
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 1.664970233213458,
+              "median": 1.6651124900760939,
+              "max": 1.8308484109709828
+            }
+          }
+        },
+        "library-controller-true": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 3.3298656384513547,
+            "median": 3.3308062245594465,
+            "max": 3.330962988426614
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 461.0546875,
+            "median": 462.73828125,
+            "max": 466.96875
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 261.6416015625,
+            "median": 263.2900390625,
+            "max": 267.6455078125
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 164.80859375,
+            "median": 166.453125,
+            "max": 170.83984375
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 110.37890625,
+            "median": 110.38671875,
+            "max": 111.5703125
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3822196,
+            "median": 3842368,
+            "max": 3854208
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.700000000004366,
+            "median": 16.700000000004366,
+            "max": 16.70000000001164
+          },
+          "windows": [
+            {
+              "label": "library-controller-true-1",
+              "seconds": 6.006248351000002,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 8.158170814205812,
+                "timerTicks": 8.158170814205812,
+                "frames": 60.1040747740469,
+                "gamepads": 68.26224558825271
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000004366,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.3298656384513547,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3822196,
+                "resources": {
+                  "calls": {
+                    "timers": 460,
+                    "timerTicks": 448,
+                    "frames": 453,
+                    "gamepads": 906
+                  },
+                  "timers": {
+                    "timeout:125ms": 1
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-true-2",
+              "seconds": 6.0045522469999995,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.993934938942668,
+                "timerTicks": 7.993934938942668,
+                "frames": 60.12105235329798,
+                "gamepads": 68.11498729224066
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.700000000004366,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.3308062245594465,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3842368,
+                "resources": {
+                  "calls": {
+                    "timers": 520,
+                    "timerTicks": 508,
+                    "frames": 905,
+                    "gamepads": 1418
+                  },
+                  "timers": {
+                    "timeout:125ms": 1
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            },
+            {
+              "label": "library-controller-true-3",
+              "seconds": 6.004269657000012,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.994311172223874,
+                "timerTicks": 7.994311172223874,
+                "frames": 60.123881941100386,
+                "gamepads": 68.11819311332425
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 3.330962988426614,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 638,
+                "jsEventListeners": 227,
+                "jsHeapUsedBytes": 3854208,
+                "resources": {
+                  "calls": {
+                    "timers": 580,
+                    "timerTicks": 568,
+                    "frames": 1357,
+                    "gamepads": 1930
+                  },
+                  "timers": {
+                    "timeout:125ms": 1
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 14,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {},
+                  "attachedElements": 430
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.665973127690271,
+              "median": 0.6661925976853235,
+              "max": 0.832701556139862
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.665973127690271,
+              "median": 0.6661612449118878,
+              "max": 0.6661925976853235
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 1.8319434235076966,
+              "median": 1.9979193830708128,
+              "max": 1.9985777930559667
+            }
+          }
+        },
+        "mock-stream-overlay-closed": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 67.44685482357833,
+            "median": 69.0989691512913,
+            "max": 72.9226487466413
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 475.25390625,
+            "median": 477.427734375,
+            "max": 538.15625
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 268.951171875,
+            "median": 273.48828125,
+            "max": 308.572265625
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 165.6015625,
+            "median": 170.138671875,
+            "max": 181.98828125
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 118.53125,
+            "median": 118.59765625,
+            "max": 141.8984375
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3927260,
+            "median": 3929152,
+            "max": 3933324
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.70000000001164,
+            "median": 16.79999999998836,
+            "max": 16.79999999998836
+          },
+          "windows": [
+            {
+              "label": "mock-stream-overlay-closed-1",
+              "seconds": 6.006364380999992,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 3.9957615751584274,
+                "timerTicks": 4.994701968948034,
+                "frames": 0,
+                "gamepads": 3.9957615751584274
+              },
+              "rendererRaf": {
+                "samples": 356,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 33.30000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 72.9226487466413,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 103,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3927260,
+                "resources": {
+                  "calls": {
+                    "timers": 629,
+                    "timerTicks": 616,
+                    "frames": 1358,
+                    "gamepads": 1973
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 2,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 54
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-closed-2",
+              "seconds": 6.005878308999993,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 3.9960849629662434,
+                "timerTicks": 4.995106203707804,
+                "frames": 0,
+                "gamepads": 3.9960849629662434
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.79999999998836,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 69.0989691512913,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 103,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3929152,
+                "resources": {
+                  "calls": {
+                    "timers": 659,
+                    "timerTicks": 653,
+                    "frames": 1358,
+                    "gamepads": 2003
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 2,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 54
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-closed-3",
+              "seconds": 6.0047277380000015,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 4.163386100220885,
+                "timerTicks": 5.162598764273897,
+                "frames": 0,
+                "gamepads": 4.163386100220885
+              },
+              "rendererRaf": {
+                "samples": 358,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.79999999998836,
+                "maxMs": 33.39999999999418
+              },
+              "matchedProcessCpuPercentOneCore": 67.44685482357833,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 103,
+                "jsEventListeners": 171,
+                "jsHeapUsedBytes": 3933324,
+                "resources": {
+                  "calls": {
+                    "timers": 690,
+                    "timerTicks": 692,
+                    "frames": 1358,
+                    "gamepads": 2034
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 13,
+                  "documentListeners": 2,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 54
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.8325177006179681,
+              "median": 0.9992126640530095,
+              "max": 1.165430459421209
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 57.28819273903936,
+              "median": 59.108756743875695,
+              "max": 62.267284546218825
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 9.157694706797638,
+              "median": 9.159449420485958,
+              "max": 9.489933741001263
+            }
+          }
+        },
+        "mock-stream-overlay-open": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 61.27347444895225,
+            "median": 62.41177240928663,
+            "max": 65.2642453972041
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 489.1171875,
+            "median": 491.083984375,
+            "max": 515.11328125
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 276.861328125,
+            "median": 278.69921875,
+            "max": 289.193359375
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 167.5546875,
+            "median": 169.392578125,
+            "max": 175.99609375
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 124.76171875,
+            "median": 124.91015625,
+            "max": 138.8671875
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 3966616,
+            "median": 3969976,
+            "max": 3981024
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.70000000001164,
+            "median": 16.70000000001164,
+            "max": 16.79999999998836
+          },
+          "windows": [
+            {
+              "label": "mock-stream-overlay-open-1",
+              "seconds": 6.008481822000001,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.98870686838869,
+                "timerTicks": 8.987295226937276,
+                "frames": 0,
+                "gamepads": 7.98870686838869
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 62.41177240928663,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 175,
+                "jsEventListeners": 191,
+                "jsHeapUsedBytes": 3966616,
+                "resources": {
+                  "calls": {
+                    "timers": 752,
+                    "timerTicks": 760,
+                    "frames": 1359,
+                    "gamepads": 2095
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 98
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-open-2",
+              "seconds": 6.006351527000006,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.99154025271887,
+                "timerTicks": 8.99048278430873,
+                "frames": 0,
+                "gamepads": 7.99154025271887
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 65.2642453972041,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 175,
+                "jsEventListeners": 191,
+                "jsHeapUsedBytes": 3969976,
+                "resources": {
+                  "calls": {
+                    "timers": 812,
+                    "timerTicks": 828,
+                    "frames": 1359,
+                    "gamepads": 2155
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 98
+                }
+              }
+            },
+            {
+              "label": "mock-stream-overlay-open-3",
+              "seconds": 6.005861481,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 7.992192319428554,
+                "timerTicks": 8.991216359357123,
+                "frames": 0,
+                "gamepads": 7.992192319428554
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999709,
+                "p95Ms": 16.79999999998836,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 61.27347444895225,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 175,
+                "jsEventListeners": 191,
+                "jsHeapUsedBytes": 3981024,
+                "resources": {
+                  "calls": {
+                    "timers": 872,
+                    "timerTicks": 895,
+                    "frames": 1359,
+                    "gamepads": 2215
+                  },
+                  "timers": {
+                    "interval:1000ms": 1,
+                    "timeout:250ms": 2
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 3,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 98
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.832156965457156,
+              "median": 0.8324521096582164,
+              "max": 0.8325200332738084
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 51.61624206297609,
+              "median": 52.42588882380076,
+              "max": 55.27482008130552
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 8.82471235270235,
+              "median": 9.153726620028705,
+              "max": 9.15697320624037
+            }
+          }
+        },
+        "settings-controller": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 3.8305777108541137,
+            "median": 3.9960507450073277,
+            "max": 4.161213064741892
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 473.53125,
+            "median": 473.912109375,
+            "max": 519.64453125
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 269.4267578125,
+            "median": 269.8095703125,
+            "max": 297.9697265625
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 168.609375,
+            "median": 168.9921875,
+            "max": 189.09765625
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 113.046875,
+            "median": 113.046875,
+            "max": 136.734375
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 4708140,
+            "median": 4715972,
+            "max": 4717912
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.70000000001164,
+            "median": 16.70000000001164,
+            "max": 16.79999999998836
+          },
+          "windows": [
+            {
+              "label": "settings-controller-1",
+              "seconds": 6.005929736999999,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 15.984202980028972,
+                "timerTicks": 15.984202980028972,
+                "frames": 60.107263289483946,
+                "gamepads": 76.09146626951292
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.699999999982538,
+                "p95Ms": 16.79999999998836,
+                "maxMs": 16.800000000017462
+              },
+              "matchedProcessCpuPercentOneCore": 3.9960507450073277,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 389,
+                "jsEventListeners": 202,
+                "jsHeapUsedBytes": 4708140,
+                "resources": {
+                  "calls": {
+                    "timers": 1356,
+                    "timerTicks": 1234,
+                    "frames": 1813,
+                    "gamepads": 3020
+                  },
+                  "timers": {
+                    "timeout:125ms": 2
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 17,
+                  "documentListeners": 4,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 246
+                }
+              }
+            },
+            {
+              "label": "settings-controller-2",
+              "seconds": 6.007863478999992,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 15.979058168608583,
+                "timerTicks": 15.979058168608583,
+                "frames": 60.087916654871854,
+                "gamepads": 76.06697482348044
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.699999999982538,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.800000000017462
+              },
+              "matchedProcessCpuPercentOneCore": 4.161213064741892,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 389,
+                "jsEventListeners": 202,
+                "jsHeapUsedBytes": 4715972,
+                "resources": {
+                  "calls": {
+                    "timers": 1476,
+                    "timerTicks": 1354,
+                    "frames": 2265,
+                    "gamepads": 3592
+                  },
+                  "timers": {
+                    "timeout:125ms": 2
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 17,
+                  "documentListeners": 4,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 246
+                }
+              }
+            },
+            {
+              "label": "settings-controller-3",
+              "seconds": 6.004316251000011,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 15.988498271391238,
+                "timerTicks": 15.988498271391238,
+                "frames": 60.1234153747108,
+                "gamepads": 76.11191364610204
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.699999999982538,
+                "p95Ms": 16.70000000001164,
+                "maxMs": 16.800000000017462
+              },
+              "matchedProcessCpuPercentOneCore": 3.8305777108541137,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 389,
+                "jsEventListeners": 202,
+                "jsHeapUsedBytes": 4717912,
+                "resources": {
+                  "calls": {
+                    "timers": 1596,
+                    "timerTicks": 1474,
+                    "frames": 2716,
+                    "gamepads": 4163
+                  },
+                  "timers": {
+                    "timeout:125ms": 2
+                  },
+                  "pendingFrames": 1,
+                  "windowListeners": 17,
+                  "documentListeners": 4,
+                  "peerWrappers": 0,
+                  "openPeers": 0,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 0,
+                  "openChannels": 0,
+                  "mediaSinks": 0,
+                  "observedElements": {
+                    "library": {
+                      "alive": false,
+                      "attached": false
+                    },
+                    "quickSettings": {
+                      "alive": false,
+                      "attached": false
+                    }
+                  },
+                  "attachedElements": 246
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.6661874279746355,
+              "median": 0.8322426129483607,
+              "max": 0.8325105718765133
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 0.8322426129484346,
+              "median": 0.83251057187658,
+              "max": 0.8327342849682463
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 0,
+              "median": 0,
+              "max": 0
+            },
+            "Tab": {
+              "samples": 3,
+              "min": 2.3310296012542344,
+              "median": 2.331655997911232,
+              "max": 2.496727838845097
+            }
+          }
+        },
+        "local-engine-includes-source": {
+          "matchedProcessCpuPercentOneCore": {
+            "samples": 3,
+            "min": 22.478329182315257,
+            "median": 22.975214510899765,
+            "max": 24.80666929774747
+          },
+          "summedRssMiB": {
+            "samples": 18,
+            "min": 682.30859375,
+            "median": 688.265625,
+            "max": 692.0859375
+          },
+          "proportionalMiB": {
+            "samples": 18,
+            "min": 326.177734375,
+            "median": 331.734375,
+            "max": 334.30859375
+          },
+          "privateMiB": {
+            "samples": 18,
+            "min": 191.3671875,
+            "median": 196.615234375,
+            "max": 199.125
+          },
+          "gpuProcessRssMiB": {
+            "samples": 18,
+            "min": 121.75,
+            "median": 121.822265625,
+            "max": 121.8984375
+          },
+          "jsHeapUsedBytesAfterGc": {
+            "samples": 3,
+            "min": 2883008,
+            "median": 2919212,
+            "max": 2945112
+          },
+          "rendererRafP95Ms": {
+            "samples": 3,
+            "min": 16.700000000000728,
+            "median": 16.700000000000728,
+            "max": 16.799999999999272
+          },
+          "windows": [
+            {
+              "label": "local-engine-includes-source-1",
+              "seconds": 6.006449242000002,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 0,
+                "timerTicks": 251.3964472456287,
+                "frames": 0,
+                "gamepads": 278.20096910426855
+              },
+              "rendererRaf": {
+                "samples": 360,
+                "p50Ms": 16.699999999999818,
+                "p95Ms": 16.700000000000728,
+                "maxMs": 16.800000000000182
+              },
+              "matchedProcessCpuPercentOneCore": 24.80666929774747,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 290,
+                "jsEventListeners": 55,
+                "jsHeapUsedBytes": 2883008,
+                "resources": {
+                  "calls": {
+                    "timers": 10,
+                    "timerTicks": 1890,
+                    "frames": 0,
+                    "gamepads": 2100
+                  },
+                  "timers": {
+                    "interval:25000ms": 1,
+                    "interval:1000ms": 1,
+                    "interval:4ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 1,
+                  "peerWrappers": 1,
+                  "openPeers": 1,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 2,
+                  "openChannels": 4,
+                  "mediaSinks": 2,
+                  "observedElements": {},
+                  "attachedElements": 7
+                }
+              }
+            },
+            {
+              "label": "local-engine-includes-source-2",
+              "seconds": 6.0057844559999936,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 0,
+                "timerTicks": 251.4242745577484,
+                "frames": 0,
+                "gamepads": 278.2317634344355
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.69999999999891,
+                "p95Ms": 16.700000000000728,
+                "maxMs": 16.80000000000109
+              },
+              "matchedProcessCpuPercentOneCore": 22.478329182315257,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 290,
+                "jsEventListeners": 55,
+                "jsHeapUsedBytes": 2919212,
+                "resources": {
+                  "calls": {
+                    "timers": 10,
+                    "timerTicks": 3780,
+                    "frames": 0,
+                    "gamepads": 4191
+                  },
+                  "timers": {
+                    "interval:25000ms": 1,
+                    "interval:1000ms": 1,
+                    "interval:4ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 1,
+                  "peerWrappers": 1,
+                  "openPeers": 1,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 2,
+                  "openChannels": 4,
+                  "mediaSinks": 2,
+                  "observedElements": {},
+                  "attachedElements": 7
+                }
+              }
+            },
+            {
+              "label": "local-engine-includes-source-3",
+              "seconds": 6.0064727549999954,
+              "pidSetsObserved": 1,
+              "unmatchedFinalPids": [],
+              "callsPerSecond": {
+                "timers": 0,
+                "timerTicks": 251.56195018818514,
+                "frames": 0,
+                "gamepads": 278.3663671175682
+              },
+              "rendererRaf": {
+                "samples": 359,
+                "p50Ms": 16.700000000000728,
+                "p95Ms": 16.799999999999272,
+                "maxMs": 16.80000000000291
+              },
+              "matchedProcessCpuPercentOneCore": 22.975214510899765,
+              "retentionAfterGc": {
+                "documents": 1,
+                "nodes": 290,
+                "jsEventListeners": 55,
+                "jsHeapUsedBytes": 2945112,
+                "resources": {
+                  "calls": {
+                    "timers": 10,
+                    "timerTicks": 5670,
+                    "frames": 0,
+                    "gamepads": 6284
+                  },
+                  "timers": {
+                    "interval:25000ms": 1,
+                    "interval:1000ms": 1,
+                    "interval:4ms": 1
+                  },
+                  "pendingFrames": 0,
+                  "windowListeners": 19,
+                  "documentListeners": 1,
+                  "peerWrappers": 1,
+                  "openPeers": 1,
+                  "iceListeners": 0,
+                  "latestPeerIceListeners": 0,
+                  "liveTracks": 2,
+                  "openChannels": 4,
+                  "mediaSinks": 2,
+                  "observedElements": {},
+                  "attachedElements": 7
+                }
+              }
+            }
+          ],
+          "roleCpuPercentOneCore": {
+            "Browser": {
+              "samples": 3,
+              "min": 0.49951842627367277,
+              "median": 0.8324353083659324,
+              "max": 0.8324385670385044
+            },
+            "GPU": {
+              "samples": 3,
+              "min": 2.997110557642034,
+              "median": 3.1632541717905465,
+              "max": 3.4962419815617234
+            },
+            "Utility": {
+              "samples": 3,
+              "min": 2.1643318017514277,
+              "median": 2.1645798471859132,
+              "max": 2.3308279877078157
+            },
+            "Receiver profile": {
+              "samples": 3,
+              "min": 7.659282536196309,
+              "median": 7.8248918986397715,
+              "max": 8.657361097200459
+            },
+            "Local source fixture": {
+              "samples": 3,
+              "min": 8.990301330352088,
+              "median": 9.157837815017327,
+              "max": 9.489799664238966
+            }
+          }
+        }
+      },
+      "lifecycle": [
+        {
+          "kind": "mock-ui",
+          "cycle": 5,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4569040,
+            "resources": {
+              "calls": {
+                "timers": 954,
+                "timerTicks": 943,
+                "frames": 1359,
+                "gamepads": 2266
+              },
+              "timers": {
+                "timeout:250ms": 2
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui",
+          "cycle": 10,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4670876,
+            "resources": {
+              "calls": {
+                "timers": 1049,
+                "timerTicks": 999,
+                "frames": 1359,
+                "gamepads": 2326
+              },
+              "timers": {
+                "timeout:250ms": 2,
+                "timeout:40ms": 1
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui",
+          "cycle": 15,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4752932,
+            "resources": {
+              "calls": {
+                "timers": 1142,
+                "timerTicks": 1057,
+                "frames": 1359,
+                "gamepads": 2385
+              },
+              "timers": {
+                "timeout:250ms": 2
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui",
+          "cycle": 20,
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 4788816,
+            "resources": {
+              "calls": {
+                "timers": 1231,
+                "timerTicks": 1113,
+                "frames": 1359,
+                "gamepads": 2442
+              },
+              "timers": {
+                "timeout:250ms": 2
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {
+                "library": {
+                  "alive": false,
+                  "attached": false
+                },
+                "quickSettings": {
+                  "alive": false,
+                  "attached": false
+                }
+              },
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "mock-ui-baseline",
+          "retention": {
+            "documents": 1,
+            "nodes": 638,
+            "jsEventListeners": 227,
+            "jsHeapUsedBytes": 3832400,
+            "resources": {
+              "calls": {
+                "timers": 582,
+                "timerTicks": 568,
+                "frames": 1357,
+                "gamepads": 1932
+              },
+              "timers": {
+                "timeout:250ms": 2
+              },
+              "pendingFrames": 0,
+              "windowListeners": 14,
+              "documentListeners": 3,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 430
+            }
+          }
+        },
+        {
+          "kind": "native-engine-baseline",
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 2501200,
+            "resources": {
+              "calls": {
+                "timers": 0,
+                "timerTicks": 0,
+                "frames": 0,
+                "gamepads": 0
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 5,
+          "retention": {
+            "documents": 1,
+            "nodes": 290,
+            "jsEventListeners": 48,
+            "jsHeapUsedBytes": 2956644,
+            "resources": {
+              "calls": {
+                "timers": 42,
+                "timerTicks": 6080,
+                "frames": 0,
+                "gamepads": 6787
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 1,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 10,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 2984024,
+            "resources": {
+              "calls": {
+                "timers": 77,
+                "timerTicks": 6115,
+                "frames": 0,
+                "gamepads": 6872
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 15,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3017308,
+            "resources": {
+              "calls": {
+                "timers": 109,
+                "timerTicks": 6150,
+                "frames": 0,
+                "gamepads": 6957
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "native-engine",
+          "cycle": 20,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3020604,
+            "resources": {
+              "calls": {
+                "timers": 140,
+                "timerTicks": 6185,
+                "frames": 0,
+                "gamepads": 7042
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          },
+          "senderCleanup": {
+            "connection": "closed",
+            "tracks": ["ended", "ended"]
+          }
+        },
+        {
+          "kind": "pending-ice-baseline",
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3003576,
+            "resources": {
+              "calls": {
+                "timers": 140,
+                "timerTicks": 6185,
+                "frames": 0,
+                "gamepads": 7042
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 5,
+          "settledBefore": 24,
+          "pending": 0,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3016968,
+            "resources": {
+              "calls": {
+                "timers": 150,
+                "timerTicks": 6185,
+                "frames": 0,
+                "gamepads": 7042
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 10,
+          "settledBefore": 29,
+          "pending": 0,
+          "retention": {
+            "documents": 1,
+            "nodes": 290,
+            "jsEventListeners": 48,
+            "jsHeapUsedBytes": 3043548,
+            "resources": {
+              "calls": {
+                "timers": 160,
+                "timerTicks": 6185,
+                "frames": 0,
+                "gamepads": 7042
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 1,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 15,
+          "settledBefore": 34,
+          "pending": 0,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3030628,
+            "resources": {
+              "calls": {
+                "timers": 170,
+                "timerTicks": 6185,
+                "frames": 0,
+                "gamepads": 7042
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-immediate",
+          "cycle": 20,
+          "settledBefore": 39,
+          "pending": 0,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3031536,
+            "resources": {
+              "calls": {
+                "timers": 180,
+                "timerTicks": 6185,
+                "frames": 0,
+                "gamepads": 7042
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        },
+        {
+          "kind": "pending-ice-expired",
+          "pending": 0,
+          "retention": {
+            "documents": 1,
+            "nodes": 10,
+            "jsEventListeners": 27,
+            "jsHeapUsedBytes": 3031536,
+            "resources": {
+              "calls": {
+                "timers": 180,
+                "timerTicks": 6185,
+                "frames": 0,
+                "gamepads": 7042
+              },
+              "timers": {},
+              "pendingFrames": 0,
+              "windowListeners": 13,
+              "documentListeners": 0,
+              "peerWrappers": 0,
+              "openPeers": 0,
+              "iceListeners": 0,
+              "latestPeerIceListeners": 0,
+              "liveTracks": 0,
+              "openChannels": 0,
+              "mediaSinks": 0,
+              "observedElements": {},
+              "attachedElements": 5
+            }
+          }
+        }
+      ],
+      "syntheticInputSamplingDelayMs": [
+        0.5, 0.10000000009313226, 2.2999999998137355, 2.1000000000931323, 2,
+        2.800000000046566, 1.6999999999534339, 2.5, 2.199999999953434, 2
+      ],
+      "localStreamTelemetryLast": {
+        "resolution": "640 x 360",
+        "framesPerSecond": 31,
+        "incomingFramesPerSecond": 30.002043596231285,
+        "decodedFramesPerSecond": 31.002111716105663,
+        "roundTripMs": 0,
+        "packetLossPercent": 0,
+        "bitrateMbps": 0.2644,
+        "codec": "H264",
+        "connection": "local",
+        "jitterMs": 0,
+        "decodeMs": 0.23361290322580638,
+        "jitterBufferMs": 7.4907741935483845,
+        "retransmittedPacketsReceived": 20,
+        "retransmittedBytesReceived": 14378,
+        "nackCount": 0,
+        "pliCount": 0,
+        "firCount": 0,
+        "receiverFramesDropped": 0,
+        "retransmittedPacketsPerSecond": 0,
+        "jitterBufferTargetMs": 11.038354838709687,
+        "jitterBufferMinimumMs": 11.038354838709687,
+        "networkQuality": "excellent",
+        "frameTiming": {
+          "observedFrames": 29,
+          "receiveIntervalP95Ms": 33.900000000001455,
+          "mediaIntervalP95Ms": 33.00000000000125,
+          "decodeP95Ms": 0.4,
+          "receiveToPresentationP95Ms": 29.400000000001455,
+          "presentationLeadP95Ms": -0.2000000000007276,
+          "callbackLatenessP95Ms": 16.700000000000728
+        },
+        "displayedFramesPerSecond": 30,
+        "displayedFpsSource": "video-callback",
+        "presentationCallbacksSkipped": 51,
+        "presentationIntervalSamples": 600,
+        "frameIntervalSource": "expected-display",
+        "frameIntervalP95Ms": 50,
+        "frameIntervalP99Ms": 50.10000000000218,
+        "framesDropped": 0,
+        "freezeCount": 0,
+        "freezeDurationMs": 0,
+        "playoutMode": "low-delay",
+        "playoutTargetMs": 0,
+        "playoutTargetAccepted": true,
+        "inputQueueBytes": 0,
+        "inputPolling": {
+          "targetMs": 4,
+          "samples": 250,
+          "windowMs": 1000,
+          "meanIntervalMs": 4,
+          "p95UpperMs": 5,
+          "maxIntervalMs": 4.400000000139698,
+          "meanJitterMs": 0.046399999944493175,
+          "longGaps": 0
+        },
+        "playbackVisible": true,
+        "documentVisible": true,
+        "playbackFocused": true,
+        "updatedAt": 1792277806526
+      },
+      "engineErrors": []
+    }
+  }
+}

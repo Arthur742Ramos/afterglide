@@ -17,6 +17,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"scripts/**/*.mjs\" \"*.config.ts\" package.json tsconfig.json index.html \"*.md\" \"docs/**/*.md\"",
     "test": "vitest run --maxWorkers=1",
     "test:watch": "vitest",
+    "profile:client": "node scripts/profile-client.mjs",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:headed": "cross-env AFTERGLIDE_CLOUD_E2E_HEADED=1 npm run test:e2e",
     "test:mac-native": "npm run build && cross-env AFTERGLIDE_CLOUD_NATIVE_MAC=1 playwright test mac-native.spec.ts",
