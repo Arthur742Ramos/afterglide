@@ -1811,6 +1811,74 @@ test("background physical navigation is inert and held Accept is released on ref
   ).toBeVisible();
 });
 
+test("starting a stream releases the detached Library navigation tree", async () => {
+  const page = await launch("large-cloud-catalog");
+  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  // A controller preference change refreshes navigation while this page is
+  // visible, independently of the catalog's initial loading order.
+  await page.evaluate(async () => {
+    await window.afterglideCloud.updateSettings({
+      preferredControllerId: "retention-fixture",
+    });
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    (window as unknown as { oldLibrary: WeakRef<Element> }).oldLibrary =
+      new WeakRef(document.querySelector(".cloud-page")!);
+  });
+  await play(page);
+  const session = await page.context().newCDPSession(page);
+  await expect
+    .poll(async () => {
+      await session.send("HeapProfiler.collectGarbage");
+      return page.evaluate(() =>
+        Boolean(
+          (
+            window as unknown as { oldLibrary: WeakRef<Element> }
+          ).oldLibrary.deref(),
+        ),
+      );
+    })
+    .toBe(false);
+});
+
+test("closing controls releases detached Quick Settings panels", async () => {
+  const page = await launch();
+  await play(page);
+  const session = await page.context().newCDPSession(page);
+  for (let cycle = 0; cycle < 3; cycle++) {
+    await page.keyboard.press("F10");
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "true",
+    );
+    await page.evaluate(() => {
+      (window as unknown as { closedPanel: WeakRef<Element> }).closedPanel =
+        new WeakRef(document.querySelector(".quick-settings")!);
+    });
+    await page.keyboard.press("F10");
+    await expect(page.locator(".quick-settings")).toHaveCount(0);
+    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
+      "data-input-suspended",
+      "false",
+    );
+    // Each GC and dereference runs in a separate task. No ElementHandle or
+    // instrumentation keeps the detached controls alive.
+    await expect
+      .poll(async () => {
+        await session.send("HeapProfiler.collectGarbage");
+        return page.evaluate(() =>
+          Boolean(
+            (
+              window as unknown as { closedPanel: WeakRef<Element> }
+            ).closedPanel.deref(),
+          ),
+        );
+      })
+      .toBe(false);
+  }
+});
+
 for (const savedShortcut of [undefined, "stick-chord", "steam-input"]) {
   test(`stick clicks pass through with F10 and pointer controls (${savedShortcut ?? "new profile"})`, async () => {
     let profile: string | undefined;

@@ -215,6 +215,81 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("ICE gathering lifetime", () => {
+  async function gathering() {
+    engine.destroy();
+    peer = new Peer();
+    peer.iceGatheringState = "gathering";
+    engine = new XboxStreamEngine({
+      sessionId: "gathering",
+      container: { replaceChildren() {} } as unknown as HTMLElement,
+      keyboardControls: true,
+      controllerSettings: {
+        preferredControllerId: "",
+        controllerDefaults: defaultControllerTuning,
+        controllerProfiles: [],
+      },
+      onConnected,
+      onInterrupted,
+      onError,
+      onTelemetry,
+      onControllerStatus,
+    });
+    const remove = vi.spyOn(peer, "removeEventListener");
+    const sendIce = vi.spyOn(
+      (
+        win as unknown as {
+          afterglideCloud: { sendIce: () => Promise<unknown[]> };
+        }
+      ).afterglideCloud,
+      "sendIce",
+    );
+    const connected = engine.connect();
+    await vi.advanceTimersByTimeAsync(0);
+    return { connected, remove, sendIce };
+  }
+
+  it("settles cancelled setup immediately without timeout, listeners or later ICE signaling", async () => {
+    const { connected, remove, sendIce } = await gathering();
+    let settled = false;
+    void connected.then(() => {
+      settled = true;
+    });
+    engine.destroy();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(remove).toHaveBeenCalledWith(
+      "icegatheringstatechange",
+      expect.any(Function),
+    );
+    peer.iceGatheringState = "complete";
+    peer.dispatchEvent(new Event("icegatheringstatechange"));
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(sendIce).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each(["complete", "timeout"])(
+    "cleans the gathering wait after %s and continues signaling",
+    async (completion) => {
+      const { connected, remove, sendIce } = await gathering();
+      if (completion === "complete") {
+        peer.iceGatheringState = "complete";
+        peer.dispatchEvent(new Event("icegatheringstatechange"));
+      } else await vi.advanceTimersByTimeAsync(4000);
+      await connected;
+      expect(sendIce).toHaveBeenCalledTimes(1);
+      expect(remove).toHaveBeenCalledWith(
+        "icegatheringstatechange",
+        expect.any(Function),
+      );
+      engine.destroy();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+});
+
 it.each([false, true])(
   "isolates bundled tracks in their media sinks (video first: %s)",
   (videoFirst) => {

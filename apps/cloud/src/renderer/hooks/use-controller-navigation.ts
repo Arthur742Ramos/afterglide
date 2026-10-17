@@ -71,7 +71,12 @@ export function useControllerNavigation(
   const previousScope = useRef<string | undefined>(undefined);
   const previousFocusables = useRef<HTMLElement[]>([]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      // Disabled navigation must not retain detached Library/overlay controls.
+      // Keep identities across enabled scope changes for focus restoration.
+      previousFocusables.current = [];
+      return;
+    }
     const scopeChanged =
       previousScope.current !== undefined &&
       previousScope.current !== focusScope;
