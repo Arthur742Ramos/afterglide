@@ -950,6 +950,7 @@ function CloudPage({
   focusSearch: boolean;
 }) {
   const { query, recentOnly, visibleCount } = browse;
+  const searchQuery = query.trim();
   const setQuery = (value: string) =>
     onBrowse((current) => ({
       ...current,
@@ -997,23 +998,23 @@ function CloudPage({
     error?: string;
   }>();
   useEffect(() => {
-    const text = query.trim();
-    if (!text) {
+    if (!searchQuery) {
       setSearch(undefined);
       return;
     }
     let active = true;
-    setSearch({ query: text, status: "loading", titles: [] });
+    setSearch({ query: searchQuery, status: "loading", titles: [] });
     const timer = setTimeout(() => {
       void window.afterglideCloud
-        .searchCloudTitles(text)
+        .searchCloudTitles(searchQuery)
         .then((titles) => {
-          if (active) setSearch({ query: text, status: "ready", titles });
+          if (active)
+            setSearch({ query: searchQuery, status: "ready", titles });
         })
         .catch(() => {
           if (active)
             setSearch({
-              query: text,
+              query: searchQuery,
               status: "error",
               titles: [],
               error: "Cloud search didn’t finish. Try your search again.",
@@ -1025,7 +1026,11 @@ function CloudPage({
       clearTimeout(timer);
       void window.afterglideCloud.cancelCloudSearch().catch(() => {});
     };
-  }, [query, searchAttempt]);
+  }, [searchQuery, searchAttempt]);
+  const currentSearch = search?.query === searchQuery ? search : undefined;
+  const searchPending =
+    Boolean(searchQuery) &&
+    (!currentSearch || currentSearch.status === "loading");
   const searchInput = useRef<HTMLInputElement>(null);
   const selected = useMemo(
     () =>
@@ -1040,21 +1045,21 @@ function CloudPage({
         (!recentOnly || title.recentlyPlayed) &&
         `${title.name} ${title.publisher}`
           .toLowerCase()
-          .includes(query.toLowerCase()),
+          .includes(searchQuery.toLowerCase()),
     );
-    return query.trim() && search?.query === query.trim()
+    return searchQuery && currentSearch
       ? [
           ...new Map(
             [
               ...localMatches,
-              ...search.titles.filter(
+              ...currentSearch.titles.filter(
                 (title) => !recentOnly || title.recentlyPlayed,
               ),
             ].map((title) => [title.id, title]),
           ).values(),
         ]
       : localMatches;
-  }, [snapshot.cloud.titles, recentOnly, query, search]);
+  }, [snapshot.cloud.titles, recentOnly, searchQuery, currentSearch]);
   const visibleTitles = useMemo(
     () => filtered.slice(0, visibleCount),
     [filtered, visibleCount],
@@ -1101,7 +1106,7 @@ function CloudPage({
                   searchInput.current?.focus();
                 }}
               >
-                ×
+                <Icon name="close" />
               </button>
             )}
           </div>
@@ -1158,15 +1163,15 @@ function CloudPage({
           available.
         </p>
       )}
-      {query.trim() && search?.status === "loading" && (
+      {searchPending && (
         <p className="demo-notice" role="status">
           Searching all cloud games…
         </p>
       )}
-      {query.trim() && search?.status === "error" && (
+      {searchQuery && currentSearch?.status === "error" && (
         <div className="search-error">
           <p className="inline-error" role="alert">
-            {search.error}
+            {currentSearch.error}
           </p>
           <button
             className="text-action"
@@ -1209,7 +1214,7 @@ function CloudPage({
         </div>
       )}
 
-      {snapshot.cloud.status === "ready" && selected && !query.trim() && (
+      {snapshot.cloud.status === "ready" && selected && !searchQuery && (
         <article className="cloud-feature">
           <GameArtwork key={selected.imageUrl} title={selected} featured />
           <div className="cloud-feature-copy">
@@ -1237,56 +1242,146 @@ function CloudPage({
       {snapshot.cloud.status === "ready" && (
         <div className="cloud-library">
           <div className="cloud-library-title">
-            <h2>
-              {query
-                ? "Search results"
-                : recentOnly
-                  ? "Recently played games"
-                  : "All cloud games"}
-            </h2>
-            <span aria-live="polite">
-              {visibleTitles.length < filtered.length
-                ? `Showing ${visibleTitles.length} of ${filtered.length}`
-                : `${filtered.length} ${filtered.length === 1 ? "title" : "titles"}`}
+            <div className="cloud-library-heading">
+              <h2>
+                {searchQuery
+                  ? "Search results"
+                  : recentOnly
+                    ? "Recently played games"
+                    : "All cloud games"}
+              </h2>
+              <p className="cloud-library-hint">
+                {searchQuery
+                  ? recentOnly
+                    ? "Recently played games"
+                    : "All cloud games"
+                  : recentOnly
+                    ? "Most recent first"
+                    : "Recent games first, then A-Z"}
+                {" · Choose a game, then Play."}
+              </p>
+            </div>
+            <span className="cloud-library-count" aria-live="polite">
+              {searchPending && !filtered.length
+                ? "Searching…"
+                : visibleTitles.length < filtered.length
+                  ? `Showing ${visibleTitles.length} of ${filtered.length}`
+                  : `${filtered.length} ${filtered.length === 1 ? "title" : "titles"}`}
             </span>
           </div>
           {filtered.length === 0 ? (
-            <p className="cloud-empty">
-              {query
-                ? search?.status === "error"
-                  ? "No games from your loaded library match this search. Retry to check all cloud games."
-                  : search?.status !== "ready"
-                    ? `Checking all cloud games for “${query}”…`
-                    : `No games match “${query}”.`
-                : recentOnly
-                  ? "No recently played games yet. Choose All games to explore."
-                  : "No cloud games are currently available for this account."}
-            </p>
+            <div className="cloud-empty">
+              <Icon name={searchQuery ? "search" : "cloud"} />
+              <div>
+                <h3>
+                  {searchQuery
+                    ? currentSearch?.status === "error"
+                      ? "No games from your loaded library match this search."
+                      : searchPending
+                        ? `Checking all cloud games for “${searchQuery}”…`
+                        : recentOnly
+                          ? `No recently played games match “${searchQuery}”.`
+                          : `No games match “${searchQuery}”.`
+                    : recentOnly
+                      ? "No recently played games yet."
+                      : "No cloud games are currently available for this account."}
+                </h3>
+                <p>
+                  {searchQuery
+                    ? currentSearch?.status === "error"
+                      ? "Retry search to check all cloud games, or clear your search to browse."
+                      : searchPending
+                        ? "Matches from your loaded library appear while the search finishes."
+                        : recentOnly
+                          ? "Search all games with the same title or publisher, or clear your search."
+                          : "Try a different title or publisher, or clear your search to browse."
+                    : recentOnly
+                      ? "Browse All games to find something to play."
+                      : "Use Refresh library to check again. Xbox determines availability for your account and region."}
+                </p>
+                {(recentOnly || searchQuery) && (
+                  <div className="cloud-empty-actions">
+                    {recentOnly && (
+                      <button
+                        className="secondary-action"
+                        data-focusable
+                        data-library-focus="empty-all-games"
+                        onClick={() => {
+                          if (searchQuery) searchInput.current?.focus();
+                          else
+                            section.current
+                              ?.querySelector<HTMLElement>(
+                                '[data-library-focus="all-games"]',
+                              )
+                              ?.focus();
+                          setRecentOnly(false);
+                        }}
+                      >
+                        {searchQuery ? "Search all games" : "Browse all games"}
+                      </button>
+                    )}
+                    {searchQuery && (
+                      <button
+                        className={
+                          recentOnly ? "text-action" : "secondary-action"
+                        }
+                        data-focusable
+                        data-library-focus="empty-clear-search"
+                        onClick={() => {
+                          searchInput.current?.focus();
+                          setQuery("");
+                        }}
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <>
-              <div className="game-grid">
+              <ul className="game-grid" aria-label="Cloud games">
                 {visibleTitles.map((title) => (
-                  <button
+                  <li
                     key={title.id}
-                    data-library-focus={`game:${title.id}`}
-                    className={title.id === selected?.id ? "selected" : ""}
-                    data-focusable
-                    aria-pressed={title.id === selected?.id}
-                    onClick={(event) => {
-                      if (event.detail === 0 && title.id === selected?.id)
-                        void onPlay(title.id);
-                      else
-                        void window.afterglideCloud.selectCloudTitle(title.id);
-                    }}
-                    onDoubleClick={() => void onPlay(title.id)}
-                    aria-label={`${title.name}, ${title.publisher}`}
+                    className={`game-card${title.id === selected?.id ? " selected" : ""}`}
                   >
-                    <GameArtwork key={title.imageUrl} title={title} />
-                    <strong>{title.name}</strong>
-                    <span>{title.publisher}</span>
-                  </button>
+                    <button
+                      className="game-select"
+                      data-library-focus={`game:${title.id}`}
+                      data-focusable
+                      aria-pressed={title.id === selected?.id}
+                      onClick={(event) => {
+                        if (event.detail === 0 && title.id === selected?.id)
+                          void onPlay(title.id);
+                        else
+                          void window.afterglideCloud.selectCloudTitle(
+                            title.id,
+                          );
+                      }}
+                      onDoubleClick={() => void onPlay(title.id)}
+                      aria-label={`${title.name}, ${title.publisher}`}
+                    >
+                      <GameArtwork key={title.imageUrl} title={title} />
+                      <strong title={title.name}>{title.name}</strong>
+                      <span title={title.publisher}>{title.publisher}</span>
+                    </button>
+                    {title.id === selected?.id && (
+                      <button
+                        className="game-card-play"
+                        data-library-focus={`play-game:${title.id}`}
+                        data-focusable
+                        aria-label={`Play ${title.name}`}
+                        disabled={!navigator.onLine}
+                        onClick={() => void onPlay(title.id)}
+                      >
+                        <Icon name="play" /> Play
+                      </button>
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ul>
               {visibleTitles.length < filtered.length && (
                 <button
                   className="secondary-action cloud-load-more"
@@ -1390,8 +1485,19 @@ function ConnectingScreen({
 
         <h1>{snapshot.session.label}</h1>
         <p>{snapshot.session.detail}</p>
-        <div className="progress-track">
-          <span style={{ width: `${snapshot.session.progress}%` }} />
+        <div
+          className="progress-track"
+          role="progressbar"
+          aria-label="Connection progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={snapshot.session.progress}
+        >
+          <span
+            style={{
+              transform: `scaleX(${snapshot.session.progress / 100})`,
+            }}
+          />
         </div>
         <div className="stage-list">
           {stageLabels.map((label, index) => (

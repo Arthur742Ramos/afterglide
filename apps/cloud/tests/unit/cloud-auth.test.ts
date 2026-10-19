@@ -119,7 +119,7 @@ describe("cloud-only service authentication", () => {
     }
   });
 
-  it("shows hydrated games while a later catalog batch is still pending", async () => {
+  it("preserves Xbox recent-play order during hydration, search and cached loads", async () => {
     const rows = Array.from({ length: 200 }, (_, index) => ({
       titleId: `title-${index}`,
       details: { productId: `product-${index}` },
@@ -131,8 +131,19 @@ describe("cloud-only service authentication", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init: RequestInit) => {
+        if (url.includes("/search/v2?"))
+          return Response.json({
+            Products: {
+              "product-0": { ProductTitle: "Game product-0" },
+              "product-199": { ProductTitle: "Game product-199" },
+            },
+          });
         if (!url.startsWith("https://catalog.gamepass.com/"))
-          return Response.json({ results: url.includes("/mru?") ? [] : rows });
+          return Response.json({
+            results: url.includes("/mru?")
+              ? [rows[199], rows[0], rows[100]]
+              : rows,
+          });
         const ids = JSON.parse(String(init.body)).Products as string[];
         if (!ids.includes("product-0")) await delayed;
         return Response.json({
@@ -163,14 +174,31 @@ describe("cloud-only service authentication", () => {
         });
       await vi.waitFor(() => expect(updates[0]).toHaveLength(25));
       expect(completed).toBe(false);
+      expect(updates[0].slice(0, 3).map((title) => title.id)).toEqual([
+        "title-199",
+        "title-0",
+        "title-100",
+      ]);
       expect(
         updates[0].every(
           (title) => title.imageUrl && title.name.startsWith("Game "),
         ),
       ).toBe(true);
       finish();
-      expect(await result).toHaveLength(200);
+      const titles = await result;
+      expect(titles).toHaveLength(200);
+      expect(titles.slice(0, 5).map((title) => title.id)).toEqual([
+        "title-199",
+        "title-0",
+        "title-100",
+        "title-1",
+        "title-10",
+      ]);
       expect(updates.at(-1)).toHaveLength(200);
+      expect(await platform.listCloudTitles()).toEqual(titles);
+      expect(
+        (await platform.searchCloudTitles("Game")).map((title) => title.id),
+      ).toEqual(["title-199", "title-0"]);
     } finally {
       finish();
       vi.unstubAllGlobals();

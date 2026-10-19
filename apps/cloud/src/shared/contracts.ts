@@ -15,6 +15,8 @@ export interface CloudTitle {
   imageUrl?: string;
   supportedInputTypes: string[];
   recentlyPlayed: boolean;
+  /** Position in Xbox's most-recently-used list; zero is the newest. */
+  recentPlayRank?: number;
 }
 
 export interface DeviceCode {

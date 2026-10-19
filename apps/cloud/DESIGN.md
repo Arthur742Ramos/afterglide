@@ -28,8 +28,8 @@ converted values when their renderer does not parse OKLCH.
 ## Typography
 
 Use Inter where it is bundled and `system-ui` as the fallback. The interface uses
-one family in weights 400, 500, 600, and 700. Default body text is 18 px on the
-Deck's 1280×800 viewport. Primary actions are at least 20 px. Supporting text is
+one family in weights 400, 500, 600, and 700. Default body text is 18 px at the
+1280×800 desktop reference size. Primary actions are at least 20 px. Supporting text is
 never smaller than 14 px.
 
 ## Layout
@@ -75,6 +75,20 @@ Primary buttons use dark ink on cobalt for contrast. Supporting labels stay at
 states. Settings switches retain compact visuals with expanded touch areas.
 
 The navigation mark matches the application icon. Library selection uses game artwork and a visible focus state. Authentication uses rounded panel geometry and circular step markers. Compact 960x600 windows reduce featured-game artwork and spacing; the main 1280x800 composition retains generous spacing.
+
+## Library interactions
+
+Selecting a game previews it without moving the player's scroll position. The
+selected card exposes a separate, labeled Play button, so launch remains available
+in lower rows and search results. Keyboard/controller activation of an already
+selected game and pointer double-click remain shortcuts, not the only ways to play.
+Game titles may use two lines; full title and publisher remain accessible.
+
+Recently played explicitly communicates most-recent-first ordering. Search makes
+the active scope visible, trims surrounding whitespace for matching, and does not
+announce a final zero count while still loading. Empty states explain the next
+action inline: widen a recent-only search without changing the query, or clear the
+search. These actions preserve deliberate keyboard focus.
 
 ## Stream controls
 
