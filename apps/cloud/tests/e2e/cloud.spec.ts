@@ -380,25 +380,99 @@ test("first sign-in leads directly to cloud readiness and Library", async () => 
 
 test("library search, recent filter and paging remain reachable", async () => {
   const page = await launch("large-cloud-catalog");
-  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(48);
   await page.getByRole("button", { name: "Show 32 more games" }).click();
-  await expect(page.locator(".game-grid button")).toHaveCount(80);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(80);
+  // Local matches must remain usable even when the remote search has no results.
+  await app.evaluate(({ ipcMain }, channel) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, () => []);
+  }, IPC.searchCloudTitles);
   await page
     .getByRole("textbox", { name: "Search cloud games" })
-    .fill("Cloud Game 80");
-  await expect(page.locator(".game-grid button")).toHaveCount(1);
+    .fill("  Cloud Game 80  ");
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(1);
   await expect(page.locator(".cloud-feature")).toHaveCount(0);
   await page.screenshot({ path: join(root, "artifacts/e2e/cloud-search.png") });
   await page.getByRole("button", { name: "Clear game search" }).click();
   await page
     .getByRole("button", { name: "Recently played", exact: true })
     .click();
-  await expect(page.locator(".game-grid button")).toHaveCount(1);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(1);
+});
+
+for (const context of ["browsing", "search"] as const) {
+  test(`selected games have an in-place Play action while ${context}`, async () => {
+    const page = await launch("large-cloud-catalog");
+    await page.setViewportSize({ width: 960, height: 600 });
+    if (context === "search")
+      await page
+        .getByRole("textbox", { name: "Search cloud games" })
+        .fill("Cloud Game 48");
+    const game = page.getByRole("button", {
+      name: "Cloud Game 48, Xbox Game Studios",
+      exact: true,
+    });
+    await game.click();
+    await expect(game).toHaveAttribute("aria-pressed", "true");
+    const play = page.getByRole("button", {
+      name: "Play Cloud Game 48",
+      exact: true,
+    });
+    await expect(play).toBeInViewport({ ratio: 1 });
+    if (context === "search") {
+      await play.focus();
+      await page.keyboard.press("Enter");
+    } else await play.click();
+    await expect(page.getByTestId("mock-stream")).toBeVisible();
+    expect(
+      await page.evaluate(
+        async () =>
+          (await window.afterglideCloud.getSnapshot()).session.titleId,
+      ),
+    ).toBe("CLOUD-GAME-48");
+  });
+}
+
+test("empty recent searches can widen scope without losing the query or keyboard focus", async () => {
+  const page = await launch("large-cloud-catalog");
+  const search = page.getByRole("textbox", { name: "Search cloud games" });
+  await search.fill("Cloud Game 48");
+  await expect(
+    page.getByRole("button", {
+      name: "Cloud Game 48, Xbox Game Studios",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Recently played", exact: true })
+    .click();
+  const expand = page.getByRole("button", {
+    name: "Search all games",
+    exact: true,
+  });
+  await expect(expand).toBeVisible();
+  await expand.focus();
+  await page.keyboard.press("Enter");
+  await expect(search).toHaveValue("Cloud Game 48");
+  await expect(search).toBeFocused();
+  await expect(
+    page.getByRole("button", {
+      name: "All games",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("button", {
+      name: "Cloud Game 48, Xbox Game Studios",
+      exact: true,
+    }),
+  ).toBeVisible();
 });
 
 test("search failure has a retry and never claims it is still loading", async () => {
   const page = await launch();
-  await expect(page.locator(".game-grid button")).toHaveCount(3);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(3);
   await app.evaluate(({ ipcMain }, channel) => {
     let attempts = 0;
     ipcMain.removeHandler(channel);
@@ -426,7 +500,7 @@ for (const input of ["keyboard", "controller"] as const) {
   for (const result of ["empty", "matching"] as const) {
     test(`successful ${result} retry preserves ${input} focus in search`, async () => {
       const page = await launch();
-      await expect(page.locator(".game-grid button")).toHaveCount(3);
+      await expect(page.locator(".game-grid .game-select")).toHaveCount(3);
       const title = await page.evaluate(async () => ({
         ...(await window.afterglideCloud.getSnapshot()).cloud.titles[0],
         name: "Focus retry fixture",
@@ -458,7 +532,7 @@ for (const input of ["keyboard", "controller"] as const) {
       await expect(retry).toHaveCount(0);
       if (result === "empty")
         await expect(page.getByText(/No games match/)).toBeVisible();
-      await expect(page.locator(".game-grid button")).toHaveCount(
+      await expect(page.locator(".game-grid .game-select")).toHaveCount(
         result === "empty" ? 0 : 1,
       );
       await expect(page.getByText(/Searching all cloud games/)).toHaveCount(0);
@@ -475,7 +549,7 @@ for (const input of ["keyboard", "controller"] as const) {
 for (const moved of ["another control", "Settings"] as const) {
   test(`pending retry preserves a newer focus choice in ${moved}`, async () => {
     const page = await launch();
-    await expect(page.locator(".game-grid button")).toHaveCount(3);
+    await expect(page.locator(".game-grid .game-select")).toHaveCount(3);
     await app.evaluate(({ ipcMain }, channel) => {
       let attempts = 0;
       ipcMain.removeHandler(channel);
@@ -545,7 +619,7 @@ for (const moved of ["another control", "Settings"] as const) {
 
 test("rapid keyboard retries retain focus through another failure and success", async () => {
   const page = await launch();
-  await expect(page.locator(".game-grid button")).toHaveCount(3);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(3);
   await app.evaluate(({ ipcMain }, channel) => {
     let attempts = 0;
     ipcMain.removeHandler(channel);
@@ -663,20 +737,20 @@ test("Settings handles Back as soon as its heading is committed", async () => {
   );
   await expect(search).toHaveValue("Sea");
   await expect(search).toBeFocused();
-  await expect(page.locator(".game-grid button")).toHaveCount(1);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(1);
 });
 
 test("Settings returns to the same Library search, filter, page and focus", async () => {
   const page = await launch("large-cloud-catalog");
   await page.getByRole("button", { name: "Show 32 more games" }).click();
-  const lastGame = page.locator(".game-grid button").last();
+  const lastGame = page.locator(".game-grid .game-select").last();
   await lastGame.focus();
   await nativeCommand("desktop-settings");
   await expect(
     page.getByRole("heading", { name: "Settings", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.locator(".game-grid button")).toHaveCount(80);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(80);
   // Controller navigation's initial focus pass must not overwrite restoration.
   await page.waitForTimeout(100);
   await expect(lastGame).toBeFocused();
@@ -697,14 +771,14 @@ test("Settings returns to the same Library search, filter, page and focus", asyn
   await expect(
     page.getByRole("button", { name: "Recently played", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".game-grid button")).toHaveCount(1);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(1);
 });
 
 for (const choice of ["search", "rail", "restore"] as const) {
   test(`Library return preserves ${choice} focus before the next renderer frame`, async () => {
     const page = await launch();
-    const lastGame = page.locator(".game-grid button").last();
-    await expect(page.locator(".game-grid button")).toHaveCount(3);
+    const lastGame = page.locator(".game-grid .game-select").last();
+    await expect(page.locator(".game-grid .game-select")).toHaveCount(3);
     const savedFocus = await lastGame.getAttribute("data-library-focus");
     const search = page.getByRole("textbox", { name: "Search cloud games" });
     const settings = page.getByRole("button", {
@@ -777,10 +851,10 @@ for (const choice of ["search", "rail", "restore"] as const) {
 for (const entry of ["native", "pointer", "controller"] as const) {
   test(`${entry} Settings entry focuses preferences and preserves Library return`, async () => {
     const page = await launch();
-    await expect(page.locator(".game-grid button")).toHaveCount(3);
+    await expect(page.locator(".game-grid .game-select")).toHaveCount(3);
     const search = page.getByRole("textbox", { name: "Search cloud games" });
     await search.fill("Sea");
-    await expect(page.locator(".game-grid button")).toHaveCount(1);
+    await expect(page.locator(".game-grid .game-select")).toHaveCount(1);
     await search.focus();
     const settings = page.getByRole("button", {
       name: "Settings",
@@ -817,7 +891,7 @@ for (const entry of ["native", "pointer", "controller"] as const) {
     else await page.keyboard.press("Escape");
     await expect(search).toHaveValue("Sea");
     await expect(search).toBeFocused();
-    await expect(page.locator(".game-grid button")).toHaveCount(1);
+    await expect(page.locator(".game-grid .game-select")).toHaveCount(1);
   });
 }
 
@@ -923,7 +997,7 @@ test("signing out clears account-scoped Library search, filter and paging", asyn
   await expect(
     page.getByRole("button", { name: "All games", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(48);
   await expect(page.getByRole("button", { name: /Play again/ })).toBeFocused();
 });
 
@@ -940,7 +1014,7 @@ test("polished Library and Settings remain accessible at desktop sizes and 200 p
     expect(
       await page
         .locator(
-          ".game-grid button > span,.cloud-library-title span,.demo-notice",
+          ".game-grid .game-select > span,.cloud-library-title span,.demo-notice",
         )
         .evaluateAll((elements) =>
           elements.every(
@@ -991,6 +1065,41 @@ test("polished Library and Settings remain accessible at desktop sizes and 200 p
   await accessible(page);
   await page.screenshot({
     path: join(root, "artifacts/e2e/cloud-polish-library-200.png"),
+  });
+  const search = page.getByRole("textbox", { name: "Search cloud games" });
+  await search.fill("Flight Simulator");
+  await page
+    .getByRole("button", {
+      name: /^Microsoft Flight Simulator 2024 Premium Deluxe World Edition,/,
+    })
+    .click();
+  await reachable(
+    page,
+    page.getByRole("button", {
+      name: "Play Microsoft Flight Simulator 2024 Premium Deluxe World Edition",
+      exact: true,
+    }),
+    true,
+  );
+  await accessible(page);
+  await page.screenshot({
+    path: join(root, "artifacts/e2e/cloud-polish-library-play-200.png"),
+  });
+  await search.fill("No matching game");
+  await page
+    .getByRole("button", { name: "Recently played", exact: true })
+    .click();
+  await expect(page.locator(".cloud-empty h3")).toHaveText(
+    "No recently played games match “No matching game”.",
+  );
+  await reachable(
+    page,
+    page.getByRole("button", { name: "Search all games", exact: true }),
+    true,
+  );
+  await accessible(page);
+  await page.screenshot({
+    path: join(root, "artifacts/e2e/cloud-polish-library-empty-200.png"),
   });
 });
 
@@ -1224,19 +1333,22 @@ test("controller directional library traversal keeps offline launches blocked", 
   const page = await launch();
   await expect(page.getByRole("button", { name: /Play again/ })).toBeFocused();
   await page.evaluate(() => window.afterglideCloudTest!.injectGamepad("down"));
-  await expect(page.locator(".game-grid button").last()).toBeFocused();
+  await expect(page.locator(".game-grid .game-select").last()).toBeFocused();
   await page.evaluate(() =>
     window.afterglideCloudTest!.injectGamepad("accept"),
   );
   await expect(page.locator(".cloud-feature h2")).toHaveText("Sea of Thieves");
   await simulateOffline(page);
   await expect(
+    page.getByRole("button", { name: "Play Sea of Thieves", exact: true }),
+  ).toBeDisabled();
+  await expect(
     page.getByText(/offline.*browse|offline.*launch/i),
   ).toBeVisible();
   await page.evaluate(() =>
     window.afterglideCloudTest!.injectGamepad("accept"),
   );
-  await page.locator(".game-grid button").last().dblclick();
+  await page.locator(".game-grid .game-select").last().dblclick();
   expect(
     await page.evaluate(
       async () => (await window.afterglideCloud.getSnapshot()).session.phase,
@@ -1813,7 +1925,7 @@ test("background physical navigation is inert and held Accept is released on ref
 
 test("starting a stream releases the detached Library navigation tree", async () => {
   const page = await launch("large-cloud-catalog");
-  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(48);
   // A controller preference change refreshes navigation while this page is
   // visible, independently of the catalog's initial loading order.
   await page.evaluate(async () => {
@@ -2376,7 +2488,7 @@ for (const device of [
 
 test("native IPC sends no catalog entries for repeated settings updates", async () => {
   const page = await launch("large-cloud-catalog");
-  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(48);
   const evidence = await page.evaluate(async () => {
     const baseline = await window.afterglideCloud.getSnapshot();
     let messages = 0,
@@ -2411,7 +2523,7 @@ test("native IPC sends no catalog entries for repeated settings updates", async 
   expect(evidence.baselineTitles).toBe(80);
   expect(evidence.messages).toBe(20);
   expect(evidence.entries).toBe(0);
-  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(48);
   await page.evaluate(() =>
     window.afterglideCloud.updateSettings({ muted: true }),
   );
@@ -2420,7 +2532,7 @@ test("native IPC sends no catalog entries for repeated settings updates", async 
   );
   expect(baseline.cloud.titles).toHaveLength(80);
   await page.reload();
-  await expect(page.locator(".game-grid button")).toHaveCount(48);
+  await expect(page.locator(".game-grid .game-select")).toHaveCount(48);
 });
 
 test("late bootstrap reply and obsolete account events cannot replace a newer catalog", async () => {

@@ -22,6 +22,11 @@ measurements are simulated. This image is not a live Xbox performance result._
 ## Make the desktop your place to play
 
 - Open a recent title or search the cloud games available to your account.
+- Select a game to preview it, then use Play on its card—even in search results
+  or further down the library. Empty recent searches can expand to All games
+  without losing your query.
+- Recently played games appear from most recent to least recent, using Xbox's
+  play history.
 - Browse with a controller, keyboard or mouse. Adjust local deadzones, trigger
   travel, button mappings and supported rumble in Settings.
 - Use fullscreen and change volume, picture fit and stream preferences in

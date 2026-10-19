@@ -5,6 +5,7 @@ export type IconName =
   | "home"
   | "cloud"
   | "search"
+  | "close"
   | "pulse"
   | "settings"
   | "console"
@@ -29,6 +30,7 @@ const paths: Record<IconName, React.ReactNode> = {
   search: (
     <path d="m20 20-4.4-4.4m2.4-5.1a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
   ),
+  close: <path d="m6 6 12 12M6 18 18 6" />,
   pulse: <path d="M3 12h4l2.2-6 4.1 12 2.2-6H21" />,
   settings: (
     <>

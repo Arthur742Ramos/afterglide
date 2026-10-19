@@ -391,11 +391,24 @@ describe("AppController", () => {
     );
   });
 
-  it("makes partial catalog games playable and ignores late progress after sign-out", async () => {
+  it("keeps recent-play order through partial catalog and search merges and ignores late progress after sign-out", async () => {
     const platform = new FakePlatform();
     const controller = makeController(platform);
     await controller.initialize();
-    const titles = controller.getSnapshot().cloud.titles;
+    const template = controller.getSnapshot().cloud.titles[0];
+    const newest = {
+      ...template,
+      id: "newest",
+      name: "Zulu",
+      recentPlayRank: 0,
+    };
+    const older = {
+      ...template,
+      id: "older",
+      name: "Alpha",
+      recentPlayRank: 1,
+    };
+    const titles = [newest, older, template];
     let publish!: (titles: CloudTitle[]) => void;
     let finish!: (titles: CloudTitle[]) => void;
     vi.spyOn(platform, "listCloudTitles").mockImplementation((onProgress) => {
@@ -413,6 +426,9 @@ describe("AppController", () => {
     });
     await controller.startCloudStream(titles[0].id);
     expect(platform.startedTarget?.id).toBe(titles[0].id);
+    vi.spyOn(platform, "searchCloudTitles").mockResolvedValue([older, newest]);
+    await controller.searchCloudTitles("a");
+    expect(controller.getSnapshot().cloud.titles).toEqual(titles);
     await controller.signOut();
     publish(titles);
     finish(titles);

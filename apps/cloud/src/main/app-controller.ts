@@ -12,6 +12,7 @@ import type {
   PlaybackWindowState,
 } from "../shared/contracts";
 import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
+import { compareCloudTitles } from "../shared/cloud-titles";
 import { sanitizeSettingsUpdate } from "../shared/controller-settings";
 import { NETWORK_POLICY } from "../shared/network-policy";
 import { errorForLog, safeError } from "./errors";
@@ -1118,11 +1119,5 @@ function mergeCloudTitles(
     ...new Map(
       [...previous, ...incoming].map((title) => [title.id, title]),
     ).values(),
-  ].sort((a, b) =>
-    a.recentlyPlayed === b.recentlyPlayed
-      ? a.name.localeCompare(b.name)
-      : a.recentlyPlayed
-        ? -1
-        : 1,
-  );
+  ].sort(compareCloudTitles);
 }

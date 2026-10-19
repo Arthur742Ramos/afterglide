@@ -6,6 +6,7 @@ import type {
   DeviceCode,
   IceCandidatePayload,
 } from "../shared/contracts";
+import { compareCloudTitles } from "../shared/cloud-titles";
 import {
   isTransientHttpStatus,
   NETWORK_POLICY,
@@ -1065,6 +1066,7 @@ export function mapCloudTitles(
   products: CatalogProduct[],
   recentIds: ReadonlySet<string>,
 ): CloudTitle[] {
+  const recentRanks = new Map([...recentIds].map((id, index) => [id, index]));
   const byProduct = new Map(
     products
       .filter((product) => product.StoreId)
@@ -1090,15 +1092,10 @@ export function mapCloudTitles(
         ),
         supportedInputTypes: row.details?.supportedInputTypes ?? [],
         recentlyPlayed: recentIds.has(titleId),
+        recentPlayRank: recentRanks.get(titleId),
       };
     })
-    .sort((left, right) =>
-      left.recentlyPlayed === right.recentlyPlayed
-        ? left.name.localeCompare(right.name)
-        : left.recentlyPlayed
-          ? -1
-          : 1,
-    );
+    .sort(compareCloudTitles);
 }
 
 function catalogProducts(catalog: CatalogResponse): CatalogProduct[] {
