@@ -58,7 +58,7 @@ function pressedControls(frame: XboxInputFrame): number {
  * Preserve button and tuned trigger rest/pressed (>0) edges, not historical
  * analog travel. Queued trigger presses use the latest nonzero magnitude;
  * sticks always use the latest position. Limits apply before sending, including
- * on drain. Exceeding either fails visibly and prioritizes neutral.
+ * on drain. Exceeding either asks the caller to discard history and send neutral.
  */
 export class InputTransitionBuffer {
   private transitions: { controls: number; at: number }[] = [];

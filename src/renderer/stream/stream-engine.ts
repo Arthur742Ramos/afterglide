@@ -92,6 +92,7 @@ export class XboxStreamEngine {
   private sequence = 0;
   private lastInputAt = 0;
   private inputTimer = 0;
+  private inputStallTimer = 0;
   private neutralPending = false;
   private handshakeAcknowledged = false;
   private telemetryTimer = 0;
@@ -352,6 +353,8 @@ export class XboxStreamEngine {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    clearTimeout(this.inputStallTimer);
+    this.inputStallTimer = 0;
     clearInterval(this.inputTimer);
     clearInterval(this.telemetryTimer);
     clearInterval(this.keepaliveTimer);
@@ -606,15 +609,31 @@ export class XboxStreamEngine {
         },
         heartbeatDue,
       );
-    if (failure) this.failInputBuffer(failure);
+    if (failure) this.resetInputBuffer(failure);
   }
 
-  private failInputBuffer(reason: InputBufferFailure): void {
-    this.notifyError(
-      reason === "overflow"
-        ? "Controller input congestion exceeded 32 queued button/trigger transitions. The stream stopped to avoid losing controls; reconnect to continue."
-        : "Controller input was delayed over 250 ms. The stream stopped rather than replaying stale controls; reconnect to continue.",
+  private resetInputBuffer(reason: InputBufferFailure): void {
+    console.warn(
+      "Controller input queue reset; discarding stale controls without ending the session",
+      reason,
     );
+    this.releaseInput();
+  }
+
+  private inputBlocked(): false {
+    if (!this.inputStallTimer && !this.destroyed && !this.terminal) {
+      this.inputStallTimer = window.setTimeout(() => {
+        // A delayed renderer callback is not proof the channel is still blocked.
+        this.releaseInput();
+        if (!this.neutralPending) return;
+        if (this.connected) this.notifyInterrupted();
+        else
+          this.notifyError(
+            "The Xbox input channel stopped accepting controls. Reconnect to try again.",
+          );
+      }, NETWORK_POLICY.disconnectedGraceMs);
+    }
+    return false;
   }
 
   private sendInputFrame(frame: InputFrame): boolean {
@@ -624,7 +643,7 @@ export class XboxStreamEngine {
       this.channels.input.readyState !== "open" ||
       this.channels.input.bufferedAmount > 0
     )
-      return false;
+      return this.inputBlocked();
     const bytes = new Uint8Array(38);
     const packet = new DataView(bytes.buffer);
     packet.setUint16(0, 2, true);
@@ -634,9 +653,11 @@ export class XboxStreamEngine {
     writeGamepad(packet, 15, frame);
     try {
       this.channels.input.send(packet);
+      clearTimeout(this.inputStallTimer);
+      this.inputStallTimer = 0;
       return true;
     } catch {
-      return false;
+      return this.inputBlocked();
     }
   }
 
@@ -877,6 +898,8 @@ export class XboxStreamEngine {
   private notifyInterrupted(): void {
     if (this.destroyed || this.terminal) return;
     this.terminal = true;
+    clearTimeout(this.inputStallTimer);
+    this.inputStallTimer = 0;
     this.releaseInput();
     this.frameMetrics.stop();
     clearTimeout(this.disconnectedTimer);
@@ -888,6 +911,8 @@ export class XboxStreamEngine {
   private notifyError(message: string): void {
     if (this.destroyed || this.terminal) return;
     this.terminal = true;
+    clearTimeout(this.inputStallTimer);
+    this.inputStallTimer = 0;
     this.releaseInput();
     this.frameMetrics.stop();
     clearTimeout(this.connectionDeadlineTimer);
