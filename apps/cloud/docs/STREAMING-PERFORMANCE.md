@@ -18,10 +18,18 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   channel has queued bytes, fresh stick samples replace historical movement.
   Button and trigger rest/press edges share an ordered buffer of 32 transitions;
   intermediate trigger travel and stick motion coalesce. The buffer has
-  an oldest age of 250 ms. Exceeding either limit fails closed with a visible
-  stream error rather than silently losing actions or replaying arbitrarily old
-  input. This is bounded short-congestion tolerance, not a promise to preserve
-  input through prolonged outages. Packets already inside SCTP or the network
+  an oldest age of 250 ms, which measures local queue age, not controller or
+  network latency. Exceeding either limit logs a warning, discards queued actions,
+  and prioritizes a neutral reset without ending video or the remote session.
+  Held controller buttons, triggers and sticks must return to rest before being
+  accepted again; keyboard controls require a fresh press. Stale taps are intentionally
+  not replayed. If no input packet can be sent for three seconds, the engine
+  requests automatic session recovery instead of reporting a terminal queue-age
+  error. Successful sends cancel that deadline, including a pending neutral
+  release. The deadline retries neutral before recovering, so a delayed renderer
+  callback cannot terminate an already-drained channel. This fallback starts
+  a replacement cloud session and cannot guarantee
+  preservation of game progress. Packets already inside SCTP or the network
   cannot be recalled.
 - The hot input path reuses its sampled frame and compares a compact digital
   transition mask plus numeric frame fields. It does not allocate transition

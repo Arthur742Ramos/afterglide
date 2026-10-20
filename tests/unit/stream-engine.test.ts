@@ -8,8 +8,10 @@ import {
 class Channel extends EventTarget {
   readyState = "connecting";
   bufferedAmount = 0;
+  failSend = false;
   sent: unknown[] = [];
   send(value: unknown) {
+    if (this.failSend) throw new Error("send failed");
     this.sent.push(value);
   }
   close() {
@@ -166,6 +168,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   engine.destroy();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -358,48 +361,118 @@ describe("real stream engine input lifecycle", () => {
       -32767, -32767,
     ]);
   });
-  it("fails visibly on expired input and retries neutral even after failure", () => {
+  it("discards expired taps, sends neutral first, and continues the same session", () => {
     ready();
     peer.channels.input.bufferedAmount = 38;
     button = 1;
     vi.advanceTimersByTime(4);
     button = 0;
     vi.advanceTimersByTime(260);
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining("250 ms"));
+    expect(onError).not.toHaveBeenCalled();
     expect(frames()).toHaveLength(0);
     peer.channels.input.bufferedAmount = 0;
     vi.advanceTimersByTime(50);
-    expect(frames().map(a)).toEqual([false]);
+    expect(frames().every((frame) => !a(frame))).toBe(true);
+    expect(frames().length).toBeGreaterThan(0);
+    expect(frames()[0].getUint16(16, true)).toBe(0);
+    expect(frames()[0].getInt16(18, true)).toBe(0);
     button = 1;
     axis = 1;
     win.dispatchEvent(Object.assign(new Event("keydown"), { code: "Space" }));
     peer.channels.input.dispatchEvent(new Event("bufferedamountlow"));
     vi.advanceTimersByTime(100);
-    expect(frames().map(a)).toEqual([false]);
-    expect(frames()[0].getUint16(16, true)).toBe(0);
-    expect(frames()[0].getInt16(18, true)).toBe(0);
-    expect(onError).toHaveBeenCalledTimes(1);
+    expect(a(frames().at(-1)!)).toBe(true);
+    expect(frames().at(-1)!.getInt16(18, true)).toBe(32767);
+    vi.advanceTimersByTime(3_000);
+    expect(onInterrupted).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
   });
-  it("fails visibly at queue capacity instead of silently losing an edge", () => {
+  it("resets overflowing input without replaying queued presses or ending video", () => {
     ready();
     peer.channels.input.bufferedAmount = 38;
     for (let i = 0; i < 33; i++) {
       button = 1 - button;
       vi.advanceTimersByTime(4);
     }
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining("32 queued"));
+    expect(onError).not.toHaveBeenCalled();
     peer.channels.input.bufferedAmount = 0;
     peer.channels.input.dispatchEvent(new Event("bufferedamountlow"));
-    expect(frames().map(a)).toEqual([false]);
+    expect(frames().map(a)).toEqual([false, true]);
+    button = 0;
+    vi.advanceTimersByTime(4);
     button = 1;
     axis = 1;
     win.dispatchEvent(Object.assign(new Event("keydown"), { code: "Space" }));
     peer.channels.input.dispatchEvent(new Event("bufferedamountlow"));
     vi.advanceTimersByTime(100);
-    expect(frames().map(a)).toEqual([false]);
+    expect(a(frames().at(-1)!)).toBe(true);
     expect(frames()[0].getUint16(16, true)).toBe(0);
     expect(frames()[0].getInt16(18, true)).toBe(0);
-    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onInterrupted).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+  it.each(["queued", "throw"] as const)(
+    "automatically recovers a persistently blocked input channel (%s), even without button edges",
+    (reason) => {
+      ready();
+      media[0].dispatchEvent(new Event("playing"));
+      if (reason === "queued") peer.channels.input.bufferedAmount = 38;
+      else peer.channels.input.failSend = true;
+      axis = 1;
+      vi.advanceTimersByTime(4);
+      vi.advanceTimersByTime(2_999);
+      expect(onInterrupted).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(onInterrupted).toHaveBeenCalledTimes(1);
+      expect(onError).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(60_000);
+      expect(onInterrupted).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("resets stale input on queue drain after a scheduler pause without disconnecting", () => {
+    ready();
+    peer.channels.input.bufferedAmount = 38;
+    button = 1;
+    vi.advanceTimersByTime(4);
+    button = 0;
+    axis = -1;
+    const now = performance.now();
+    vi.spyOn(performance, "now").mockReturnValue(now + 251);
+    peer.channels.input.bufferedAmount = 0;
+    peer.channels.input.dispatchEvent(new Event("bufferedamountlow"));
+    vi.advanceTimersByTime(4);
+    expect(frames().every((frame) => !a(frame))).toBe(true);
+    expect(frames()[0].getInt16(18, true)).toBe(0);
+    expect(frames().at(-1)!.getInt16(18, true)).toBe(-32767);
+    expect(onError).not.toHaveBeenCalled();
+    expect(onInterrupted).not.toHaveBeenCalled();
+  });
+  it("cancels pending input-channel recovery when playback is destroyed", () => {
+    ready();
+    media[0].dispatchEvent(new Event("playing"));
+    peer.channels.input.bufferedAmount = 38;
+    axis = 1;
+    vi.advanceTimersByTime(100);
+    engine.destroy();
+    vi.advanceTimersByTime(60_000);
+    expect(onInterrupted).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+  it("rechecks a drained channel at the stall deadline before replacing the session", () => {
+    ready();
+    media[0].dispatchEvent(new Event("playing"));
+    peer.channels.input.bufferedAmount = 38;
+    axis = 1;
+    vi.advanceTimersByTime(10);
+    focused = false;
+    win.dispatchEvent(new Event("blur"));
+    vi.advanceTimersByTime(2_993);
+    peer.channels.input.bufferedAmount = 0;
+    vi.advanceTimersByTime(1);
+    expect(onInterrupted).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(frames()).toHaveLength(1);
+    expect(frames()[0].getInt16(18, true)).toBe(0);
   });
   it.each(["blur", "hidden", "suspend", "switch"] as const)(
     "clears queued taps on %s and sends neutral before resumed input",
