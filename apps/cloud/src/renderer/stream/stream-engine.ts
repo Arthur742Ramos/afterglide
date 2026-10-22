@@ -60,7 +60,8 @@ interface StreamEngineOptions {
     "preferredControllerId" | "controllerDefaults" | "controllerProfiles"
   >;
   onConnected: () => void;
-  onInterrupted: () => void;
+  /** `lost` means the local transport is gone; otherwise it may still return. */
+  onInterrupted: (lost: boolean) => void;
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
   onControllerStatus: (status: ControllerStatus) => void;
@@ -105,11 +106,9 @@ export class XboxStreamEngine {
   private neutralPending = false;
   private handshakeAcknowledged = false;
   private telemetryTimer = 0;
-  private keepaliveTimer = 0;
-  private keepaliveInFlight = false;
   private connectionDeadlineTimer = 0;
   private disconnectedTimer = 0;
-  private keepaliveFailures = 0;
+  private stalled = false;
   private previousStats?: StreamStatsSample;
   private telemetryCollecting = false;
   private activeGamepadIndex?: number;
@@ -269,27 +268,6 @@ export class XboxStreamEngine {
       );
 
       if (this.destroyed || this.terminal) return;
-      this.keepaliveTimer = window.setInterval(() => {
-        if (this.destroyed || this.terminal || this.keepaliveInFlight) return;
-        this.keepaliveInFlight = true;
-        void window.afterglideCloud
-          .keepalive(this.options.sessionId)
-          .then(() => {
-            if (this.destroyed || this.terminal) return;
-            this.keepaliveFailures = 0;
-          })
-          .catch(() => {
-            if (this.destroyed || this.terminal) return;
-            this.keepaliveFailures += 1;
-            if (
-              this.keepaliveFailures >= NETWORK_POLICY.keepaliveFailureThreshold
-            )
-              this.notifyInterrupted();
-          })
-          .finally(() => {
-            this.keepaliveInFlight = false;
-          });
-      }, NETWORK_POLICY.keepaliveIntervalMs);
       this.telemetryTimer = window.setInterval(
         () => void this.collectTelemetry(),
         NETWORK_POLICY.telemetryIntervalMs,
@@ -422,7 +400,6 @@ export class XboxStreamEngine {
     this.inputPollingMetrics.reset();
     clearInterval(this.inputTimer);
     clearInterval(this.telemetryTimer);
-    clearInterval(this.keepaliveTimer);
     clearTimeout(this.connectionDeadlineTimer);
     clearTimeout(this.disconnectedTimer);
     window.removeEventListener("keydown", this.onKeyDown);
@@ -468,6 +445,10 @@ export class XboxStreamEngine {
     if (this.peer.connectionState === "connected") {
       clearTimeout(this.disconnectedTimer);
       this.disconnectedTimer = 0;
+      if (this.stalled) {
+        this.stalled = false;
+        this.options.onConnected();
+      }
       if (this.transportDisconnected) {
         this.transportDisconnected = false;
         this.primeControllerRelease();
@@ -484,12 +465,12 @@ export class XboxStreamEngine {
       clearTimeout(this.disconnectedTimer);
       this.disconnectedTimer = window.setTimeout(() => {
         if (!this.destroyed && this.peer.connectionState === "disconnected")
-          this.notifyInterrupted();
+          this.notifyStalled();
       }, NETWORK_POLICY.disconnectedGraceMs);
     }
     if (this.connected && this.peer.connectionState === "failed") {
       this.suspendPlayout();
-      this.notifyInterrupted();
+      this.notifyLost();
     }
     if (!this.connected && this.peer.connectionState === "failed")
       this.notifyError("A usable route to the Xbox was not found.");
@@ -544,7 +525,7 @@ export class XboxStreamEngine {
           id: data.id,
           cv: "",
         });
-        this.notifyInterrupted();
+        this.notifyLost();
       } else if (data.type === "TransactionStart" && data.id) {
         this.send(this.channels.message, {
           type: "TransactionComplete",
@@ -747,7 +728,7 @@ export class XboxStreamEngine {
         // A delayed renderer callback is not proof the channel is still blocked.
         this.releaseInput();
         if (!this.neutralPending) return;
-        if (this.connected) this.notifyInterrupted(true);
+        if (this.connected) this.notifyLost(true);
         else
           this.notifyError(
             "The Xbox input channel stopped accepting controls. Reconnect to try again.",
@@ -1091,7 +1072,7 @@ export class XboxStreamEngine {
     if (this.destroyed || this.terminal) return;
     // Neutral is attempted before closing the remaining transport. A closed
     // required channel cannot recover within the same peer connection.
-    if (this.connected) this.notifyInterrupted(true);
+    if (this.connected) this.notifyLost(true);
     else
       this.notifyError(
         `The Xbox ${name} connection was lost before the stream was ready. Reconnect to try again.`,
@@ -1099,7 +1080,15 @@ export class XboxStreamEngine {
       );
   }
 
-  private notifyInterrupted(closeTransport = false): void {
+  // The peer may still reconnect on its own; keep it and tell the owner so the
+  // remote session stays held instead of being replaced.
+  private notifyStalled(): void {
+    if (this.destroyed || this.terminal || this.stalled) return;
+    this.stalled = true;
+    this.options.onInterrupted(false);
+  }
+
+  private notifyLost(closeTransport = false): void {
     if (this.destroyed || this.terminal) return;
     this.terminal = true;
     clearTimeout(this.inputStallTimer);
@@ -1108,9 +1097,8 @@ export class XboxStreamEngine {
     else this.releaseInput();
     this.frameMetrics.stop();
     clearTimeout(this.disconnectedTimer);
-    clearInterval(this.keepaliveTimer);
     clearInterval(this.telemetryTimer);
-    this.options.onInterrupted();
+    this.options.onInterrupted(true);
   }
 
   private notifyError(message: string, closeTransport = false): void {
@@ -1123,7 +1111,6 @@ export class XboxStreamEngine {
     this.frameMetrics.stop();
     clearTimeout(this.connectionDeadlineTimer);
     clearTimeout(this.disconnectedTimer);
-    clearInterval(this.keepaliveTimer);
     clearInterval(this.telemetryTimer);
     this.options.onError(message);
   }

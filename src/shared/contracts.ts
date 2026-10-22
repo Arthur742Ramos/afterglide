@@ -215,10 +215,9 @@ export interface StreamApi {
     sessionId: string,
     candidates: IceCandidatePayload[],
   ): Promise<IceCandidatePayload[]>;
-  keepalive(sessionId: string): Promise<void>;
   reportStreamEvent(
     sessionId: string,
-    event: "connected" | "interrupted" | "failed",
+    event: "connected" | "interrupted" | "lost" | "failed",
     detail?: string,
   ): Promise<void>;
   stopStream(): Promise<void>;
@@ -298,7 +297,6 @@ export const IPC = {
   retryStream: "afterglide:retry-stream",
   sendSdp: "afterglide:send-sdp",
   sendIce: "afterglide:send-ice",
-  keepalive: "afterglide:keepalive",
   reportStreamEvent: "afterglide:report-stream-event",
   stopStream: "afterglide:stop-stream",
   updateTelemetry: "afterglide:update-telemetry",

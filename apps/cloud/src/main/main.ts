@@ -163,7 +163,6 @@ app.whenReady().then(async () => {
   );
   app.once("will-quit", stopPowerContext);
   await controller.initialize();
-  powerMonitor.on("resume", () => controller?.handleSystemResume());
   let sampling = false;
   const deviceTimer = setInterval(async () => {
     if (sampling) return;
@@ -397,14 +396,11 @@ function registerIpc(appController: AppController): void {
   handle(IPC.sendIce, (sessionId: string, candidates: IceCandidatePayload[]) =>
     appController.sendIce(sessionId, candidates),
   );
-  handle(IPC.keepalive, (sessionId: string) =>
-    appController.keepalive(sessionId),
-  );
   handle(
     IPC.reportStreamEvent,
     async (
       sessionId: string,
-      event: "connected" | "interrupted" | "failed",
+      event: "connected" | "interrupted" | "lost" | "failed",
       detail?: string,
     ) => {
       try {

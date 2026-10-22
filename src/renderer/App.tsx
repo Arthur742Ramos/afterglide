@@ -232,9 +232,6 @@ export function App() {
   }, [recovery]);
 
   useEffect(() => {
-    if (snapshot?.session.phase === "recovering" && descriptor) {
-      recovery.interrupt(descriptor.sessionId);
-    }
     if (
       snapshot?.session.phase === "idle" ||
       (snapshot && snapshot.auth.status !== "signed-in")
@@ -243,7 +240,7 @@ export function App() {
       recovery.cancel();
       setDescriptor(undefined);
     }
-  }, [snapshot?.session.phase, snapshot?.auth.status, descriptor, recovery]);
+  }, [snapshot?.session.phase, snapshot?.auth.status, recovery]);
 
   if (!snapshot || snapshot.auth.status === "restoring") return <BootScreen />;
   if (
@@ -1187,7 +1184,6 @@ function StreamView({
   const latestTelemetry = useRef(snapshot.telemetry);
   const controlsCapturedRef = useRef(false);
   const streamEventsEnabled = useRef(true);
-  const interruptionReported = useRef<string | undefined>(undefined);
   const root = useRef<HTMLElement>(null);
   const header = useRef<HTMLElement>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -1352,18 +1348,16 @@ function StreamView({
     if (!streamEventsEnabled.current) return;
     void window.afterglide.reportStreamEvent(descriptor.sessionId, "connected");
   }, [descriptor.sessionId]);
-  const onInterrupted = useCallback(() => {
-    if (
-      !streamEventsEnabled.current ||
-      interruptionReported.current === descriptor.sessionId
-    )
-      return;
-    interruptionReported.current = descriptor.sessionId;
-    void window.afterglide.reportStreamEvent(
-      descriptor.sessionId,
-      "interrupted",
-    );
-  }, [descriptor.sessionId]);
+  const onInterrupted = useCallback(
+    (lost: boolean) => {
+      if (!streamEventsEnabled.current) return;
+      void window.afterglide.reportStreamEvent(
+        descriptor.sessionId,
+        lost ? "lost" : "interrupted",
+      );
+    },
+    [descriptor.sessionId],
+  );
   const onError = useCallback(
     (message: string) => {
       if (!streamEventsEnabled.current) return;
@@ -1498,7 +1492,7 @@ function StreamView({
             <small>
               {recoveryState.status === "offline"
                 ? "Reconnect to your network to try again."
-                : "Trying a new Xbox streaming session. Game progress may not be preserved."}
+                : "Afterglide is keeping your Xbox session open while the video connection returns."}
             </small>
           </div>
         </div>
@@ -1597,10 +1591,10 @@ function RecoveryScreen({
         <p className="eyebrow">CONNECTION INTERRUPTED</p>
         <h1>
           {exhausted
-            ? "Automatic retries paused"
+            ? "New-session attempts paused"
             : !online
               ? "You’re offline"
-              : "Restoring the stream"}
+              : "Starting a new session"}
         </h1>
         <p role="status">
           {exhausted
@@ -1610,8 +1604,8 @@ function RecoveryScreen({
               : `Starting a new Xbox streaming session · attempt ${Math.min(3, state.attempts + (state.status === "waiting" ? 1 : 0))} of 3.`}
         </p>
         <p>
-          Retrying starts a new Xbox streaming session. Game progress may not be
-          preserved.
+          Each attempt ends the interrupted Xbox session and requests a new one.
+          Unsaved game progress may be lost.
         </p>
         <div className="error-actions">
           {exhausted && (
@@ -1652,8 +1646,9 @@ function SessionErrorScreen({
     undefined,
     snapshot.settings.preferredControllerId,
   );
-  const backLabel =
-    snapshot.session.source === "cloud"
+  const backLabel = snapshot.session.sessionId
+    ? "End session"
+    : snapshot.session.source === "cloud"
       ? "Back to cloud games"
       : "Back to consoles";
   return (
@@ -1670,7 +1665,9 @@ function SessionErrorScreen({
         <div className="error-actions">
           {snapshot.session.recoverable && (
             <button className="primary-action" data-focusable onClick={onRetry}>
-              <Icon name="refresh" /> Try again <ControllerHint label="A" />
+              <Icon name="refresh" />{" "}
+              {snapshot.session.sessionId ? "Start a new session" : "Try again"}{" "}
+              <ControllerHint label="A" />
             </button>
           )}
           <button className="secondary-action" data-focusable onClick={onBack}>

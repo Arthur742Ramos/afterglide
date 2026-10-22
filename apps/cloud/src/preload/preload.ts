@@ -44,8 +44,6 @@ const api: StreamApi = {
     ipcRenderer.invoke(IPC.sendSdp, sessionId, offer),
   sendIce: (sessionId, candidates: IceCandidatePayload[]) =>
     ipcRenderer.invoke(IPC.sendIce, sessionId, candidates),
-  keepalive: (sessionId) =>
-    ipcRenderer.invoke(IPC.keepalive, sessionId) as Promise<void>,
   reportStreamEvent: (sessionId, event, detail) =>
     ipcRenderer.invoke(
       IPC.reportStreamEvent,

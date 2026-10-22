@@ -78,7 +78,7 @@ class Media extends EventTarget {
 let peer: Peer;
 let engine: XboxStreamEngine;
 let onConnected = vi.fn<() => void>();
-let onInterrupted = vi.fn<() => void>();
+let onInterrupted = vi.fn<(lost: boolean) => void>();
 let onError = vi.fn<(message: string) => void>();
 let media: Media[];
 let focused: boolean;
@@ -121,7 +121,6 @@ beforeEach(async () => {
     afterglideCloud: {
       sendSdp: async () => ({ sdp: "" }),
       sendIce: async () => [],
-      keepalive: async () => {},
     },
   });
   doc = Object.assign(new EventTarget(), {
@@ -1239,6 +1238,23 @@ describe("real stream engine input lifecycle", () => {
         }),
       }),
     );
+    vi.advanceTimersByTime(60_000);
+    expect(onInterrupted).toHaveBeenCalledExactlyOnceWith(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+  it("treats a transient peer disconnect as a recoverable stall and resumes in place", () => {
+    ready();
+    media[0].dispatchEvent(new Event("playing"));
+    onConnected.mockClear();
+    peer.connectionState = "disconnected";
+    peer.dispatchEvent(new Event("connectionstatechange"));
+    vi.advanceTimersByTime(2_999);
+    expect(onInterrupted).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onInterrupted).toHaveBeenCalledExactlyOnceWith(false);
+    peer.connectionState = "connected";
+    peer.dispatchEvent(new Event("connectionstatechange"));
+    expect(onConnected).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(60_000);
     expect(onInterrupted).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();

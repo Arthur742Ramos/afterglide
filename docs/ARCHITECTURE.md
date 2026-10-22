@@ -102,8 +102,8 @@ provisioning allows longer queues than home provisioning.
 ICE gathering is bounded at four seconds, duplicate candidates are removed, and
 SDP and candidate payloads are size-limited on both sides of the preload bridge.
 Media must connect within 60 seconds. An established WebRTC connection gets a
-three-second grace period in `disconnected`; `failed` recovers immediately.
-Keepalive recovery starts after three consecutive failures, while any success
+three-second grace period in `disconnected`; `failed` reports a lost transport immediately.
+The main-process heartbeat releases the session after three consecutive keepalive failures, while any success
 resets the count. Telemetry samples once per second and classifies network quality
 from round-trip time, packet loss, and received frame rate. WebRTC controls the
 incoming bitrate through its congestion-control loop.
@@ -164,11 +164,7 @@ repeated samples are not counted as independent measurements. Configuration
 changes clear cached device readings. Reports group summary statistics by
 resolution and polling mode and label simulated adapters explicitly.
 
-Operating-system resume publishes one interruption for an established stream;
-late events cannot turn a recovering session back into a connected one. The
-renderer manages bounded recovery attempts and waits for network availability.
-Retrying creates a new Xbox session and does not guarantee preservation of a
-cloud game. Main-process generation checks prevent an awaited stop from starting
+The main process owns the heartbeat and the active session. A soft stall resumes in place; a lost transport keeps the same Xbox session and heartbeat (no DELETE, no new `/play`, no timed release) until the user restarts or ends it; only an explicit provider 404/410 releases local state, without a DELETE. Only the explicit restart creates a new Xbox session, so game preservation is never guaranteed. Remote Play has no stop-on-quit; the cloud app ends its session on quit. Main-process generation checks prevent an awaited stop from starting
 another stream after the user has left, and late provisioning results are
 cleaned up. Recovery timing ends at playable video, not at successful signaling.
 
