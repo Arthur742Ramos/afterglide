@@ -961,7 +961,7 @@ test("a compatible GitHub release is visible from the shell and settings", async
   }
 });
 
-test("an interrupted stream recovers autonomously", async () => {
+test("a lost stream keeps its session until the player deliberately restarts it", async () => {
   const { app, page } = await launch({ signedIn: true });
   try {
     await page.getByRole("button", { name: /Den Series X/ }).click();
@@ -969,7 +969,15 @@ test("an interrupted stream recovers autonomously", async () => {
     await expect(page.getByTestId("mock-stream")).toBeVisible();
     const sessionId = await streamingSessionId(page);
     await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
-    await expect(page.getByText("Restoring the stream")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Start a new session" }),
+    ).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(
+      (await page.evaluate(() => window.afterglide.getSnapshot())).session
+        .sessionId,
+    ).toBe(sessionId);
+    await page.getByRole("button", { name: "Start a new session" }).click();
     await expect(page.getByTestId("mock-stream")).toBeVisible({
       timeout: 10_000,
     });
@@ -1200,20 +1208,17 @@ test("quick settings show save failures without dropping controller focus or rec
   }
 });
 
-test("recovery waits offline and retries once online without duplicate interruptions", async () => {
+test("a deliberate new-session request waits offline without ending the held session", async () => {
   const { app, page } = await launch({ signedIn: true });
   try {
     await page.getByRole("button", { name: /Play now/ }).click();
     const sessionId = await streamingSessionId(page);
     await setRendererOnline(page, false);
-    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
-      "data-input-suspended",
-      "true",
-    );
     await page.evaluate(async () => {
       await window.afterglideTest!.simulateNetworkDrop();
       await window.afterglideTest!.simulateNetworkDrop();
     });
+    await page.getByRole("button", { name: "Start a new session" }).click();
     await expect(
       page.getByText("You’re offline", { exact: true }),
     ).toBeVisible();
@@ -1231,72 +1236,6 @@ test("recovery waits offline and retries once online without duplicate interrupt
       )
       .not.toBe(sessionId);
     expect(await streamingSessionId(page)).not.toBe(sessionId);
-    await expect(page.getByTestId("mock-stream")).toHaveAttribute(
-      "data-input-suspended",
-      "false",
-    );
-  } finally {
-    await app.close();
-  }
-});
-
-test("repeated media interruptions exhaust the automatic budget across replacement sessions", async () => {
-  const { app, page } = await launch({ signedIn: true });
-  try {
-    await page.getByRole("button", { name: /Play now/ }).click();
-    let sessionId = await streamingSessionId(page);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
-      await expect
-        .poll(
-          async () =>
-            (await page.evaluate(() => window.afterglide.getSnapshot())).session
-              .sessionId,
-          { timeout: 10_000 },
-        )
-        .not.toBe(sessionId);
-      sessionId = await streamingSessionId(page);
-    }
-    await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
-    await expect(
-      page.getByRole("heading", { name: "Automatic retries paused" }),
-    ).toBeVisible();
-    await setRendererOnline(page, false);
-    await setRendererOnline(page, true);
-    await page.waitForTimeout(1_000);
-    expect(
-      (await page.evaluate(() => window.afterglide.getSnapshot())).session
-        .sessionId,
-    ).toBe(sessionId);
-    await page
-      .getByRole("button", { name: "End session", exact: true })
-      .click();
-    await expect(page.getByRole("button", { name: /Play now/ })).toBeVisible();
-  } finally {
-    await app.close();
-  }
-});
-
-test("ending offline recovery cancels future reconnects after online returns", async () => {
-  const { app, page } = await launch({ signedIn: true });
-  try {
-    await page.getByRole("button", { name: /Play now/ }).click();
-    await streamingSessionId(page);
-    await setRendererOnline(page, false);
-    await page.evaluate(() => window.afterglideTest!.simulateNetworkDrop());
-    await expect(
-      page.getByText("You’re offline", { exact: true }),
-    ).toBeVisible();
-    await page.keyboard.press("F10");
-    await page.getByRole("button", { name: "Leave Xbox stream" }).click();
-    await expect(page.getByRole("button", { name: /Play now/ })).toBeVisible();
-    await setRendererOnline(page, true);
-    await page.waitForTimeout(1_100);
-    expect(
-      (await page.evaluate(() => window.afterglide.getSnapshot())).session
-        .phase,
-    ).toBe("idle");
-    await expect(page.getByTestId("mock-stream")).toHaveCount(0);
   } finally {
     await app.close();
   }
@@ -1443,7 +1382,7 @@ test("an in-session media failure is explained and can reconnect", async () => {
     ).toBeVisible();
     await expect(page.getByText("Reference: MEDIA_FAILED")).toBeVisible();
     await expectNoAccessibilityViolations(page, "session error");
-    await page.getByRole("button", { name: /Try again/ }).click();
+    await page.getByRole("button", { name: /Start a new session/ }).click();
     await expect(page.getByTestId("mock-stream")).toBeVisible();
   } finally {
     await app.close();

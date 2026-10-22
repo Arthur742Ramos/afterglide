@@ -18,6 +18,7 @@ import type {
 } from "../../src/main/platform-service";
 import { SettingsStore } from "../../src/main/settings-store";
 import { emptyTelemetry } from "../../src/shared/contracts";
+import { NETWORK_POLICY } from "../../src/shared/network-policy";
 
 let directory = "";
 afterEach(() => {
@@ -47,6 +48,7 @@ class FakePlatform implements PlatformService {
   wakeCount = 0;
   authorizeCount = 0;
   failStart = false;
+  startCount = 0;
   startedTarget?: StreamTarget;
   async restore() {
     return true;
@@ -85,9 +87,11 @@ class FakePlatform implements PlatformService {
     this.startedTarget = target;
     if (this.failStart)
       throw new AfterglideError("UNAVAILABLE", "The console is busy.");
+    this.startCount += 1;
+    const id = this.startCount === 1 ? "session" : `session-${this.startCount}`;
     return {
-      sessionId: "session",
-      sessionPath: `v5/sessions/${target.source}/session`,
+      sessionId: id,
+      sessionPath: `v5/sessions/${target.source}/${id}`,
     };
   }
   async getSessionState() {
@@ -270,31 +274,149 @@ describe("AppController", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
-  it("deduplicates wake interruptions and rejects a late connected event", async () => {
-    const controller = makeController(new FakePlatform());
-    await controller.initialize();
-    controller.handleSystemResume();
-    expect(controller.getSnapshot().session.phase).toBe("idle");
-    await controller.startStream("den");
-    controller.handleSystemResume();
-    expect(controller.getSnapshot().session.phase).toBe("negotiating");
-    await controller.reportStreamEvent("session", "connected");
-    controller.handleSystemResume();
-    const recovery = controller.getSnapshot().session;
-    expect(recovery.phase).toBe("recovering");
-    controller.handleSystemResume();
-    await controller.reportStreamEvent("session", "connected");
-    expect(controller.getSnapshot().session).toEqual(recovery);
-    await controller.retryStream();
-    await controller.reportStreamEvent("session", "connected");
-    controller.updateTelemetry({ ...emptyTelemetry });
-    expect(
-      controller.getSnapshot().telemetry.recoveryMs,
-    ).toBeGreaterThanOrEqual(0);
-    expect(controller.exportPerformanceReport().recoveries).toHaveLength(1);
-    await controller.stopStream();
-    controller.handleSystemResume();
-    expect(controller.getSnapshot().session.phase).toBe("idle");
+  describe("interruption keeps the remote session", () => {
+    async function streaming(platform: FakePlatform) {
+      platform.states = [{ state: "Provisioned" }];
+      const controller = makeController(platform);
+      await controller.initialize();
+      await controller.startStream("den");
+      await controller.reportStreamEvent("session", "connected");
+      return controller;
+    }
+
+    afterEach(() => vi.useRealTimers());
+
+    it("holds the same provider session through a stall and restores it when the transport returns", async () => {
+      const platform = new FakePlatform();
+      const stop = vi.spyOn(platform, "stopSession");
+      const controller = await streaming(platform);
+      await controller.reportStreamEvent("session", "interrupted");
+      const recovering = controller.getSnapshot().session;
+      expect(recovering).toMatchObject({
+        phase: "recovering",
+        sessionId: "session",
+      });
+      await controller.reportStreamEvent("session", "interrupted");
+      expect(controller.getSnapshot().session).toEqual(recovering);
+      await controller.reportStreamEvent("session", "connected");
+      expect(controller.getSnapshot().session).toMatchObject({
+        phase: "streaming",
+        sessionId: "session",
+      });
+      expect(stop).not.toHaveBeenCalled();
+      expect(platform.startCount).toBe(1);
+      expect(controller.exportPerformanceReport().recoveries).toHaveLength(1);
+    });
+
+    it("keeps the session after the transport is lost and only a deliberate restart replaces it", async () => {
+      const platform = new FakePlatform();
+      const stop = vi.spyOn(platform, "stopSession");
+      const controller = await streaming(platform);
+      await controller.reportStreamEvent("session", "lost");
+      expect(controller.getSnapshot().session).toMatchObject({
+        phase: "error",
+        errorCode: "STREAM_INTERRUPTED",
+        recoverable: true,
+        sessionId: "session",
+      });
+      await controller.reportStreamEvent("session", "connected");
+      expect(controller.getSnapshot().session.phase).toBe("error");
+      expect(stop).not.toHaveBeenCalled();
+      expect(platform.startCount).toBe(1);
+
+      await controller.retryStream();
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(stop).toHaveBeenCalledWith("v5/sessions/home/session");
+      expect(platform.startCount).toBe(2);
+      await controller.reportStreamEvent("session-2", "connected");
+      expect(controller.getSnapshot().session.phase).toBe("streaming");
+    });
+
+    it("ignores an interruption reported for an older session", async () => {
+      const platform = new FakePlatform();
+      const controller = await streaming(platform);
+      await controller.retryStream();
+      await controller.reportStreamEvent("session", "lost");
+      expect(controller.getSnapshot().session.phase).not.toBe("error");
+    });
+
+    it("explicitly ending releases the held session exactly once", async () => {
+      const platform = new FakePlatform();
+      const stop = vi.spyOn(platform, "stopSession");
+      const controller = await streaming(platform);
+      await controller.reportStreamEvent("session", "lost");
+      await controller.stopStream();
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot().session.phase).toBe("idle");
+    });
+
+    it("keeps its own heartbeat running without the renderer and stops it when the session ends", async () => {
+      vi.useFakeTimers();
+      const platform = new FakePlatform();
+      const keepalive = vi.spyOn(platform, "keepalive");
+      const controller = await streaming(platform);
+      await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs);
+      expect(keepalive).toHaveBeenCalledWith("v5/sessions/home/session");
+      await controller.reportStreamEvent("session", "lost");
+      await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs);
+      expect(keepalive).toHaveBeenCalledTimes(2);
+      await controller.stopStream();
+      await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs * 4);
+      expect(keepalive).toHaveBeenCalledTimes(2);
+    });
+
+    it("releases the session after the heartbeat fails repeatedly", async () => {
+      vi.useFakeTimers();
+      const platform = new FakePlatform();
+      vi.spyOn(platform, "keepalive").mockRejectedValue(new Error("down"));
+      const stop = vi.spyOn(platform, "stopSession");
+      const controller = await streaming(platform);
+      await vi.advanceTimersByTimeAsync(
+        NETWORK_POLICY.keepaliveIntervalMs *
+          NETWORK_POLICY.keepaliveFailureThreshold,
+      );
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot().session).toMatchObject({
+        phase: "error",
+        errorCode: "SESSION_LOST",
+      });
+      expect(controller.getSnapshot().session.sessionId).toBeUndefined();
+    });
+
+    it("releases a held session nobody recovers, restarts or ends, but not one that recovered", async () => {
+      vi.useFakeTimers();
+      const platform = new FakePlatform();
+      const stop = vi.spyOn(platform, "stopSession");
+      const controller = await streaming(platform);
+      await controller.reportStreamEvent("session", "interrupted");
+      await controller.reportStreamEvent("session", "connected");
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(stop).not.toHaveBeenCalled();
+      await controller.reportStreamEvent("session", "lost");
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot().session.errorCode).toBe("SESSION_LOST");
+    });
+
+    it("a late heartbeat failure from a replaced session cannot end the new one", async () => {
+      vi.useFakeTimers();
+      const platform = new FakePlatform();
+      let failOld!: (error: Error) => void;
+      vi.spyOn(platform, "keepalive").mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            failOld = reject;
+          }),
+      );
+      const controller = await streaming(platform);
+      await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs);
+      await controller.retryStream();
+      failOld(new Error("late"));
+      await vi.advanceTimersByTimeAsync(
+        NETWORK_POLICY.keepaliveIntervalMs * 10,
+      );
+      expect(controller.getSnapshot().session.phase).toBe("negotiating");
+    });
   });
 
   it("does not restart if the user leaves while recovery is stopping the old session", async () => {

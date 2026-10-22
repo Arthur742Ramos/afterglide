@@ -207,7 +207,7 @@ will be published with the first beta.
 The runtime applies explicit network bounds: 12-second Xbox API timeouts,
 idempotent-read retries with exponential backoff, a 4-second ICE gathering
 window, candidate and signaling-size caps, a 60-second media connection
-deadline, 3-second tolerance for transient WebRTC disconnects, and recovery only
+deadline, 3-second tolerance for transient WebRTC disconnects, and a 75-second hold of an interrupted session, and release only
 after three consecutive keepalive failures. Afterglide leaves incoming bitrate
 adaptation to WebRTC congestion control instead of forcing a fixed bitrate.
 

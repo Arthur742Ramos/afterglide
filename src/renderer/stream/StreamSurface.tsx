@@ -22,7 +22,7 @@ interface Props {
   >;
   inputSuspended: boolean;
   onConnected: () => void;
-  onInterrupted: () => void;
+  onInterrupted: (lost: boolean) => void;
   onError: (message: string) => void;
   onTelemetry: (telemetry: StreamTelemetry) => void;
   onControllerStatus: (status: ControllerStatus) => void;

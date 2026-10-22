@@ -24,7 +24,14 @@ interface ActiveSession {
   source: StreamTarget["source"];
   targetId: string;
   targetName: string;
+  heartbeat?: ReturnType<typeof setInterval>;
+  retention?: ReturnType<typeof setTimeout>;
 }
+
+// A held session that nobody recovers, restarts or ends is released after the
+// same window in which an unreachable provider is declared lost.
+const SESSION_RETENTION_MS =
+  NETWORK_POLICY.keepaliveIntervalMs * NETWORK_POLICY.keepaliveFailureThreshold;
 
 interface NamedTarget extends StreamTarget {
   name: string;
@@ -346,6 +353,7 @@ export class AppController {
         targetId: target.id,
         targetName: target.name,
       };
+      this.startHeartbeat(this.activeSession);
 
       let authorized = false;
       const deadline =
@@ -422,6 +430,10 @@ export class AppController {
     }
   }
 
+  /**
+   * Deliberate restart: the only recovery path that releases the held provider
+   * session and requests a new one. Automatic interruptions never call this.
+   */
   async retryStream(): Promise<StreamDescriptor> {
     const target = this.lastTarget;
     if (!target) throw new Error("Choose something to play before retrying.");
@@ -476,21 +488,21 @@ export class AppController {
       .slice(0, NETWORK_POLICY.maxIceCandidates);
   }
 
-  async keepalive(sessionId: string): Promise<void> {
-    const session = this.requireSession(sessionId);
-    await this.platform.keepalive(session.path);
-  }
-
   async reportStreamEvent(
     sessionId: string,
-    event: "connected" | "interrupted" | "failed",
+    event: "connected" | "interrupted" | "lost" | "failed",
     detail?: string,
   ): Promise<void> {
     const session = this.activeSession;
     if (!session || session.id !== sessionId) return;
     if (event === "connected") {
-      if (!["negotiating", "streaming"].includes(this.snapshot.session.phase))
+      if (
+        !["negotiating", "streaming", "recovering"].includes(
+          this.snapshot.session.phase,
+        )
+      )
         return;
+      this.releaseRetention(session);
       if (this.snapshot.session.phase === "negotiating")
         this.performanceReport.connected();
       if (this.recoveryStartedAt !== undefined) {
@@ -521,7 +533,7 @@ export class AppController {
       this.setSession(
         "recovering",
         "Restoring the stream",
-        "The connection changed. Afterglide will try a new streaming connection. Cloud game progress may not be preserved.",
+        "The connection changed. Your game is still running while Afterglide waits for the stream to return.",
         28,
         {
           source: session.source,
@@ -530,17 +542,34 @@ export class AppController {
         },
         session.id,
       );
+      this.holdSession(session);
+      return;
+    }
+    const target = {
+      source: session.source,
+      id: session.targetId,
+      name: session.targetName,
+    };
+    this.holdSession(session);
+    if (event === "lost") {
+      if (!["streaming", "recovering"].includes(this.snapshot.session.phase))
+        return;
+      this.recoveryStartedAt ??= Date.now();
+      this.failSession(
+        "STREAM_INTERRUPTED",
+        "The video connection was lost, but Afterglide is still holding your stream session for a short time. This version can’t reattach video to it. Starting over requests a new session, so unsaved progress may be lost.",
+        true,
+        target,
+        session.id,
+      );
       return;
     }
     this.failSession(
       "MEDIA_FAILED",
       detail ?? "Video could not start. Try the connection again.",
       true,
-      {
-        source: session.source,
-        id: session.targetId,
-        name: session.targetName,
-      },
+      target,
+      session.id,
     );
   }
 
@@ -551,11 +580,6 @@ export class AppController {
     this.deviceMetrics = undefined;
     this.patch({ session: idleSession() });
     await this.stopActiveSession();
-  }
-
-  handleSystemResume(): void {
-    if (this.activeSession && this.snapshot.session.phase === "streaming")
-      void this.reportStreamEvent(this.activeSession.id, "interrupted");
   }
 
   updateDeviceMetrics(metrics: DeviceMetrics): void {
@@ -665,12 +689,71 @@ export class AppController {
 
   simulateNetworkDrop(): void {
     if (!this.platform.mock || !this.activeSession) return;
-    void this.reportStreamEvent(this.activeSession.id, "interrupted");
+    void this.reportStreamEvent(this.activeSession.id, "lost");
+  }
+
+  private startHeartbeat(session: ActiveSession): void {
+    let failures = 0;
+    let inFlight = false;
+    session.heartbeat = setInterval(() => {
+      if (inFlight || this.activeSession !== session) return;
+      inFlight = true;
+      void this.platform
+        .keepalive(session.path)
+        .then(() => {
+          if (this.activeSession === session) failures = 0;
+        })
+        .catch(() => {
+          if (this.activeSession !== session) return;
+          failures += 1;
+          if (failures >= NETWORK_POLICY.keepaliveFailureThreshold)
+            this.releaseLostSession(session);
+        })
+        .finally(() => {
+          inFlight = false;
+        });
+    }, NETWORK_POLICY.keepaliveIntervalMs);
+    session.heartbeat.unref?.();
+  }
+
+  private holdSession(session: ActiveSession): void {
+    this.releaseRetention(session);
+    session.retention = setTimeout(
+      () => this.releaseLostSession(session),
+      SESSION_RETENTION_MS,
+    );
+    session.retention.unref?.();
+  }
+
+  private releaseRetention(session: ActiveSession): void {
+    clearTimeout(session.retention);
+    session.retention = undefined;
+  }
+
+  private releaseLostSession(session: ActiveSession): void {
+    if (this.activeSession !== session) return;
+    void this.stopActiveSession().catch((error: unknown) => {
+      console.warn("Could not stop the remote session", errorForLog(error));
+    });
+    this.failSession(
+      "SESSION_LOST",
+      "Xbox stopped responding or the stream was not restored in time, so Afterglide released the session. Unsaved progress may be lost.",
+      true,
+      {
+        source: session.source,
+        id: session.targetId,
+        name: session.targetName,
+      },
+    );
   }
 
   private async stopActiveSession(): Promise<void> {
     const session = this.activeSession;
     this.activeSession = undefined;
+    if (session) {
+      clearInterval(session.heartbeat);
+      this.releaseRetention(session);
+    }
     if (session) await this.platform.stopSession(session.path);
   }
 
@@ -711,16 +794,22 @@ export class AppController {
     message: string,
     recoverable: boolean,
     target?: NamedTarget,
+    sessionId?: string,
   ): void {
     this.patch({
       session: {
         phase: "error",
         label:
-          code === "MEDIA_FAILED"
-            ? "The stream stopped"
-            : target?.source === "cloud"
-              ? "Couldn’t start cloud play"
-              : "Couldn’t start remote play",
+          code === "STREAM_INTERRUPTED"
+            ? "The stream connection was lost"
+            : code === "MEDIA_FAILED"
+              ? "The stream stopped"
+              : code === "SESSION_LOST"
+                ? "The stream session was released"
+                : target?.source === "cloud"
+                  ? "Couldn’t start cloud play"
+                  : "Couldn’t start remote play",
+        sessionId,
         detail: message,
         progress: 0,
         errorCode: code,

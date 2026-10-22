@@ -1156,13 +1156,24 @@ test("controller play, directional local controls and return to Library", async 
   await expect(page.getByRole("button", { name: /Play again/ })).toBeFocused();
 });
 
-test("simulated interruption reconnects a cloud session; exit cancels it", async () => {
+test("a lost cloud stream keeps its session until a deliberate restart; exit cancels it", async () => {
   const page = await launch();
   await play(page);
   const initial = await page.evaluate(
     async () => (await window.afterglideCloud.getSnapshot()).session.sessionId,
   );
   await page.evaluate(() => window.afterglideCloudTest!.simulateNetworkDrop());
+  await expect(
+    page.getByRole("button", { name: "Start a new session" }),
+  ).toBeVisible();
+  await page.waitForTimeout(1_000);
+  expect(
+    await page.evaluate(
+      async () =>
+        (await window.afterglideCloud.getSnapshot()).session.sessionId,
+    ),
+  ).toBe(initial);
+  await page.getByRole("button", { name: "Start a new session" }).click();
   await expect
     .poll(async () =>
       page.evaluate(
@@ -1417,9 +1428,10 @@ test("offline recovery explains new-session consequences and controller Back exi
   await play(page);
   await simulateOffline(page);
   await page.evaluate(() => window.afterglideCloudTest!.simulateNetworkDrop());
+  await page.getByRole("button", { name: "Start a new session" }).click();
   await expect(page.getByRole("heading", { name: /offline/ })).toBeVisible();
   await expect(
-    page.getByText(/Game progress may not be preserved/),
+    page.getByText(/Unsaved game progress may be lost/),
   ).toBeVisible();
   await expect(page.getByText(/Demo mode.*Simulated sign-in/)).toBeVisible();
   await page.screenshot({
@@ -1816,6 +1828,7 @@ test("windowed idle keeps the cursor and fullscreen recovery restores it", async
   await expect(surface).not.toHaveCSS("cursor", "none");
   await expect(surface).toHaveAttribute("data-input-suspended", "true");
   await page.evaluate(() => window.afterglideCloudTest!.simulateNetworkDrop());
+  await page.getByRole("button", { name: "Start a new session" }).click();
   await expect(page.getByRole("heading", { name: /offline/ })).toBeVisible();
   await expect(view).toHaveCount(0);
   await expect(page.getByRole("button", { name: "End session" })).toHaveCSS(

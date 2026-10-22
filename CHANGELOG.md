@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Keep the Xbox session and its main-process heartbeat alive through renderer or
+  media interruptions; a lost stream now offers an explicitly warned "Start a
+  new session" or "End session" within a bounded 75-second hold instead of
+  silently deleting and recreating the session. Same-session reattach is not
+  supported by the protocol, and unsaved progress is not guaranteed.
 - Preserve bounded button and trigger edges during input congestion while keeping
   analog movement fresh and giving neutral releases priority.
 - Add presented-frame cadence percentiles, dropped-frame and freeze diagnostics,

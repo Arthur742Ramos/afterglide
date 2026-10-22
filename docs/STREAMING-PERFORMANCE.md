@@ -23,7 +23,7 @@ network, receiver buffer, decoder, compositor, display and controller all contri
   and prioritizes a neutral reset before accepting fresh input, without ending
   video or the remote session. Stale taps are intentionally not replayed.
   If no input packet can be sent for three seconds, the engine requests automatic
-  session recovery instead of reporting a terminal queue-age error. Successful
+  a lost-transport state that keeps the Xbox session, instead of a terminal queue-age error. Successful
   sends cancel that deadline, including a pending neutral release. The deadline
   retries neutral before recovering, so a delayed renderer callback cannot
   terminate an already-drained channel. Packets
@@ -142,11 +142,29 @@ Check both Health's GPU feature status and the stream's decoder identity. An
 enabled Chromium feature flag alone does not prove this stream used hardware
 decode. Corroborate with platform GPU/video-engine tools on the packaged build;
 decoder names vary by driver. Do not force unverified VA-API flags or codecs.
+
+## Session-preserving recovery
+
+Session recovery never silently replaces a running game. The main process owns
+the keepalive heartbeat (every 25 s; three consecutive failures release the
+session), so it continues through renderer or media teardown. A transient WebRTC
+`disconnected` is a soft stall that resumes in place if the peer returns; a lost
+transport (`failed`, a closed required channel, server disconnect, or a stalled
+input channel) keeps the same Xbox session and heartbeat for at most 75 s
+(`keepaliveIntervalMs * keepaliveFailureThreshold`) while the player chooses
+"Start a new session" (explicitly ends the old session and requests another) or
+"End session". After 75 s without either, the session is released. Afterglide
+does not re-negotiate WebRTC on an existing session because neither the Xbox
+protocol implementation nor the dependencies expose a resume or rejoin endpoint,
+so a lost transport cannot be reattached. Host and provider timeouts are unknown
+and not guaranteed, and unsaved game progress may be lost whenever a new session
+is started. Live Xbox recovery has not been validated.
+
 Record absent evidence as unverified.
 
 Also exercise physical sleep/wake, an offline interval, Wi-Fi reconnection,
 controller removal/replacement, and End session during a pending recovery.
-Verify bounded retries and no restart after leaving. Recovery starts a new
+Verify the held session, its 75-second release, and no restart after leaving. A deliberate restart starts a new
 streaming session: cloud capacity, queues, and game-progress preservation remain
 controlled by Xbox services. Complete the same live-network disruption tests for
 both home and cloud play before advertising seamless recovery.
