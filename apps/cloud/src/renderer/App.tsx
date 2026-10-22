@@ -1908,7 +1908,7 @@ function StreamView({
             <small>
               {recoveryState.status === "offline"
                 ? "Reconnect to your network to try again."
-                : "Your game is still running on Xbox. Waiting for the video connection to return."}
+                : "Afterglide is keeping your Xbox session open while the video connection returns."}
             </small>
           </div>
         </div>

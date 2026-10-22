@@ -2,10 +2,15 @@
 
 ## Unreleased
 
+- CI audit unblock (dependencies only): non-force `npm audit fix` for
+  follow-redirects, and `vite` 8.1.0 → 8.3.4 and `vitest` 4.1.11 → 4.1.12
+  (same majors) in the root and cloud packages and lockfiles to clear the
+  `npm audit --audit-level=high` gate.
 - Keep the Xbox session and its main-process heartbeat alive through renderer or
   media interruptions; a lost stream now offers an explicitly warned "Start a
-  new session" or "End session" within a bounded 75-second hold instead of
-  silently deleting and recreating the session. Same-session reattach is not
+  new session" or "End session" instead of silently deleting and recreating the
+  session. Neither the recovery budget nor failed heartbeats ever delete the
+  session; only an explicit provider 404/410 releases local state. Same-session reattach is not
   supported by the protocol, and unsaved progress is not guaranteed.
 - Preserve bounded button and trigger edges during input congestion while keeping
   analog movement fresh and giving neutral releases priority.

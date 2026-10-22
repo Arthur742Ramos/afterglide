@@ -792,37 +792,45 @@ describe("AppController", () => {
       expect(keepalive).toHaveBeenCalledTimes(2);
     });
 
-    it("releases the session after the heartbeat fails repeatedly", async () => {
+    it("never deletes or replaces the session when the heartbeat keeps failing or the hold lasts", async () => {
       vi.useFakeTimers();
       const platform = new FakePlatform();
-      vi.spyOn(platform, "keepalive").mockRejectedValue(new Error("down"));
+      const keepalive = vi
+        .spyOn(platform, "keepalive")
+        .mockRejectedValue(new Error("down"));
       const stop = vi.spyOn(platform, "stopSession");
       const controller = await streaming(platform);
-      await vi.advanceTimersByTimeAsync(
-        NETWORK_POLICY.keepaliveIntervalMs *
-          NETWORK_POLICY.keepaliveFailureThreshold,
-      );
-      expect(stop).toHaveBeenCalledTimes(1);
-      expect(controller.getSnapshot().session).toMatchObject({
-        phase: "error",
-        errorCode: "SESSION_LOST",
-      });
-      expect(controller.getSnapshot().session.sessionId).toBeUndefined();
-    });
-
-    it("releases a held session nobody recovers, restarts or ends, but not one that recovered", async () => {
-      vi.useFakeTimers();
-      const platform = new FakePlatform();
-      const stop = vi.spyOn(platform, "stopSession");
-      const controller = await streaming(platform);
-      await controller.reportStreamEvent("session", "interrupted");
-      await controller.reportStreamEvent("session", "connected");
-      await vi.advanceTimersByTimeAsync(10 * 60_000);
-      expect(stop).not.toHaveBeenCalled();
       await controller.reportStreamEvent("session", "lost");
       await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(keepalive.mock.calls.length).toBeGreaterThan(
+        NETWORK_POLICY.keepaliveFailureThreshold,
+      );
+      expect(stop).not.toHaveBeenCalled();
+      expect(platform.startCount).toBe(1);
+      expect(controller.getSnapshot().session).toMatchObject({
+        phase: "error",
+        errorCode: "STREAM_INTERRUPTED",
+        sessionId: "session",
+      });
+      await controller.stopStream();
       expect(stop).toHaveBeenCalledTimes(1);
-      expect(controller.getSnapshot().session.errorCode).toBe("SESSION_LOST");
+    });
+
+    it("forgets a session the provider reports as gone without sending a delete", async () => {
+      vi.useFakeTimers();
+      const platform = new FakePlatform();
+      vi.spyOn(platform, "keepalive").mockRejectedValue(
+        new AfterglideError("XBOX_HTTP_404", "gone"),
+      );
+      const stop = vi.spyOn(platform, "stopSession");
+      const controller = await streaming(platform);
+      await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs);
+      expect(stop).not.toHaveBeenCalled();
+      expect(controller.getSnapshot().session).toMatchObject({
+        phase: "error",
+        errorCode: "SESSION_ENDED",
+      });
+      expect(controller.getSnapshot().session.sessionId).toBeUndefined();
     });
 
     it("a late heartbeat failure from a replaced session cannot end the new one", async () => {

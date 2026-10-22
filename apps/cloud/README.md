@@ -71,7 +71,7 @@ repository, so source builds need the complete checkout.
 _Demo welcome screen. Packaged apps use live sign-in and ignore demo flags._
 
 The first-run check explains cloud availability, sign-in storage and controller
-readiness. If a stream is interrupted, the session is held for up to 75 seconds while you choose "Start a new session" or "End session". For setup and troubleshooting, use [support](SUPPORT.md).
+readiness. If a stream is interrupted, the session is kept open, with its heartbeat, until you choose "Start a new session" or "End session". For setup and troubleshooting, use [support](SUPPORT.md).
 
 ## Run
 

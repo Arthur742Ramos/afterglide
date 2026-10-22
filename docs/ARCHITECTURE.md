@@ -164,7 +164,7 @@ repeated samples are not counted as independent measurements. Configuration
 changes clear cached device readings. Reports group summary statistics by
 resolution and polling mode and label simulated adapters explicitly.
 
-The main process owns the heartbeat and the active session. A soft stall resumes in place; a lost transport keeps the same Xbox session (no DELETE, no new `/play`) for at most 75 s while the user restarts or ends it, then it is released. Only the explicit restart creates a new Xbox session, so game preservation is never guaranteed. Remote Play has no stop-on-quit; the cloud app ends its session on quit. Main-process generation checks prevent an awaited stop from starting
+The main process owns the heartbeat and the active session. A soft stall resumes in place; a lost transport keeps the same Xbox session and heartbeat (no DELETE, no new `/play`, no timed release) until the user restarts or ends it; only an explicit provider 404/410 releases local state, without a DELETE. Only the explicit restart creates a new Xbox session, so game preservation is never guaranteed. Remote Play has no stop-on-quit; the cloud app ends its session on quit. Main-process generation checks prevent an awaited stop from starting
 another stream after the user has left, and late provisioning results are
 cleaned up. Recovery timing ends at playable video, not at successful signaling.
 

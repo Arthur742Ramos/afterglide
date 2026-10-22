@@ -12,7 +12,7 @@ import type {
 import { emptyTelemetry, idleSession, IPC } from "../shared/contracts";
 import { sanitizeSettingsUpdate } from "../shared/controller-settings";
 import { NETWORK_POLICY } from "../shared/network-policy";
-import { errorForLog, safeError } from "./errors";
+import { AfterglideError, errorForLog, safeError } from "./errors";
 import type { PlatformService, StreamTarget } from "./platform-service";
 import type { ReleaseCheckPort } from "./release-checker";
 import { SettingsStore } from "./settings-store";
@@ -25,13 +25,7 @@ interface ActiveSession {
   targetId: string;
   targetName: string;
   heartbeat?: ReturnType<typeof setInterval>;
-  retention?: ReturnType<typeof setTimeout>;
 }
-
-// A held session that nobody recovers, restarts or ends is released after the
-// same window in which an unreachable provider is declared lost.
-const SESSION_RETENTION_MS =
-  NETWORK_POLICY.keepaliveIntervalMs * NETWORK_POLICY.keepaliveFailureThreshold;
 
 interface NamedTarget extends StreamTarget {
   name: string;
@@ -502,7 +496,6 @@ export class AppController {
         )
       )
         return;
-      this.releaseRetention(session);
       if (this.snapshot.session.phase === "negotiating")
         this.performanceReport.connected();
       if (this.recoveryStartedAt !== undefined) {
@@ -533,7 +526,7 @@ export class AppController {
       this.setSession(
         "recovering",
         "Restoring the stream",
-        "The connection changed. Your game is still running while Afterglide waits for the stream to return.",
+        "The connection changed. Afterglide is keeping your Xbox session open while the video connection returns.",
         28,
         {
           source: session.source,
@@ -542,7 +535,6 @@ export class AppController {
         },
         session.id,
       );
-      this.holdSession(session);
       return;
     }
     const target = {
@@ -550,14 +542,13 @@ export class AppController {
       id: session.targetId,
       name: session.targetName,
     };
-    this.holdSession(session);
     if (event === "lost") {
       if (!["streaming", "recovering"].includes(this.snapshot.session.phase))
         return;
       this.recoveryStartedAt ??= Date.now();
       this.failSession(
         "STREAM_INTERRUPTED",
-        "The video connection was lost, but Afterglide is still holding your stream session for a short time. This version can’t reattach video to it. Starting over requests a new session, so unsaved progress may be lost.",
+        "The video connection was lost, but Afterglide is still keeping your Xbox session open. Xbox may still end it on its own. This version can’t reattach video to it. Starting over requests a new session, so unsaved progress may be lost.",
         true,
         target,
         session.id,
@@ -692,22 +683,23 @@ export class AppController {
     void this.reportStreamEvent(this.activeSession.id, "lost");
   }
 
+  // The heartbeat belongs to the held session, not the renderer. A failed
+  // request is not proof that Xbox ended the game, so it never deletes the
+  // session; only an explicit "not found" from the provider releases local state.
   private startHeartbeat(session: ActiveSession): void {
-    let failures = 0;
     let inFlight = false;
     session.heartbeat = setInterval(() => {
       if (inFlight || this.activeSession !== session) return;
       inFlight = true;
       void this.platform
         .keepalive(session.path)
-        .then(() => {
-          if (this.activeSession === session) failures = 0;
-        })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (this.activeSession !== session) return;
-          failures += 1;
-          if (failures >= NETWORK_POLICY.keepaliveFailureThreshold)
-            this.releaseLostSession(session);
+          if (
+            error instanceof AfterglideError &&
+            (error.code === "XBOX_HTTP_404" || error.code === "XBOX_HTTP_410")
+          )
+            this.forgetEndedSession(session);
         })
         .finally(() => {
           inFlight = false;
@@ -716,28 +708,13 @@ export class AppController {
     session.heartbeat.unref?.();
   }
 
-  private holdSession(session: ActiveSession): void {
-    this.releaseRetention(session);
-    session.retention = setTimeout(
-      () => this.releaseLostSession(session),
-      SESSION_RETENTION_MS,
-    );
-    session.retention.unref?.();
-  }
-
-  private releaseRetention(session: ActiveSession): void {
-    clearTimeout(session.retention);
-    session.retention = undefined;
-  }
-
-  private releaseLostSession(session: ActiveSession): void {
+  private forgetEndedSession(session: ActiveSession): void {
     if (this.activeSession !== session) return;
-    void this.stopActiveSession().catch((error: unknown) => {
-      console.warn("Could not stop the remote session", errorForLog(error));
-    });
+    this.activeSession = undefined;
+    clearInterval(session.heartbeat);
     this.failSession(
-      "SESSION_LOST",
-      "Xbox stopped responding or the stream was not restored in time, so Afterglide released the session. Unsaved progress may be lost.",
+      "SESSION_ENDED",
+      "Xbox reports that this session has ended. Start again to request a new session.",
       true,
       {
         source: session.source,
@@ -752,7 +729,6 @@ export class AppController {
     this.activeSession = undefined;
     if (session) {
       clearInterval(session.heartbeat);
-      this.releaseRetention(session);
     }
     if (session) await this.platform.stopSession(session.path);
   }
@@ -804,8 +780,8 @@ export class AppController {
             ? "The stream connection was lost"
             : code === "MEDIA_FAILED"
               ? "The stream stopped"
-              : code === "SESSION_LOST"
-                ? "The stream session was released"
+              : code === "SESSION_ENDED"
+                ? "The Xbox session has ended"
                 : target?.source === "cloud"
                   ? "Couldn’t start cloud play"
                   : "Couldn’t start remote play",

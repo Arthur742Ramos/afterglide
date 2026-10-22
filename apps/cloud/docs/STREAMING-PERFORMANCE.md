@@ -261,10 +261,13 @@ the keepalive heartbeat (every 25 s; three consecutive failures release the
 session), so it continues through renderer or media teardown. A transient WebRTC
 `disconnected` is a soft stall that resumes in place if the peer returns; a lost
 transport (`failed`, a closed required channel, server disconnect, or a stalled
-input channel) keeps the same cloud session and heartbeat for at most 75 s
-(`keepaliveIntervalMs * keepaliveFailureThreshold`) while the player chooses
-"Start a new session" (explicitly ends the old session and requests another) or
-"End session". After 75 s without either, the session is released. Afterglide
+input channel) keeps the same cloud session and its heartbeat for as long as
+the app is visibly holding it, until the player chooses "Start a new session"
+(explicitly ends the old session and requests another) or "End session", or
+signs out or quits. Heartbeat failures and the recovery budget never send a
+DELETE or start a new session: a failed request does not prove Xbox ended the
+game, so reachability is reported as unknown. Only an explicit HTTP 404/410 from
+the heartbeat releases the local bookkeeping, without a DELETE. Afterglide
 does not re-negotiate WebRTC on an existing session because neither the Xbox
 protocol implementation nor the dependencies expose a resume or rejoin endpoint,
 so a lost transport cannot be reattached. Host and provider timeouts are unknown
@@ -275,7 +278,7 @@ Record absent evidence as unverified.
 
 Also exercise physical sleep/wake, an offline interval, Wi-Fi reconnection,
 controller removal/replacement, and End session during a pending recovery.
-Verify the held session, its 75-second release, and no restart after leaving. A deliberate restart starts a new
+Verify the held session stays open with no DELETE or new play until an explicit choice, and no restart after leaving. A deliberate restart starts a new
 streaming session: cloud capacity, queues, and game-progress preservation remain
 controlled by Xbox services. Complete the same live-network disruption tests for
 cloud play before advertising seamless recovery.
