@@ -284,7 +284,10 @@ describe("AppController", () => {
       return controller;
     }
 
-    afterEach(() => vi.useRealTimers());
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
 
     it("holds the same provider session through a stall and restores it when the transport returns", async () => {
       const platform = new FakePlatform();
@@ -372,12 +375,15 @@ describe("AppController", () => {
         .spyOn(platform, "keepalive")
         .mockRejectedValue(new Error("down"));
       const stop = vi.spyOn(platform, "stopSession");
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const controller = await streaming(platform);
       await controller.reportStreamEvent("session", "lost");
       await vi.advanceTimersByTimeAsync(10 * 60_000);
       expect(keepalive.mock.calls.length).toBeGreaterThan(
         NETWORK_POLICY.keepaliveFailureThreshold,
       );
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("v5/sessions");
       expect(stop).not.toHaveBeenCalled();
       expect(platform.startCount).toBe(1);
       expect(controller.getSnapshot().session).toMatchObject({

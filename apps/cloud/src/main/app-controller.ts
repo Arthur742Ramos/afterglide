@@ -957,13 +957,23 @@ export class AppController {
   // session; only an explicit "not found" from the provider releases local state.
   private startHeartbeat(session: ActiveSession): void {
     let inFlight = false;
+    let failing = false;
     session.heartbeat = setInterval(() => {
       if (inFlight || this.activeSession !== session) return;
       inFlight = true;
       void this.platform
         .keepalive(session.path)
+        .then(() => {
+          if (failing && this.activeSession === session)
+            console.info("Xbox session keepalive recovered");
+          failing = false;
+        })
         .catch((error: unknown) => {
           if (this.activeSession !== session) return;
+          // Log only the first failure of a streak to keep the log bounded.
+          if (!failing)
+            console.warn("Xbox session keepalive failed", errorForLog(error));
+          failing = true;
           if (
             error instanceof AfterglideError &&
             (error.code === "XBOX_HTTP_404" || error.code === "XBOX_HTTP_410")
