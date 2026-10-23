@@ -136,10 +136,15 @@ jobs:
             echo "Tag already exists; inspect its immutable source identity." >&2
             exit 1
           fi
+          # Create the lightweight ref atomically. Unlike release --target, this
+          # cannot silently use a tag created concurrently at a different commit.
+          gh api --method POST "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA" >/dev/null
+          actual_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$actual_sha" = "$GITHUB_SHA"
           cat > notes.md <<'NOTES'
           Apple Silicon beta qualification draft. Signed/notarized artifact checks and hosted signed-out launch/relaunch passed. Owner-machine clean installation, settings/Keychain upgrade, physical controller and sustained live recovery qualification remain pending. This draft must remain unpublished until those checks are recorded for these exact artifact hashes. Intel Mac and Windows are outside this release scope. See apps/cloud/docs/MAC-RELEASE.md for the qualification and publication procedure.
           NOTES
-          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft --prerelease --title "Afterglide Cloud 0.1.0-beta.1 — Apple Silicon" --notes-file notes.md \
+          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --title "Afterglide Cloud 0.1.0-beta.1 — Apple Silicon" --notes-file notes.md \
             Afterglide-Cloud-0.1.0-beta.1-mac-arm64.dmg \
             Afterglide-Cloud-0.1.0-beta.1-mac-arm64.zip \
             SHA256SUMS mac-release.json mac-smoke.json dmg-notary.json
