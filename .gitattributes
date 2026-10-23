@@ -2,4 +2,5 @@
 apps/cloud/** text=auto eol=lf
 .github/workflows/cloud-ci.yml text eol=lf
 .github/workflows/cloud-candidate.yml text eol=lf
+.github/workflows/cloud-release.yml text eol=lf
 .github/ISSUE_TEMPLATE/cloud-*.yml text eol=lf

@@ -1,0 +1,150 @@
+name: Cloud Mac release preparation
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed main commit (40 lowercase hex characters)
+        required: true
+      release_tag:
+        description: Separate Cloud tag matching apps/cloud/package.json
+        required: true
+        default: cloud-v0.1.0-beta.1
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cloud-mac-official-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/cloud
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/cloud/package-lock.json
+      - name: Require exact reviewed source and successful main checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+          if (!/^[a-f0-9]{40}$/.test(process.env.EXPECTED_SHA) || process.env.EXPECTED_SHA !== process.env.GITHUB_SHA)
+            throw new Error('Dispatch must pin the exact current main commit.');
+          if (version !== '0.1.0-beta.1' || process.env.RELEASE_TAG !== `cloud-v${version}`)
+            throw new Error('Expected the reviewed Cloud beta version/tag.');
+          for (const workflow of ['ci.yml', 'cloud-ci.yml']) {
+            const result = JSON.parse(execFileSync('gh', ['api', `repos/Arthur742Ramos/afterglide/actions/workflows/${workflow}/runs?head_sha=${process.env.GITHUB_SHA}&event=push&per_page=10`], { encoding: 'utf8' }));
+            const latest = result.workflow_runs[0];
+            if (!latest || latest.status !== 'completed' || latest.conclusion !== 'success')
+              throw new Error(`Required ${workflow} checks have not passed at this exact commit.`);
+          }
+          NODE
+      - name: Require owner-provisioned signing and notarization credentials
+        env:
+          CSC_LINK: ${{ secrets.CLOUD_MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CLOUD_MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.CLOUD_MAC_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.CLOUD_MAC_APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          node --input-type=module <<'NODE'
+          for (const name of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD'])
+            if (!process.env[name]) throw new Error(`Missing approved ${name} configuration. No unsigned fallback.`);
+          NODE
+      - run: npm ci
+      - run: npm run verify
+      - run: npm audit --audit-level=high
+      - run: npx playwright test
+      - name: Sign and notarize app, then build images
+        env:
+          CSC_LINK: ${{ secrets.CLOUD_MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CLOUD_MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.CLOUD_MAC_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.CLOUD_MAC_APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: 72GY62F838
+        run: npx electron-builder --mac dmg zip --arm64 --publish never --config.forceCodeSigning=true --config.mac.identity="Developer ID Application" --config.mac.notarize=true --config.dmg.sign=true
+      - name: Notarize and staple final DMG
+        env:
+          APPLE_ID: ${{ secrets.CLOUD_MAC_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.CLOUD_MAC_APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          image="release/Afterglide-Cloud-0.1.0-beta.1-mac-arm64.dmg"
+          xcrun notarytool submit "$image" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id 72GY62F838 --wait --timeout 30m --output-format json > release/dmg-notary.json
+          node --input-type=module -e "import {readFileSync} from 'node:fs'; if (JSON.parse(readFileSync('release/dmg-notary.json','utf8')).status !== 'Accepted') throw new Error('DMG notarization was not accepted.');"
+          xcrun stapler staple "$image"
+      - name: Verify final images, identity, notarization and packaged runtime
+        run: |
+          node scripts/verify-mac-release.mjs
+          node scripts/check-packaged-runtime.mjs
+          node scripts/smoke-mac-release.mjs
+          cd release
+          shasum -a 256 -c SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: cloud-mac-signed-${{ github.sha }}
+          path: |
+            apps/cloud/release/Afterglide-Cloud-0.1.0-beta.1-mac-arm64.dmg
+            apps/cloud/release/Afterglide-Cloud-0.1.0-beta.1-mac-arm64.zip
+            apps/cloud/release/SHA256SUMS
+            apps/cloud/release/mac-release.json
+            apps/cloud/release/mac-smoke.json
+            apps/cloud/release/dmg-notary.json
+          if-no-files-found: error
+          retention-days: 30
+
+  draft:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: Arthur742Ramos/afterglide
+    steps:
+      - name: Download this run's verified payload
+        run: gh run download "$GITHUB_RUN_ID" --name "cloud-mac-signed-$GITHUB_SHA" --dir payload
+      - name: Stage a draft prerelease; never replace existing assets
+        run: |
+          cd payload
+          sha256sum --check --strict SHA256SUMS
+          # Fail if a draft, release or tag already exists; no --clobber path.
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; inspect it instead of replacing assets." >&2
+            exit 1
+          fi
+          if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag already exists; inspect its immutable source identity." >&2
+            exit 1
+          fi
+          # Create the lightweight ref atomically. Unlike release --target, this
+          # cannot silently use a tag created concurrently at a different commit.
+          gh api --method POST "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA" >/dev/null
+          actual_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$actual_sha" = "$GITHUB_SHA"
+          cat > notes.md <<'NOTES'
+          Apple Silicon beta qualification draft. Signed/notarized artifact checks and hosted signed-out launch/relaunch passed. Owner-machine clean installation, settings/Keychain upgrade, physical controller and sustained live recovery qualification remain pending. This draft must remain unpublished until those checks are recorded for these exact artifact hashes. Intel Mac and Windows are outside this release scope. See apps/cloud/docs/MAC-RELEASE.md for the qualification and publication procedure.
+          NOTES
+          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --title "Afterglide Cloud 0.1.0-beta.1 — Apple Silicon" --notes-file notes.md \
+            Afterglide-Cloud-0.1.0-beta.1-mac-arm64.dmg \
+            Afterglide-Cloud-0.1.0-beta.1-mac-arm64.zip \
+            SHA256SUMS mac-release.json mac-smoke.json dmg-notary.json

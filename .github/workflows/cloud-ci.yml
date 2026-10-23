@@ -11,6 +11,7 @@ on:
       - "src/main/device-metrics.ts"
       - ".github/workflows/cloud-ci.yml"
       - ".github/workflows/cloud-candidate.yml"
+      - ".github/workflows/cloud-release.yml"
   pull_request:
     paths: *cloud_paths
   workflow_dispatch:
@@ -40,7 +41,7 @@ jobs:
           cache-dependency-path: apps/cloud/package-lock.json
       - run: npm ci
       - run: npm run verify
-      - run: npx prettier --check ../../.github/workflows/cloud-ci.yml ../../.github/workflows/cloud-candidate.yml
+      - run: npx prettier --check ../../.github/workflows/cloud-ci.yml ../../.github/workflows/cloud-candidate.yml ../../.github/workflows/cloud-release.yml
       - run: npm audit --audit-level=high
       - run: npx playwright test
       - name: Package Windows directory

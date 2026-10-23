@@ -1,5 +1,9 @@
 # Cloud download and release status
 
+The first Apple Silicon release is being prepared as `0.1.0-beta.1`
+(`cloud-v0.1.0-beta.1`). It is not published or qualified yet. See the
+[Mac release preparation and remaining gates](MAC-RELEASE.md).
+
 Afterglide Cloud is a source alpha for Windows and macOS. There is no supported
 public Cloud installer download yet. The repository's published Linux AppImage
 belongs to the original Steam Deck/remote-play app and does not install Cloud.

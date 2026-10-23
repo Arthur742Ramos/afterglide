@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Planned 0.1.0-beta.1 — Apple Silicon
+
+- Reserve a separate Cloud version/tag and prepare a hosted Developer ID and
+  notarization pipeline that stages a draft only after native artifact checks.
+  Signing prerequisites and final physical-machine qualification must pass before
+  distribution.
+- Include the latest merged library navigation, input-stall resilience and
+  session-preservation changes. Transport loss retains the existing Xbox session
+  and heartbeat; replacing it requires a warned explicit restart. Provider-side
+  termination can still lose progress.
+- Add packaged signed-out startup/restart checks and exact version, publisher,
+  architecture, notarization and artifact identity validation. This preparation
+  does not publish a binary, qualify Intel/Windows or enable automatic updates.
+
 - Prepare a manual unsigned Cloud candidate workflow for Windows x64 and Mac
   arm64, with exact-source manifests and SHA-256 checksums. No release is
   published and signing/notarization remain required before distribution.
