@@ -6,7 +6,8 @@
 
 - Reserve a separate Cloud version/tag and prepare a hosted Developer ID and
   notarization pipeline that stages a draft only after native artifact checks.
-  Signing credentials and final owner-machine qualification remain blocked.
+  Signing prerequisites and final physical-machine qualification must pass before
+  distribution.
 - Include the latest merged library navigation, input-stall resilience and
   session-preservation changes. Transport loss retains the existing Xbox session
   and heartbeat; replacing it requires a warned explicit restart. Provider-side

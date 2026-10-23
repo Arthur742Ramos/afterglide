@@ -12,19 +12,17 @@ reviewed preparation commit, not the older baseline hash. Do not include dirty
 worktrees or open, unreviewed changes. The runtime update feed remains disabled;
 this first release uses a manual upgrade.
 
-## Current blockers (2026-10-23)
+## Prerequisites before distribution
 
-- The owner's Mac has valid Apple Development and Apple Distribution identities,
-  but no Developer ID Application signing identity. Apple Distribution is not the
-  Developer ID identity required for this direct-download release.
-- The repository has no Actions secrets or variables configured. Hosted signing
-  and notarization cannot run. No credentials were created, exported or uploaded.
-- No final signed artifact exists yet. Clean download/install, upgrade with
-  settings and Keychain restoration, physical controller, and sustained live
-  interruption-recovery qualification must be completed on those exact bytes.
+- Configure an approved Developer ID Application signing identity and
+  notarization authentication for the release job. Apple Distribution does not
+  substitute for Developer ID in this direct-download workflow.
+- Complete clean download/install, upgrade with settings and Keychain restoration,
+  physical controller, and sustained live interruption-recovery qualification on
+  the exact final signed bytes.
 
-The existing installed alpha and running install-test copy must remain intact
-while preparation proceeds. Do not stop a game, sign out, replace an active app,
+Existing installations and active sessions must remain intact while preparation
+proceeds. Do not stop a game, sign out, replace an active app,
 reset its profile or accept a new Keychain/permission/legal prompt automatically.
 
 ## Signing configuration
@@ -45,7 +43,7 @@ The workflow expects these GitHub Actions repository secrets:
 
 The locked electron-builder 26.15.3 supports this credential route and creates a
 temporary signing keychain on the disposable hosted runner. This setup is not
-presently configured. No local keychain is changed by preparation. The pipeline
+automatically provisioned. No local keychain is changed by preparation. The pipeline
 does not run on pull requests and accepts only an exact reviewed `main` SHA.
 Missing credentials, a wrong publisher, an ad-hoc/development signature or a
 failed notarization stops it; there is no unsigned fallback.
@@ -124,5 +122,5 @@ normally. Stop and report any warning or unexpected permission prompt.
 
 Local Mac work should be limited to final signing if an approved local credential
 route is chosen, and install/live qualification. Hosted builds avoid duplicating
-toolchains and installers on the owner's nearly full disk. Do not remove unrelated
+toolchains and installers on the qualification machine. Do not remove unrelated
 files, source checkouts, caches or running jobs to make space.
