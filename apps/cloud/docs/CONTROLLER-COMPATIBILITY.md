@@ -48,8 +48,11 @@ Local confirmation/back retain their physical bottom/right positions.
 
 Focus loss, overlays, profile/device changes and disconnects release Xbox input.
 Held controls require release before they are forwarded again. Keyboard controls
-remain optional and independent. Recovery creates a new session and may not
-preserve game state; controller reconnection does not guarantee remote recovery.
+remain optional and independent. A brief transport interruption can resume in
+place. Lost transport retains the existing Xbox session and heartbeat; this
+version cannot reattach video after that transport is gone. Only the warned
+explicit restart ends it and requests a new session, risking unsaved progress.
+Controller reconnection does not guarantee remote recovery.
 
 Ordinary two-channel vibration is attempted only when the exposed actuator
 supports `dual-rumble`. Capability presence is reported as unverified, with

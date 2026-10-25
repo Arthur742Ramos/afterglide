@@ -76,6 +76,22 @@ describe("desktop placement and native policy", () => {
     search.click?.({} as never, undefined, {} as never);
     expect(commands).toEqual(["search"]);
   });
+  it("keeps manual crash recovery in the native process without sending renderer commands", () => {
+    const commands: string[] = [];
+    let reloads = 0;
+    const items = desktopMenuTemplate(
+      "win32",
+      (command) => commands.push(command),
+      () => reloads++,
+    ).flatMap((m) => (Array.isArray(m.submenu) ? m.submenu : []));
+    const reload = items.find((item) => item.id === "desktop-reload-controls")!;
+    expect(reload.enabled).toBe(false);
+    expect(reload.accelerator).toBe("CmdOrCtrl+Shift+R");
+    reload.click?.({} as never, undefined, {} as never);
+    expect(reloads).toBe(1);
+    expect(commands).toEqual([]);
+  });
+
   it("prevents display sleep across active stream phases and releases on idle or error", () => {
     const active = new Set<number>();
     let nextId = 0;

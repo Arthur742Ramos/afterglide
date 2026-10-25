@@ -3,7 +3,10 @@
 The Apple Silicon launch-fix beta is **0.1.0-beta.2**
 (`cloud-v0.1.0-beta.2`). Download and publication state are available on the
 [GitHub release page](https://github.com/Arthur742Ramos/afterglide/releases/tag/cloud-v0.1.0-beta.2).
-The older beta.1 draft remains separate; its installers do not contain this fix.
+The older beta.1 draft remains separate; its installers do not contain this fix
+or the [October 25 renderer-recovery update](IMPROVEMENT-VALIDATION.md) now
+included in main. The beta.1 signed/notarized images and owner upgrade were
+validated on October 23, but those results do not qualify these new bytes.
 
 Beta.2 starts the session heartbeat only after Xbox reports `Provisioned`.
 Previously, a keepalive sent during provisioning could return HTTP 410 and cause

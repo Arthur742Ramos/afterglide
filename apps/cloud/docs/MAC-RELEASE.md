@@ -8,8 +8,8 @@ See the GitHub release notes for publication state and exact-build qualification
 The original root `v*` tags continue to belong to the Linux app.
 
 The application baseline is reviewed main
-`b0fa39eb4675c938d199a5aa673cec3f3e302504`, including recent library navigation,
-input-stall handling and Xbox session preservation. A release must use the final
+`df5d9a6ea76d7d70a04a252de78815bc36fef088`, including renderer-loss recovery,
+recent library navigation, input-stall handling and Xbox session preservation. A release must use the final
 reviewed preparation commit, not the older baseline hash. Do not include dirty
 worktrees or open, unreviewed changes. The runtime update feed remains disabled;
 this first release uses a manual upgrade.

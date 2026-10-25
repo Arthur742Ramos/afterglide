@@ -149,10 +149,27 @@ app.whenReady().then(async () => {
   });
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
-      desktopMenuTemplate(process.platform, (command) => {
-        if (mainWindow && !mainWindow.isDestroyed())
-          mainWindow.webContents.send(IPC.desktopCommand, command);
-      }),
+      desktopMenuTemplate(
+        process.platform,
+        (command) => {
+          if (!mainWindow || mainWindow.isDestroyed()) return;
+          const contents = mainWindow.webContents;
+          if (contents.isDestroyed() || contents.isCrashed()) return;
+          try {
+            contents.send(IPC.desktopCommand, command);
+          } catch {
+            // A renderer can disappear between the check and IPC delivery.
+          }
+        },
+        () => {
+          if (
+            mainWindow &&
+            !mainWindow.isDestroyed() &&
+            mainWindow.webContents.isCrashed()
+          )
+            mainWindow.webContents.reload();
+        },
+      ),
     ),
   );
   openMainWindow();
@@ -303,6 +320,38 @@ function createWindow(fullscreen: boolean): BrowserWindow {
   });
 
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const rendererLost = () => {
+    void controller?.rendererLost().catch(() => {
+      console.warn("The interrupted renderer launch could not be cleaned up.");
+    });
+  };
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) rendererLost();
+  });
+  // Recover the UI once per window. A persistent renderer failure must not
+  // cause an unbounded reload loop or automatically replace an Xbox session.
+  let crashReloaded = false;
+  window.webContents.on("did-finish-load", () => {
+    const reload = Menu.getApplicationMenu()?.getMenuItemById(
+      "desktop-reload-controls",
+    );
+    if (reload) reload.enabled = false;
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    if (quitting || window.isDestroyed()) return;
+    rendererLost();
+    const reload = Menu.getApplicationMenu()?.getMenuItemById(
+      "desktop-reload-controls",
+    );
+    if (reload) reload.enabled = true;
+    if (
+      !crashReloaded &&
+      ["crashed", "oom", "abnormal-exit", "killed"].includes(details.reason)
+    ) {
+      crashReloaded = true;
+      window.webContents.reload();
+    }
+  });
   if (placement.maximized && !fullscreen && !isBackgroundTest)
     window.maximize();
   window.on("close", () => {

@@ -46,7 +46,7 @@ codecs or change security settings.
   behavior, readable controls and keyboard parity on actual Windows/Mac desktops.
 - Interrupted/repeated flows: cancel and relaunch, sign-out and replacement login,
   network loss/restoration, sleep/resume, recovery cancellation and session exit.
-  A replacement cloud session may not preserve game progress.
+  Transport loss retains the existing session and heartbeat. A warned explicit restart requests a replacement cloud session and may lose unsaved progress.
 - Check the supported compact/desktop sizes and 200% zoom with actual errors,
   missing artwork, settings-save failure and Settings return focus.
 
