@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { validateReleaseIdentity } from "../../scripts/verify-mac-release.mjs";
 
 const identity = {
-  version: "0.1.0-beta.1",
-  tag: "cloud-v0.1.0-beta.1",
+  version: "0.1.0-beta.2",
+  tag: "cloud-v0.1.0-beta.2",
   commit: "b".repeat(40),
-  actualVersion: "0.1.0-beta.1",
+  actualVersion: "0.1.0-beta.2",
   actualIdentifier: "io.github.Arthur742Ramos.AfterglideCloud",
   arch: "arm64",
   metadata:
@@ -18,7 +18,7 @@ describe("official Mac release identity", () => {
     expect(() => validateReleaseIdentity(identity)).not.toThrow();
   });
   it.each([
-    { tag: "v0.1.0-beta.1" },
+    { tag: "v0.1.0-beta.2" },
     { version: "0.1.0" },
     { commit: "main" },
     { actualVersion: "0.1.0-alpha.1" },

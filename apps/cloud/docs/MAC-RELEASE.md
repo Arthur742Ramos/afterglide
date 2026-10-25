@@ -1,8 +1,10 @@
-# First official Mac release preparation
+# Mac beta release procedure
 
-The planned first distribution is **Afterglide Cloud 0.1.0-beta.1**, Apple Silicon
-only, with tag **cloud-v0.1.0-beta.1**. It is a beta, not a stable release.
-The version bump reserves its identity; it does not mean that a release exists.
+The current release target is **Afterglide Cloud 0.1.0-beta.2**, Apple Silicon
+only, with tag **cloud-v0.1.0-beta.2**. It fixes launch cancellation caused by
+keepalive requests sent before Xbox finishes provisioning a session. The older
+`cloud-v0.1.0-beta.1` draft and its immutable artifacts remain separate.
+See the GitHub release notes for publication state and exact-build qualification.
 The original root `v*` tags continue to belong to the Linux app.
 
 The application baseline is reviewed main
@@ -57,7 +59,7 @@ and [notarization](https://developer.apple.com/documentation/security/notarizing
    checks to pass on that exact merged commit. CI covers Windows and native
    Apple Silicon; it does not make Windows an advertised release target.
 2. Dispatch **Cloud Mac release preparation** on `main`, with its complete
-   40-character `expected_sha` and `cloud-v0.1.0-beta.1` as `release_tag`.
+   40-character `expected_sha` and `cloud-v0.1.0-beta.2` as `release_tag`.
 3. The native hosted Mac repeats format/type/unit checks, audit and simulated
    Electron journeys, then signs/notarizes the app and builds arm64 DMG/ZIP.
    The final DMG is separately notarized and stapled.
@@ -103,8 +105,10 @@ Intel Mac and Windows binaries remain outside this first release scope.
 
 ## Publish and install after qualification
 
-Keep the draft unpublished until all required results above are recorded and any
-failures resolved. Recheck its target tag SHA and every asset against the signed
+Record the results above and resolve observed failures before publication.
+If the owner explicitly requests an early beta release, list every unperformed
+qualification check in its public notes and do not claim stable or fully qualified
+distribution. Recheck its target tag SHA and every asset against the signed
 manifest and GitHub download digests; do not rebuild or re-sign between final
 qualification and publication. Replace the draft notes with concrete changes,
 supported scope, limitations, checksums and the qualification evidence. Set the

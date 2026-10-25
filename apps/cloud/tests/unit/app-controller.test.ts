@@ -780,6 +780,32 @@ describe("AppController", () => {
       expect(controller.getSnapshot().session.phase).toBe("idle");
     });
 
+    it("waits for provisioning before starting the session heartbeat", async () => {
+      vi.useFakeTimers();
+      const platform = new FakePlatform();
+      let provisioned = false;
+      vi.spyOn(platform, "getSessionState").mockImplementation(async () => ({
+        state: provisioned ? "Provisioned" : "Provisioning",
+      }));
+      const keepalive = vi
+        .spyOn(platform, "keepalive")
+        .mockRejectedValue(new AfterglideError("XBOX_HTTP_410", "not ready"));
+      const controller = makeController(platform);
+      await controller.initialize();
+      const starting = controller.startCloudStream("cloud-game");
+      await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs * 2);
+      expect(keepalive).not.toHaveBeenCalled();
+      expect(controller.getSnapshot().session.phase).toBe("provisioning");
+      provisioned = true;
+      await vi.advanceTimersByTimeAsync(40);
+      await starting;
+      expect(controller.getSnapshot().session.phase).toBe("negotiating");
+      keepalive.mockResolvedValue(undefined);
+      await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs);
+      expect(keepalive).toHaveBeenCalledTimes(1);
+      await controller.stopStream();
+    });
+
     it("keeps its own heartbeat running without the renderer and stops it when the session ends", async () => {
       vi.useFakeTimers();
       const platform = new FakePlatform();

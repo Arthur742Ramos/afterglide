@@ -41,7 +41,7 @@ export function validateReleaseIdentity({
   actualIdentifier,
   arch,
 }) {
-  if (!/^0\.1\.0-beta\.1$/.test(version) || tag !== `cloud-v${version}`)
+  if (!/^0\.1\.0-beta\.2$/.test(version) || tag !== `cloud-v${version}`)
     throw new Error(
       "Expected the reviewed Cloud beta version and separate cloud-v tag.",
     );
