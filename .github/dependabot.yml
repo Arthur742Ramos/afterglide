@@ -7,6 +7,13 @@ updates:
     groups:
       app-dependencies:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /apps/cloud
+    schedule:
+      interval: weekly
+    groups:
+      cloud-dependencies:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
