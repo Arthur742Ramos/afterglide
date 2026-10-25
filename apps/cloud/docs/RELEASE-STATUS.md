@@ -1,18 +1,18 @@
 # Cloud download and release status
 
 The first Apple Silicon release is being prepared as `0.1.0-beta.1`
-(`cloud-v0.1.0-beta.1`). It is not published or qualified yet. See the
+(`cloud-v0.1.0-beta.1`). A Developer ID signed, notarized and stapled arm64 draft was staged on October 23 from commit `485f1d7186bfc34927027266329e9b582d0950fd`. An owner upgrade and signed-in Library launch passed. It is not published or fully qualified yet; later source changes are not part of those signed bytes. See the
 [Mac release preparation and remaining gates](MAC-RELEASE.md).
 
 Afterglide Cloud is a source alpha for Windows and macOS. There is no supported
 public Cloud installer download yet. The repository's published Linux AppImage
 belongs to the original Steam Deck/remote-play app and does not install Cloud.
 
-| Platform            | Current route                                                                                          | Distribution qualification                                                                           |
-| ------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Windows x64         | [Build from source](../README.md#run); manual candidate workflow can build an unsigned NSIS installer  | Signing, clean install/upgrade/uninstall and sustained physical-device qualification pending         |
-| macOS Apple Silicon | Source execution and local development DMG; manual candidate workflow can build unsigned arm64 DMG/ZIP | Developer ID, notarization/stapling, clean install and packaged device/account qualification pending |
-| macOS Intel         | Architecture-specific packaging configuration                                                          | Actual Intel execution and the complete qualification checklist pending; no supported binary claim   |
+| Platform            | Current route                                                                                         | Distribution qualification                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows x64         | [Build from source](../README.md#run); manual candidate workflow can build an unsigned NSIS installer | Signing, clean install/upgrade/uninstall and sustained physical-device qualification pending                                                  |
+| macOS Apple Silicon | Source; ad-hoc test candidates; separate signed/notarized `0.1.0-beta.1` arm64 draft                  | Draft signing/notarization and owner upgrade passed; signed-out, clean install, account/device and native accessibility qualification pending |
+| macOS Intel         | Architecture-specific packaging configuration                                                         | Actual Intel execution and the complete qualification checklist pending; no supported binary claim                                            |
 
 Candidate artifacts are retained in GitHub Actions for 14 days and may require
 GitHub access to retrieve. They are test inputs, not a public download channel.
