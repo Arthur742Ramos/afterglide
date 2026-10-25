@@ -1,5 +1,10 @@
 # Client lifecycle profiling
 
+For the Windows offscreen RSS-cap investigation and bounded controls without app
+code, see [October 25 closure](INVESTIGATION-CLOSURE.md). Those controls reproduce
+large main-process working-set variation on both runtime versions; hidden
+offscreen RSS must not be interpreted as an ordinary app leak or performance gain.
+
 The opt-in profiler uses disposable accounts/profiles and two workloads:
 
 - The source UI with the synthetic 80-title catalog: foreground signed-out idle,
