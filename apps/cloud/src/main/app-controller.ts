@@ -598,6 +598,18 @@ export class AppController {
       .slice(0, NETWORK_POLICY.maxIceCandidates);
   }
 
+  /** A replaced renderer cannot own the old peer or its launch response. */
+  async rendererLost(): Promise<void> {
+    if (this.startingTarget || this.retryPending) {
+      // Provisioning has not handed off a playable descriptor yet. Cancel only
+      // this unfinished launch; generation checks clean up late creation replies.
+      await this.stopStream();
+      return;
+    }
+    const session = this.activeSession;
+    if (session) await this.reportStreamEvent(session.id, "lost");
+  }
+
   async reportStreamEvent(
     sessionId: string,
     event: "connected" | "interrupted" | "lost" | "failed",
@@ -659,7 +671,11 @@ export class AppController {
       name: session.targetName,
     };
     if (event === "lost") {
-      if (!["streaming", "recovering"].includes(this.snapshot.session.phase))
+      if (
+        !["negotiating", "streaming", "recovering"].includes(
+          this.snapshot.session.phase,
+        )
+      )
         return;
       this.recoveryStartedAt ??= Date.now();
       this.failSession(
@@ -1090,11 +1106,17 @@ export class AppController {
     const { cloud, ...state } = this.snapshot;
     const { titles, ...metadata } = cloud;
     // Electron serializes the payload: no extra deep clone before IPC is needed.
-    this.window.webContents.send(IPC.snapshot, {
-      ...state,
-      cloud: titles === this.lastBroadcastTitles ? metadata : cloud,
-    });
-    this.lastBroadcastTitles = titles;
+    try {
+      this.window.webContents.send(IPC.snapshot, {
+        ...state,
+        cloud: titles === this.lastBroadcastTitles ? metadata : cloud,
+      });
+      this.lastBroadcastTitles = titles;
+    } catch {
+      // A disposed renderer must not interrupt session state or cleanup. The
+      // next renderer gets a complete baseline through getSnapshot.
+      this.lastBroadcastTitles = undefined;
+    }
   }
 }
 

@@ -2,7 +2,7 @@
 
 The planned first distribution is **Afterglide Cloud 0.1.0-beta.1**, Apple Silicon
 only, with tag **cloud-v0.1.0-beta.1**. It is a beta, not a stable release.
-The version bump reserves its identity; it does not mean that a release exists.
+A private draft exists for commit `485f1d7186bfc34927027266329e9b582d0950fd`. Its Developer ID signing, notarization/stapling and owner upgrade passed on October 23. The draft remains unpublished and its remaining qualification gates below are open. New source changes require their own reviewed artifact and qualification; they do not change the existing signed images.
 The original root `v*` tags continue to belong to the Linux app.
 
 The application baseline is reviewed main

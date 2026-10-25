@@ -106,6 +106,7 @@ export function shouldQuitAfterLastWindow(platform: string, test: boolean) {
 export function desktopMenuTemplate(
   platform: string,
   send: (command: DesktopCommand) => void,
+  reloadCrashedRenderer: () => void = () => {},
 ): MenuItemConstructorOptions[] {
   const mac = platform === "darwin";
   const preferences: MenuItemConstructorOptions = {
@@ -149,6 +150,13 @@ export function desktopMenuTemplate(
     {
       label: "View",
       submenu: [
+        {
+          id: "desktop-reload-controls",
+          label: "Reload controls after a crash",
+          accelerator: "CmdOrCtrl+Shift+R",
+          enabled: false,
+          click: reloadCrashedRenderer,
+        },
         {
           id: "desktop-search",
           label: "Search Library",

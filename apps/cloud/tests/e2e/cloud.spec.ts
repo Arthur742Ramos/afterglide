@@ -1194,6 +1194,124 @@ test("a lost cloud stream keeps its session until a deliberate restart; exit can
   await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
 });
 
+test("reloading a playing renderer exposes its held session without replacing it", async () => {
+  const page = await launch();
+  await play(page);
+  const initial = await page.evaluate(
+    async () => (await window.afterglideCloud.getSnapshot()).session.sessionId,
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Start a new session" }),
+  ).toBeVisible();
+  await expect(page.getByText(/unsaved progress may be lost/i)).toBeVisible();
+  expect(
+    await page.evaluate(
+      async () =>
+        (await window.afterglideCloud.getSnapshot()).session.sessionId,
+    ),
+  ).toBe(initial);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Start a new session" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "End session", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible();
+  expect(
+    await page.evaluate(
+      async () => (await window.afterglideCloud.getSnapshot()).session.phase,
+    ),
+  ).toBe("idle");
+});
+
+test("a crashed renderer reloads to explicit retained-session recovery", async () => {
+  const page = await launch();
+  await play(page);
+  const initial = await page.evaluate(
+    async () => (await window.afterglideCloud.getSnapshot()).session.sessionId,
+  );
+  const crashed = page.waitForEvent("crash");
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer(),
+  );
+  await crashed;
+  // Playwright permanently marks this Page as crashed. Inspect the recovered
+  // renderer's actual DOM through Electron, without reloading it from the test.
+  const recoveredState = () =>
+    app.evaluate(async ({ BrowserWindow }) => {
+      const contents = BrowserWindow.getAllWindows()[0].webContents;
+      if (contents.isCrashed() || contents.isLoadingMainFrame())
+        return undefined;
+      return contents.executeJavaScript(`(async () => ({
+      session: (await window.afterglideCloud.getSnapshot()).session,
+      text: document.body.innerText,
+      buttons: Array.from(document.querySelectorAll('button')).filter(b => b.getBoundingClientRect().height > 0).map(b => b.textContent.trim())
+    }))()`);
+    });
+  await expect
+    .poll(async () => (await recoveredState())?.buttons)
+    .toContain("End session");
+  const held = await recoveredState();
+  expect(held.session).toMatchObject({
+    phase: "error",
+    sessionId: initial,
+    errorCode: "STREAM_INTERRUPTED",
+  });
+  expect(held.text).toContain("unsaved progress may be lost");
+  expect(
+    held.buttons.some((name: string) => name.startsWith("Start a new session")),
+  ).toBe(true);
+  await app.evaluate(async ({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.executeJavaScript(
+      "Array.from(document.querySelectorAll('button')).find(b=>b.textContent.includes('Start a new session')).click()",
+    ),
+  );
+  await expect
+    .poll(async () => (await recoveredState())?.session.phase)
+    .toBe("streaming");
+  const replacement = (await recoveredState()).session.sessionId;
+  expect(replacement).not.toBe(initial);
+  // A second real crash must not loop. Its native menu action remains usable
+  // independently of the dead renderer and only reloads local controls.
+  await app.evaluate(async ({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    await new Promise<void>((resolve) => {
+      contents.once("render-process-gone", () => resolve());
+      contents.forcefullyCrashRenderer();
+    });
+  });
+  expect(
+    await app.evaluate(({ BrowserWindow, Menu }) => ({
+      crashed: BrowserWindow.getAllWindows()[0].webContents.isCrashed(),
+      reloadEnabled: Menu.getApplicationMenu()!.getMenuItemById(
+        "desktop-reload-controls",
+      )!.enabled,
+    })),
+  ).toEqual({ crashed: true, reloadEnabled: true });
+  await app.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()!.getMenuItemById("desktop-settings")!.click();
+    const item = Menu.getApplicationMenu()!.getMenuItemById(
+      "desktop-reload-controls",
+    )!;
+    item.click();
+  });
+  await expect
+    .poll(async () => (await recoveredState())?.session.sessionId)
+    .toBe(replacement);
+  await expect
+    .poll(async () => (await recoveredState())?.buttons)
+    .toContain("End session");
+  await app.evaluate(async ({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.executeJavaScript(
+      "Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='End session').click()",
+    ),
+  );
+  await expect
+    .poll(async () => (await recoveredState())?.session.phase)
+    .toBe("idle");
+  expect((await recoveredState()).text).toContain("Your cloud library.");
+});
+
 test("cloud launch failure retries with a safe error", async () => {
   const page = await launch("cloud-connect-error");
   await page.getByRole("button", { name: /Play again/ }).click();

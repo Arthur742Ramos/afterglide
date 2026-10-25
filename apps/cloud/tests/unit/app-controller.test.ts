@@ -716,6 +716,72 @@ describe("AppController", () => {
       vi.restoreAllMocks();
     });
 
+    it.each(["negotiating", "streaming", "recovering"] as const)(
+      "renderer loss in %s retains the heartbeat and explicit end/restart choices",
+      async (phase) => {
+        vi.useFakeTimers();
+        const platform = new FakePlatform();
+        platform.states = [{ state: "Provisioned" }];
+        const stop = vi.spyOn(platform, "stopSession");
+        const keepalive = vi.spyOn(platform, "keepalive");
+        const controller = makeController(platform);
+        await controller.initialize();
+        await controller.startCloudStream("cloud-game");
+        if (phase !== "negotiating")
+          await controller.reportStreamEvent("session", "connected");
+        if (phase === "recovering")
+          await controller.reportStreamEvent("session", "interrupted");
+        await controller.rendererLost();
+        const held = controller.getSnapshot().session;
+        expect(held).toMatchObject({
+          phase: "error",
+          sessionId: "session",
+          errorCode: "STREAM_INTERRUPTED",
+        });
+        await controller.rendererLost();
+        await controller.reportStreamEvent("session", "connected");
+        expect(controller.getSnapshot().session).toEqual(held);
+        await vi.advanceTimersByTimeAsync(
+          NETWORK_POLICY.keepaliveIntervalMs * 2,
+        );
+        expect(keepalive).toHaveBeenCalledTimes(2);
+        expect(platform.startCount).toBe(1);
+        expect(stop).not.toHaveBeenCalled();
+        await expect(controller.startCloudStream("cloud-game")).rejects.toThrow(
+          "Leave the current stream",
+        );
+        await controller.stopStream();
+        await controller.rendererLost();
+        await controller.stopStream();
+        expect(stop).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(NETWORK_POLICY.keepaliveIntervalMs);
+        expect(keepalive).toHaveBeenCalledTimes(2);
+        expect(controller.getSnapshot().session.phase).toBe("idle");
+      },
+    );
+
+    it("cleans up the session even when a dead renderer rejects snapshot delivery", async () => {
+      const platform = new FakePlatform();
+      const controller = await streaming(platform);
+      const stop = vi.spyOn(platform, "stopSession");
+      controller.attachWindow({
+        isDestroyed: () => false,
+        webContents: {
+          send: () => {
+            throw new Error("Render frame disposed");
+          },
+        },
+      } as unknown as BrowserWindow);
+      await controller.rendererLost();
+      expect(controller.getSnapshot().session.sessionId).toBe("session");
+      expect(stop).not.toHaveBeenCalled();
+      await controller.stopStream();
+      expect(stop).toHaveBeenCalledOnce();
+      expect(controller.getSnapshot().session.phase).toBe("idle");
+      await controller.rendererLost();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+
     it("holds the same provider session through a stall and restores it when the transport returns", async () => {
       const platform = new FakePlatform();
       const stop = vi.spyOn(platform, "stopSession");
@@ -860,61 +926,70 @@ describe("AppController", () => {
     });
   });
 
-  it("does not restart if the user leaves while recovery is stopping the old session", async () => {
-    const platform = new FakePlatform();
-    const controller = makeController(platform);
-    await controller.initialize();
-    await controller.startCloudStream("cloud-game");
-    let finishStop!: () => void;
-    vi.spyOn(platform, "stopSession").mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          finishStop = resolve;
-        }),
-    );
-    const start = vi.spyOn(platform, "startSession");
-    const retry = controller.retryStream();
-    const rejected = expect(retry).rejects.toThrow("Connection cancelled");
-    await controller.stopStream();
-    finishStop();
-    await rejected;
-    expect(start).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().session.phase).toBe("idle");
-  });
-
-  it("cleans up a service session that finishes provisioning after cancellation", async () => {
-    const platform = new FakePlatform();
-    const controller = makeController(platform);
-    await controller.initialize();
-    let finishStart!: (value: {
-      sessionId: string;
-      sessionPath: string;
-    }) => void;
-    const startCalled = new Promise<void>((resolveCalled) => {
-      vi.spyOn(platform, "startSession").mockImplementation(
+  it.each(["stopStream", "rendererLost"] as const)(
+    "does not restart after %s while recovery is stopping the old session",
+    async (interrupt) => {
+      const platform = new FakePlatform();
+      const controller = makeController(platform);
+      await controller.initialize();
+      await controller.startCloudStream("cloud-game");
+      let finishStop!: () => void;
+      vi.spyOn(platform, "stopSession").mockImplementation(
         () =>
-          new Promise((resolve) => {
-            finishStart = resolve;
-            resolveCalled();
+          new Promise<void>((resolve) => {
+            finishStop = resolve;
           }),
       );
-    });
-    const stop = vi.spyOn(platform, "stopSession");
-    const starting = controller.startCloudStream("cloud-game");
-    const rejected = expect(starting).rejects.toMatchObject({
-      code: "OPERATION_CANCELLED",
-      recoverable: false,
-    });
-    await startCalled;
-    await controller.stopStream();
-    finishStart({ sessionId: "late", sessionPath: "late-path" });
-    await rejected;
-    await vi.waitFor(() =>
-      expect(stop).toHaveBeenCalledWith("late-path", "late"),
-    );
-    expect(stop).toHaveBeenCalledTimes(1);
-    expect(controller.getSnapshot().session.phase).toBe("idle");
-  });
+      const start = vi.spyOn(platform, "startSession");
+      const retry = controller.retryStream();
+      const rejected = expect(retry).rejects.toThrow("Connection cancelled");
+      await expect(controller.retryStream()).rejects.toThrow(
+        "A reconnection is already running",
+      );
+      await controller[interrupt]();
+      finishStop();
+      await rejected;
+      expect(start).not.toHaveBeenCalled();
+      expect(controller.getSnapshot().session.phase).toBe("idle");
+    },
+  );
+
+  it.each(["stopStream", "rendererLost"] as const)(
+    "cleans up a service session that finishes provisioning after %s",
+    async (interrupt) => {
+      const platform = new FakePlatform();
+      const controller = makeController(platform);
+      await controller.initialize();
+      let finishStart!: (value: {
+        sessionId: string;
+        sessionPath: string;
+      }) => void;
+      const startCalled = new Promise<void>((resolveCalled) => {
+        vi.spyOn(platform, "startSession").mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              finishStart = resolve;
+              resolveCalled();
+            }),
+        );
+      });
+      const stop = vi.spyOn(platform, "stopSession");
+      const starting = controller.startCloudStream("cloud-game");
+      const rejected = expect(starting).rejects.toMatchObject({
+        code: "OPERATION_CANCELLED",
+        recoverable: false,
+      });
+      await startCalled;
+      await controller[interrupt]();
+      finishStart({ sessionId: "late", sessionPath: "late-path" });
+      await rejected;
+      await vi.waitFor(() =>
+        expect(stop).toHaveBeenCalledWith("late-path", "late"),
+      );
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot().session.phase).toBe("idle");
+    },
+  );
 
   it("exports only sanitized active telemetry and preserves evidence after exit", async () => {
     const controller = makeController(new FakePlatform());

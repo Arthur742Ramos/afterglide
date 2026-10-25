@@ -70,8 +70,7 @@ client behavior, not Xbox capacity, live signaling or streaming performance.
 PR #16 records a short Apple Silicon Fortnite session at 1080p/60 with
 user-confirmed audio and keyboard input. It does not establish sustained decode
 performance, physical controller/rumble support or interruption recovery. Intel
-Mac runtime, Windows and Apple Silicon sustained sessions, signing/notarization
-and ordinary clean installation remain platform gates. This campaign does not
+Mac runtime, Windows and Apple Silicon sustained sessions, ordinary clean installation remain platform gates. The October 23 Apple Silicon draft passed signing/notarization and an owner upgrade; this does not qualify later source changes or the remaining exact-artifact tests. This campaign does not
 publish a release or require a new login, subscription or security-setting change.
 
 ## Catalog transfer measurement and change
