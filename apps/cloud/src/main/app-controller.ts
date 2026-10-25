@@ -460,7 +460,6 @@ export class AppController {
         targetName: target.name,
         controller: cancellation,
       };
-      this.startHeartbeat(this.activeSession);
       // From here, stopActiveSession owns cleanup of the adopted session.
       receivedCreation = undefined;
 
@@ -474,6 +473,10 @@ export class AppController {
         this.assertCurrent(generation);
 
         if (state.state === "Provisioned") {
+          // Keepalive is only valid once provisioning has finished. Xbox can
+          // return 410 while the allocated session is still starting; treating
+          // that as an ended session cancels an otherwise valid launch.
+          this.startHeartbeat(this.activeSession);
           this.setSession(
             "negotiating",
             "Starting video",
