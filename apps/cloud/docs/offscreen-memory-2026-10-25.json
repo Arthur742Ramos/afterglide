@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "485f1d7186bfc34927027266329e9b582d0950fd",
+  "currentBase": "c2e79adae335ffaba1d8b1b7a061cde291d867ac",
+  "streamEngineSha256Both": "34646f43c034cd561eea67da6463f6bfa4b8c0720be1f165279ba5da8fe6a020",
+  "host": {
+    "os": "Windows 10.0.26300",
+    "architecture": "x64",
+    "logicalCpus": 16,
+    "shared": true
+  },
+  "caps": {
+    "durationPerCaseMs": 20000,
+    "aggregateRssMiB": 1536,
+    "cpuPercentOneCore": 135
+  },
+  "controls": {
+    "afterglideCode": false,
+    "webrtc": false,
+    "playwright": false,
+    "networkContent": false,
+    "windowsVisible": false,
+    "windowsFocusable": false,
+    "canvas": "640x360 color fill every 33ms",
+    "window": "1280x800",
+    "sampleIntervalMs": 500
+  },
+  "baselineArchiveSha256": "97dcb75065444ef031b9b6ea814ccd2109b97934fffb0c503a555d4737ca79cc",
+  "runs": [
+    {
+      "name": "idle-offscreen",
+      "electron": "43.8.1",
+      "chromium": "150.0.7871.250",
+      "reason": "completed",
+      "samples": 40,
+      "durationMs": 20359,
+      "firstRssMiB": 201.6875,
+      "lastRssMiB": 325.63671875,
+      "peakRssMiB": 325.63671875,
+      "mainPeakRssMiB": 109.15625,
+      "mainPeakHeapUsedMiB": 4.5233306884765625,
+      "gpuPeakRssMiB": 102.890625,
+      "maxCpuPercentOneCore": 3.4020040080160414,
+      "rawSha256": "3430ef704771a67fb0b99b4a23bd6cc6a366c7ca3c95a3d15e7091d93198c064"
+    },
+    {
+      "name": "canvas-offscreen",
+      "electron": "43.8.1",
+      "chromium": "150.0.7871.250",
+      "reason": "completed",
+      "samples": 40,
+      "durationMs": 20297,
+      "firstRssMiB": 450.63671875,
+      "lastRssMiB": 506.3046875,
+      "peakRssMiB": 1142.4609375,
+      "mainPeakRssMiB": 915.2890625,
+      "mainPeakHeapUsedMiB": 4.004596710205078,
+      "gpuPeakRssMiB": 112.2578125,
+      "maxCpuPercentOneCore": 40.495703124999984,
+      "rawSha256": "c3c65f960a71fa766d4a3aadb5e1614815fae06aa98f20f24ab8a2e95a1e51a1"
+    },
+    {
+      "name": "canvas-hidden",
+      "electron": "43.8.1",
+      "chromium": "150.0.7871.250",
+      "reason": "completed",
+      "samples": 40,
+      "durationMs": 20434,
+      "firstRssMiB": 297.3515625,
+      "lastRssMiB": 300.43359375,
+      "peakRssMiB": 300.8203125,
+      "mainPeakRssMiB": 94.62109375,
+      "mainPeakHeapUsedMiB": 4.522674560546875,
+      "gpuPeakRssMiB": 85.33984375,
+      "maxCpuPercentOneCore": 12.251771653543305,
+      "rawSha256": "b3dfe853f0f1fecfb9b6e427ca524c89ee0915390e44b0033a9a8337eb51c23f"
+    },
+    {
+      "name": "baseline-canvas-offscreen",
+      "electron": "43.7.7",
+      "chromium": "150.0.7871.250",
+      "reason": "completed",
+      "samples": 40,
+      "durationMs": 20337,
+      "firstRssMiB": 204.75,
+      "lastRssMiB": 1090.51171875,
+      "peakRssMiB": 1090.51171875,
+      "mainPeakRssMiB": 859.18359375,
+      "mainPeakHeapUsedMiB": 3.9874534606933594,
+      "gpuPeakRssMiB": 114.81640625,
+      "maxCpuPercentOneCore": 49.0922310756972,
+      "rawSha256": "90e9c63693d93d32112f090ce4d9c61a2ba150ea9d7c38c7cb6e4d9c4ddf6b3d"
+    }
+  ],
+  "sources": {
+    "closure-canvas.cjs": {
+      "sha256": "cfacd2a816409c1eca0b44b9981387cce9e1c8c523aa105e3f30b34cf0552244",
+      "source": "const { app, BrowserWindow } = require('electron');\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst mode = process.argv[2];\nconst output = process.argv[3];\napp.setPath('userData', output + '.profile');\napp.whenReady().then(async () => {\n  const win = new BrowserWindow({ width:1280, height:800, show:false, focusable:false, skipTaskbar:true, webPreferences:{ sandbox:true, contextIsolation:true, nodeIntegration:false, backgroundThrottling:false, offscreen:mode !== 'canvas-hidden' } });\n  await win.loadFile(path.join(__dirname, 'closure-canvas.html'));\n  if (mode !== 'idle-offscreen') await win.webContents.executeJavaScript('startCanvas()');\n  const samples=[];\n  const started=Date.now();\n  let prior;\n  let stopping=false;\n  const finish=(reason) => {\n    if (stopping) return;\n    stopping=true;\n    clearInterval(timer);\n    fs.writeFileSync(output, JSON.stringify({ mode, versions:process.versions, noAppCode:true, noPlaywright:true, caps:{rssMiB:1536,cpuPercentOneCore:135,durationMs:20000}, reason, samples },null,2));\n    win.destroy();\n    app.quit();\n  };\n  const timer=setInterval(() => {\n    const at=Date.now();\n    const processes=app.getAppMetrics().map(p=>({pid:p.pid,type:p.type,rssMiB:p.memory.workingSetSize/1024,cpuSeconds:p.cpu.cumulativeCPUUsage}));\n    const rssMiB=processes.reduce((sum,p)=>sum+p.rssMiB,0);\n    const cpuPercentOneCore=prior ? 100000*processes.reduce((sum,p)=>sum+Math.max(0,p.cpuSeconds-(prior.processes.find(old=>old.pid===p.pid)?.cpuSeconds??p.cpuSeconds)),0)/(at-prior.at) : 0;\n    const sample={at,elapsedMs:at-started,rssMiB,cpuPercentOneCore,mainMemory:process.memoryUsage(),processes};\n    samples.push(sample);\n    fs.writeFileSync(output+'.checkpoint.json',JSON.stringify({mode,samples},null,2));\n    prior=sample;\n    if (rssMiB>1536||cpuPercentOneCore>135) finish('resource-cap');\n    else if(at-started>=20000) finish('completed');\n  },500);\n});\n"
+    },
+    "closure-canvas.html": {
+      "sha256": "f48d8ce098ce357a0bc4ac8c39b0a6ff9a6038361b12b4ae28469d35780f8bb0",
+      "source": "<!doctype html><title>Disposable canvas fixture</title><canvas width=\"640\" height=\"360\"></canvas><script>\nfunction startCanvas(){const canvas=document.querySelector('canvas');const c=canvas.getContext('2d');let frame=0;setInterval(()=>{c.fillStyle=frame++%2?'#2050b0':'#f8c050';c.fillRect(0,0,640,360)},33)}\n</script>\n"
+    },
+    "closure-run.mjs": {
+      "sha256": "83cd0a24a8c7a4696ae7d67b5c7204c58815831c90bff24949cf1a1efc86b5d1",
+      "source": "import { createRequire } from 'node:module';\nimport { spawn } from 'node:child_process';\nimport { readFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\nconst require=createRequire(import.meta.url);\nconst executable=process.argv[2]??require('electron');\nfor(const mode of process.argv[3]?[process.argv[3]]:['idle-offscreen','canvas-offscreen','canvas-hidden']){\n const output=resolve(import.meta.dirname,(process.argv[4]??'')+mode+'.json');\n const child=spawn(executable,[resolve(import.meta.dirname,'closure-canvas.cjs'),mode,output],{windowsHide:true,stdio:['ignore','pipe','pipe']});\n let errors='';child.stderr.on('data',b=>{errors+=b.toString()});\n const code=await new Promise(done=>child.once('exit',done));\n if(code!==0) throw new Error(mode+' exited '+code+': '+errors.slice(-1000));\n const r=JSON.parse(readFileSync(output,'utf8'));\n console.log(JSON.stringify({mode,reason:r.reason,firstRssMiB:r.samples[0].rssMiB,lastRssMiB:r.samples.at(-1).rssMiB,maxRssMiB:Math.max(...r.samples.map(s=>s.rssMiB)),mainFirst:r.samples[0].mainMemory,mainLast:r.samples.at(-1).mainMemory}));\n}\n"
+    }
+  },
+  "limitations": [
+    "One short run per case on a shared host; no statistical before/after performance claim.",
+    "Summed working sets can double-count shared pages; GPU process RSS is not VRAM.",
+    "These controls isolate the offscreen fixture class, not Electron allocator internals.",
+    "No authenticated gameplay, physical input, native accessibility, signed installation or sustained live qualification."
+  ]
+}

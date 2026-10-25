@@ -1,5 +1,8 @@
 # October 25 reliability and maintenance follow-up
 
+The [closure report](INVESTIGATION-CLOSURE.md) adds bounded attribution controls
+for the synthetic RSS-cap stop and the exact remaining build-time audit paths.
+
 Baseline: `485f1d7186bfc34927027266329e9b582d0950fd` (merged PR #51).
 This source work does not update the installed app or the October 23 signed beta
 draft. No public release, Mac work or live account operation is part of this pass.
