@@ -1289,6 +1289,7 @@ test("a crashed renderer reloads to explicit retained-session recovery", async (
     })),
   ).toEqual({ crashed: true, reloadEnabled: true });
   await app.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()!.getMenuItemById("desktop-settings")!.click();
     const item = Menu.getApplicationMenu()!.getMenuItemById(
       "desktop-reload-controls",
     )!;

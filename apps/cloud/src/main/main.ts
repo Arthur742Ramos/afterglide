@@ -152,8 +152,14 @@ app.whenReady().then(async () => {
       desktopMenuTemplate(
         process.platform,
         (command) => {
-          if (mainWindow && !mainWindow.isDestroyed())
-            mainWindow.webContents.send(IPC.desktopCommand, command);
+          if (!mainWindow || mainWindow.isDestroyed()) return;
+          const contents = mainWindow.webContents;
+          if (contents.isDestroyed() || contents.isCrashed()) return;
+          try {
+            contents.send(IPC.desktopCommand, command);
+          } catch {
+            // A renderer can disappear between the check and IPC delivery.
+          }
         },
         () => {
           if (

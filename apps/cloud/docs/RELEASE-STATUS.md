@@ -4,6 +4,10 @@ The first Apple Silicon release is being prepared as `0.1.0-beta.1`
 (`cloud-v0.1.0-beta.1`). A Developer ID signed, notarized and stapled arm64 draft was staged on October 23 from commit `485f1d7186bfc34927027266329e9b582d0950fd`. An owner upgrade and signed-in Library launch passed. It is not published or fully qualified yet; later source changes are not part of those signed bytes. See the
 [Mac release preparation and remaining gates](MAC-RELEASE.md).
 
+The [October 25 source follow-up](IMPROVEMENT-VALIDATION.md) updates renderer
+recovery and dependency maintenance. It requires new reviewed distribution
+artifacts; the existing draft must not be promoted as that update.
+
 Afterglide Cloud is a source alpha for Windows and macOS. There is no supported
 public Cloud installer download yet. The repository's published Linux AppImage
 belongs to the original Steam Deck/remote-play app and does not install Cloud.
